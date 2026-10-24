@@ -27,7 +27,7 @@ Files: `src/bridge/extract/hl7.py`, `tests/bridge/test_hl7.py`
 - Tolerate: trailing separators, missing trailing fields, latin-1 bytes (decode with fallback), Z-segments.
 - Acceptance: ≥20 tests including the above edge cases; no third-party HL7 libs.
 
-### T-102 · Free-text medication sig parser · `ready`
+### T-102 · Free-text medication sig parser · `review`
 Files: `src/bridge/normalize/sig.py`, `tests/bridge/test_sig.py`
 - `parse_sig(text: str) -> SigResult` (dataclass) with fields: `dose_value: float | None`, `dose_unit: str | None` (UCUM-ish: `mg`, `mL`, `{tab}`, `{cap}`, `{puff}`, `[iU]`, `{drop}`), `route: str | None` ∈ `oral, iv, im, subcut, topical, inhaled, rectal, ophthalmic, otic, nasal, transdermal, sublingual`, `frequency_count: int | None`, `frequency_period: float | None`, `frequency_period_unit: "h" | "d" | "wk" | None`, `as_needed: bool`, `as_needed_reason: str | None`, `duration_days: int | None`, `confidence: float` (0–1), `unparsed: str` (tokens not understood).
 - Handle Latin abbreviations (`po, bid, tid, qid, qd, qhs, q4-6h, prn, ac, pc, x10d, ud`), fractions (`1/2 tab`, `½`), ranges (`1-2 tabs` → take lower bound value, note in `unparsed`? — document your choice), "as directed".
