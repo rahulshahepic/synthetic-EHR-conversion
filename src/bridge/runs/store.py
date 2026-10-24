@@ -123,14 +123,20 @@ class RunStore:
 
     # ---------------------------------------------------------------- records
     def stage(self, run_id: str, rtype: str, records: Iterable[tuple[str, dict[str, Any], dict[str, Any]]]) -> int:
+        """Stage a streaming source with one SQLite executemany call per table."""
         n = 0
-        stamp = now()  # one stable staging timestamp per table, not one datetime per row
-        with self.tx():
+        stamp = now()
+
+        def rows():
+            nonlocal n
             for i, (key, source, lineage) in enumerate(records):
-                self.db.execute(
-                    "INSERT OR REPLACE INTO records (run_id, rtype, source_key, seq, status, source, lineage, updated_at)"
-                    " VALUES (?,?,?,?,?,?,?,?)", (run_id, rtype, key, i, PENDING, _j(source), _j(lineage), stamp))
-                n += 1
+                n = i + 1
+                yield (run_id, rtype, key, i, PENDING, _j(source), _j(lineage), stamp)
+
+        with self.tx():
+            self.db.executemany(
+                "INSERT OR REPLACE INTO records (run_id, rtype, source_key, seq, status, source, lineage, updated_at)"
+                " VALUES (?,?,?,?,?,?,?,?)", rows())
         return n
 
     def record(self, run_id: str, rtype: str, key: str) -> dict[str, Any] | None:
