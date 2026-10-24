@@ -12,7 +12,7 @@ For `ready` helper tasks, Claude may have committed a small **v0** implementatio
 | ID | Title | Status |
 |---|---|---|
 | M1 | Nimbus target EHR + import API | done |
-| M2 | Halcyon synthetic source generator | claude |
+| M2 | Halcyon synthetic source generator | done |
 | M3 | Bridge core pipeline, metrics, monitors, pause/revert | claude |
 | M5 | MCP server + reconciliation loop | claude |
 
@@ -49,7 +49,7 @@ Files: `src/bridge/normalize/demographics.py`, `tests/bridge/test_demographics.p
 - `parse_legacy_date("19840312" | "031284" | "00000000" | "1984-03-12") -> DateParse(value: date | None, precision: "day"|"month"|"year"|None, inferred: bool)`. 2-digit years pivot: assume not in future relative to a given `as_of`.
 - Acceptance: ≥40 tests.
 
-### T-105 · Synthetic terminology crosswalks · `blocked (M2)`
+### T-105 · Synthetic terminology crosswalks · `blocked (M3)`
 Files: `src/bridge/terminology/data/*.csv`, `tests/bridge/test_terminology_data.py`
 Extend crosswalks so every local code the Halcyon generator can emit (listed in `testbed/halcyon/vocab.py` after M2) has a row or an explicit `unmappable` marker. Include ICD-9→ICD-10 1:many rows. All codes must be labeled synthetic where invented.
 
@@ -60,6 +60,6 @@ Render a run's metrics, alerts, loss ledger, and question status to a single sel
 ### T-107 · Web dashboard (stretch) · `blocked (M5)`
 Read-only local web UI over the run DB: runs, batches, metric trends, alerts, questions.
 
-### T-108 · Second source profile for drift testing · `blocked (M2)`
-Files: `testbed/halcyon/profiles/`
+### T-108 · Second source profile for drift testing · `ready`
+Files: `testbed/halcyon/profiles/`, small hooks in `testbed/halcyon/generator.py` (`Config.rates`, `vocab.FACILITIES`)
 A "Lakeside facility" profile: metric units, different visit codes, different sig style, so the drift monitors have something to catch mid-run.
