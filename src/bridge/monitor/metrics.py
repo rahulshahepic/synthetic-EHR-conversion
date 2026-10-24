@@ -29,6 +29,8 @@ def batch_metrics(results: list[dict[str, Any]]) -> dict[str, Any]:
         "attempted": attempted,
         **{k: st[k] for k in ("loaded", "rejected", "held", "blocked", "dropped", "superseded")},
         "unchanged": sum(1 for r in loaded if r.get("unchanged")),
+        "created": sum(1 for r in loaded if r.get("operation") == "created"),
+        "updated": sum(1 for r in loaded if r.get("operation") == "updated"),
         "target_reject_rate": round(st["rejected"] / submitted, 4) if submitted else 0.0,
         "hold_rate": round(st["held"] / attempted, 4) if attempted else 0.0,
         "fidelity_mean": round(sum(fid) / len(fid), 4) if fid else None,

@@ -76,7 +76,9 @@ class NimbusService:
     def __init__(self, db_path: str = ":memory:"):
         self._db = sqlite3.connect(db_path, check_same_thread=False, isolation_level=None)
         self._db.row_factory = sqlite3.Row
-        self._db.execute("PRAGMA journal_mode=WAL") if db_path != ":memory:" else None
+        if db_path != ":memory:":
+            self._db.execute("PRAGMA journal_mode=WAL")
+            self._db.execute("PRAGMA synchronous=NORMAL")
         self._db.executescript(SCHEMA)
         self._lock = threading.RLock()
 
@@ -164,7 +166,7 @@ class NimbusService:
         now = _now()
         if existing is not None:
             if json.loads(existing["data"]) == data:
-                return {**out, "status": "unchanged", "targetId": existing["id"]}
+                return {**out, "status": "unchanged", "operation": "unchanged", "targetId": existing["id"]}
             rid = existing["id"]
             self._record_history(rt, rid, batch["batchId"], "update", existing)
             self._db.execute(
@@ -180,7 +182,7 @@ class NimbusService:
                 (rt, rid, sk, 1, json.dumps(data), batch["batchId"], now, now),
             )
         self._index(rt, rid, data)
-        return {**out, "status": "accepted", "targetId": rid}
+        return {**out, "status": "accepted", "operation": "updated" if existing is not None else "created", "targetId": rid}
 
     # ------------------------------------------------------------------ helpers
     def _row_by_sk(self, rt: str, sk: str) -> sqlite3.Row | None:

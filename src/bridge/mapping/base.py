@@ -109,6 +109,11 @@ class MapContext:
         key2, st = self.resolve_key(rtype, key)
         if st == S.LOADED:
             return {"sourceKey": f"{rtype}/{key2}"}
+        if st in (S.PENDING, S.HELD, S.BLOCKED):
+            # the referenced record may still load (e.g. waiting on a question): wait rather than lose the link forever
+            if self.blocked_by is None:
+                self.blocked_by = f"{rtype}/{key2}"
+            return None
         self.note(field_, "dropped", 0.5, f"referenced {rtype} {key} not available ({st or 'missing'})", key)
         return None
 
@@ -147,7 +152,11 @@ def mapper(rtype: str) -> Callable[[Mapper], Mapper]:
 
 
 def run_mapper(ctx: MapContext) -> Outcome:
-    payload = MAPPERS[ctx.rtype](ctx)
+    if ctx.src.get("_retire"):
+        from .retire import map_source_deleted
+        payload = map_source_deleted(ctx)
+    else:
+        payload = MAPPERS[ctx.rtype](ctx)
     if ctx.superseded_by:
         return Outcome("superseded", note=f"duplicate of {ctx.superseded_by}")
     if ctx.held_by:

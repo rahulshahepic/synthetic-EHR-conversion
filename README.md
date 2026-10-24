@@ -24,7 +24,15 @@ tests/                pytest suites
 - [Metrics, monitoring, pause & revert](docs/metrics-and-monitoring.md)
 - [Reconciliation & AI (MCP)](docs/reconciliation-and-ai.md)
 
-## Quickstart (as milestones land)
+## See it in one command
+```
+pip install -e ".[dev]"
+python -m testbed.demo --out demo_out --patients 300     # ~2 min; writes demo_out/DEMO_TRANSCRIPT.md
+```
+Generates a messy legacy export, runs rehearsal 1 with a simulated analyst answering Bridge's questions (through the same
+operations the MCP server exposes), verifies, runs rehearsal 2 reusing the answers, then a cutover delta.
+
+## Quickstart (step by step)
 ```
 pip install -e ".[dev]"
 python -m testbed.halcyon generate --out exports/seed42 --seed 42 --patients 500
@@ -34,6 +42,10 @@ python -m bridge --run-db runs/r1.db questions                         # grouped
 python -m bridge --run-db runs/r1.db answer <qid> <option> --by user:you
 python -m bridge --run-db runs/r1.db resume --note "why" --by user:you
 python -m bridge --run-db runs/r1.db revert --scope run --cascade      # or --scope batch|type --target-id X
+python -m bridge --run-db runs/r2.db run --source exports/seed42 --rules-from runs/r1.db   # rehearsal 2
+python -m bridge --run-db runs/r2.db compare --other-run-db runs/r1.db
+python -m bridge --run-db runs/cut.db run --source exports/seed42b --prior-run runs/r1.db   # cutover delta
+python -m bridge --run-db runs/cut.db delta
 python -m bridge --run-db runs/r1.db mcp                               # MCP server (stdio) for AI assistants
 # connect from Claude Code: claude mcp add bridge -- python -m bridge --run-db "$PWD/runs/r1.db" mcp
 ```

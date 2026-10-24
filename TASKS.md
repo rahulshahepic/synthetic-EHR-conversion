@@ -18,9 +18,9 @@ For `ready` helper tasks, Claude may have committed a small **v0** implementatio
 | M5 | MCP server + reconciliation loop | done |
 | M6 | Verification: read-back sampling, clinical sentinels, end-of-run reconciliation | done |
 | M7 | Rehearsals: rule carry-over, run-vs-run comparison | done |
-| M8 | Cutover delta load + source deletions | claude |
+| M8 | Cutover delta load + source deletions | done |
 | M9 | Late identity merges via Nimbus $merge | done |
-| M10 | Scripted end-to-end demo | claude |
+| M10 | Scripted end-to-end demo | done |
 
 ## Helper tasks
 
@@ -68,7 +68,7 @@ Read only through `bridge.runs.store.RunStore` and `bridge.status` (`run_summary
 Files: `src/bridge/web/` (new), tests.
 Read-only local web UI over the run DB: runs, batches, metric trends, alerts, questions, record lineage. Use `bridge.assistant.BridgeAssistant` for all data (same operations the MCP server exposes). FastAPI + server-rendered HTML or a single static page; no external CDN assets. CLI: `python -m bridge --run-db ... web --port 8710`.
 
-### T-108 · Second source profile for drift testing · `review`
+### T-108 · Second source profile for drift testing · `done`
 Files: `testbed/halcyon/profiles/`, small hooks in `testbed/halcyon/generator.py` (`Config.rates`, `vocab.FACILITIES`)
 A "Lakeside facility" profile: metric units, different visit codes, different sig style, so the drift monitors have something to catch mid-run.
 
@@ -80,6 +80,6 @@ Given a Halcyon export dir and a Bridge run DB, report for every planted issue t
 Files: `tools/bench.py` (new) plus targeted changes in `src/bridge/runs/store.py` and `src/nimbus/service.py` only.
 Today a 500-patient run (~52k Nimbus records) takes ~26s. Profile (`python -m cProfile`) a 5k-patient run and remove the top hotspots (e.g. the `work_queue` blocked-record EXISTS join that concatenates strings, per-record JSON parsing, per-record Nimbus history inserts). Keep behavior identical: the full test suite must pass unchanged. Report before/after timings in the PR.
 
-### T-111 · Export mutator for cutover testing · `ready`
+### T-111 · Export mutator for cutover testing · `ready` (Bridge side done in M8; `tests/bridge/test_delta.py::_mutate` is a tiny hand-rolled example to replace)
 Files: `testbed/halcyon/mutate.py` (new), CLI `python -m testbed.halcyon mutate --from <exportA> --out <exportB> --seed N`, `tests/testbed/test_mutate.py`
 Produce export B from export A as "the same system some weeks later": keep every existing primary key stable; add new patients (with charts), new visits/labs/notes for existing patients, demographic changes on ~5% of patients (also emitted as ADT A08 in B's feeds), status changes (meds discontinued, appointments completed/cancelled), and delete a small number of rows (e.g. entered-in-error problems, cancelled-and-purged appointments). Copy feeds/extracts and append new messages. Write `answer_key/delta.json` listing every added/changed/deleted key by table. Do not import `bridge` or `nimbus`. Acceptance: deterministic for a seed; tests assert keys in A remain stable in B except listed deletions, and that delta.json is complete (diff A vs B tables equals delta.json).

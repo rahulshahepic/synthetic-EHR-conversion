@@ -77,9 +77,15 @@ def build_server(run_db: str) -> MCPServer:
         return b.acknowledge_alert(alert_id, note, by, new_threshold)
 
     @mcp.tool(description="Start a conversion of a Halcyon export directory. Runs until the first pause or completion. "
-                          "rules_from: a prior rehearsal's run DB (or exported rules JSON) whose answers are reused.")
-    def start_run(source: str, target: str | None = None, batch_size: int = 200, rules_from: str | None = None) -> dict[str, Any]:
-        return b.start_run(source, target, batch_size, rules_from)
+                          "rules_from: a prior rehearsal's run DB (or exported rules JSON) whose answers are reused. "
+                          "prior_run_db: cutover/delta run against the prior run's target; also detects source deletions.")
+    def start_run(source: str, target: str | None = None, batch_size: int = 200, rules_from: str | None = None,
+                  prior_run_db: str | None = None) -> dict[str, Any]:
+        return b.start_run(source, target, batch_size, rules_from, prior_run_db)
+
+    @mcp.tool(description="Delta summary of a run: created / updated / unchanged / source_deleted per resource type.")
+    def delta_summary(run_id: str | None = None) -> dict[str, Any]:
+        return b.delta_summary(run_id)
 
     @mcp.tool(description="Merge two already-loaded Nimbus patients found to be the same person (Bridge patient keys, "
                           "e.g. H-P000123). Moves all clinical data to the survivor; revertible via revert(scope='batch'). "

@@ -121,3 +121,12 @@ def test_sig_v0(sig, dose, unit, route, count, prn):
 def test_sig_low_confidence():
     assert parse_sig("ud per INR clinic").confidence < 0.5
     assert parse_sig("1-2 tabs po q6h prn pain").confidence < 0.8
+
+
+def test_no_reference_lost_to_a_temporarily_held_parent(run):
+    """Records whose parent was waiting on a question must wait too, not drop the link (regression)."""
+    store, client, rid, _ = run
+    lost = store.db.execute(
+        "SELECT rtype, source_key, field, note FROM loss WHERE run_id=? AND klass='dropped' AND "
+        "(note LIKE '%(held)%' OR note LIKE '%(pending)%' OR note LIKE '%(blocked)%')", (rid,)).fetchall()
+    assert not lost, [tuple(r) for r in lost[:5]]

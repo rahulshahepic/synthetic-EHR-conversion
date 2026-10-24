@@ -77,6 +77,7 @@ class RunStore:
         self.db.row_factory = sqlite3.Row
         if path != ":memory:":
             self.db.execute("PRAGMA journal_mode=WAL")
+            self.db.execute("PRAGMA synchronous=NORMAL")
         self.db.executescript(SCHEMA)
 
     def tx(self):

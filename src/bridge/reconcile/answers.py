@@ -41,7 +41,7 @@ def answer(store: S.RunStore, qid: str, option: str, value: str | None = None, a
         if rec is None:
             continue
         if rec["status"] == S.HELD and rec["held_by"] == qid:
-            store.update_record(run_id, a["rtype"], a["source_key"], status=S.PENDING, held_by=None)
+            store.update_record(run_id, a["rtype"], a["source_key"], status=S.PENDING, held_by=None, note=f"released by {qid}")
             released += 1
         elif a["used_default"] and option != q["default_option"] and rec["status"] in (S.LOADED, S.REJECTED):
             store.update_record(run_id, a["rtype"], a["source_key"], status=S.PENDING)
