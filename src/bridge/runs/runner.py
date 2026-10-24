@@ -155,15 +155,24 @@ class Runner:
                               'target_close_seconds': close_seconds, 'persist_seconds': persist_seconds})
 
     def _persist_results(self, run_id, rtype, submit, resp, bridge_batch_id, results) -> None:
+        # Same per-record outcome as _finish, written with a handful of executemany calls per batch.
+        updates: list[tuple[str, dict[str, Any]]] = []
+        losses: list[tuple[str, list[dict[str, Any]]]] = []
+        for (rec, ctx, payload), res in zip(submit, resp):
+            if res["status"] in ("accepted", "unchanged"):
+                status, extra = S.LOADED, {"target_id": res.get("targetId"), "unchanged": res["status"] == "unchanged",
+                                           "operation": res.get("operation")}
+            else:
+                status, extra = S.REJECTED, {}
+            fields, result = self._outcome(run_id, rtype, rec, ctx, status, payload=payload, batch_id=bridge_batch_id,
+                                           issues=res.get("issues"), **extra)
+            updates.append((rec["source_key"], fields))
+            if status == S.LOADED:
+                losses.append((rec["source_key"], ctx.losses()))
+            results.append(result)
         with self.store.tx():
-            for (rec, ctx, payload), res in zip(submit, resp):
-                if res["status"] in ("accepted", "unchanged"):
-                    results.append(self._finish(run_id, rtype, rec, ctx, S.LOADED, payload=payload, target_id=res.get("targetId"),
-                                                batch_id=bridge_batch_id, issues=res.get("issues"), unchanged=res["status"] == "unchanged",
-                                                operation=res.get("operation")))
-                else:
-                    results.append(self._finish(run_id, rtype, rec, ctx, S.REJECTED, payload=payload, issues=res.get("issues"),
-                                                batch_id=bridge_batch_id))
+            self.store.update_records(run_id, rtype, updates)
+            self.store.record_losses(run_id, rtype, losses)
 
     def _measure(self, run_id: str, rtype: str, results: list[dict[str, Any]], bridge_batch_id: str,
                  nimbus_batch: str | None, released: int = 0, timings: dict | None = None) -> bool:
@@ -197,8 +206,21 @@ class Runner:
                 payload: dict[str, Any] | None = None, target_id: str | None = None, batch_id: str | None = None,
                 issues: list[dict[str, Any]] | None = None, note: str | None = None, unchanged: bool = False,
                 operation: str | None = None) -> dict[str, Any]:
+        fields, result = self._outcome(run_id, rtype, rec, ctx, status, payload=payload, target_id=target_id,
+                                       batch_id=batch_id, issues=issues, note=note, unchanged=unchanged, operation=operation)
+        self.store.update_record(run_id, rtype, rec["source_key"], **fields)
+        if status in (S.LOADED, S.DROPPED, S.SUPERSEDED):
+            self.store.record_loss(run_id, rtype, rec["source_key"], ctx.losses())
+        return result
+
+    def _outcome(self, run_id: str, rtype: str, rec: dict[str, Any], ctx: MapContext, status: str, *,
+                 payload: dict[str, Any] | None = None, target_id: str | None = None, batch_id: str | None = None,
+                 issues: list[dict[str, Any]] | None = None, note: str | None = None, unchanged: bool = False,
+                 operation: str | None = None) -> tuple[dict[str, Any], dict[str, Any]]:
+        """Record columns to write and the result row for metrics."""
         ann = [a.__dict__ for a in ctx.annotations]
-        fields: dict[str, Any] = {"status": status, "annotations": ann, "fidelity": ctx.fidelity(), "issues": issues,
+        fidelity = ctx.fidelity()
+        fields: dict[str, Any] = {"status": status, "annotations": ann, "fidelity": fidelity, "issues": issues,
                                   "held_by": ctx.held_by if status == S.HELD else None,
                                   "blocked_by": ctx.blocked_by if status == S.BLOCKED else None, "note": note}
         if payload is not None:
@@ -209,8 +231,5 @@ class Runner:
             fields["batch_id"] = batch_id
         if status == S.SUPERSEDED and ctx.superseded_by:
             self.store.xset(run_id, "superseded", f"{rtype}/{rec['source_key']}", ctx.superseded_by)
-        self.store.update_record(run_id, rtype, rec["source_key"], **fields)
-        if status in (S.LOADED, S.DROPPED, S.SUPERSEDED):
-            self.store.record_loss(run_id, rtype, rec["source_key"], ctx.losses())
-        return {"source_key": rec["source_key"], "status": status, "fidelity": ctx.fidelity(), "issues": issues,
-                "annotations": ann, "held_by": ctx.held_by, "unchanged": unchanged, "operation": operation}
+        return fields, {"source_key": rec["source_key"], "status": status, "fidelity": fidelity, "issues": issues,
+                        "annotations": ann, "held_by": ctx.held_by, "unchanged": unchanged, "operation": operation}

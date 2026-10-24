@@ -86,6 +86,8 @@ class RunStore:
         if path != ":memory:":
             self.db.execute("PRAGMA journal_mode=WAL")
             self.db.execute("PRAGMA synchronous=NORMAL")
+            # Fewer, larger checkpoints: the default (1000 pages) checkpoints on almost every batch commit.
+            self.db.execute("PRAGMA wal_autocheckpoint=10000")
         self.db.executescript(SCHEMA)
 
     def tx(self):
@@ -192,6 +194,31 @@ class RunStore:
                 """UPDATE records SET status='pending', blocked_by=NULL, note=?, updated_at=?
                    WHERE run_id=? AND blocked_by=? AND status='blocked'""",
                 (f"released by {rtype}/{key}", now(), run_id, f"{rtype}/{key}"))
+
+    def update_records(self, run_id: str, rtype: str, rows: list[tuple[str, dict[str, Any]]]) -> None:
+        """Bulk update_record: one executemany per distinct column set, then one dependent wakeup pass."""
+        stamp = now()
+        groups: dict[tuple[str, ...], list[tuple[Any, ...]]] = {}
+        released: list[str] = []
+        for key, fields in rows:
+            fields = dict(fields)
+            for k in ("source", "mapped", "annotations", "issues"):
+                if k in fields:
+                    fields[k] = _j(fields[k])
+            fields["updated_at"] = stamp
+            groups.setdefault(tuple(fields), []).append((*fields.values(), run_id, rtype, key))
+            if fields.get("status") in (LOADED, SUPERSEDED):
+                released.append(key)
+        for cols, params in groups.items():
+            self.db.executemany(f"UPDATE records SET {', '.join(f'{k}=?' for k in cols)}"
+                                " WHERE run_id=? AND rtype=? AND source_key=?", params)
+        # Same wakeup as update_record; skipped outright when nothing in the run is blocked.
+        if released and self.db.execute(
+                "SELECT 1 FROM records WHERE run_id=? AND status='blocked' LIMIT 1", (run_id,)).fetchone():
+            self.db.executemany(
+                """UPDATE records SET status='pending', blocked_by=NULL, note=?, updated_at=?
+                   WHERE run_id=? AND blocked_by=? AND status='blocked'""",
+                [(f"released by {rtype}/{key}", stamp, run_id, f"{rtype}/{key}") for key in released])
 
     def status_counts(self, run_id: str) -> dict[str, dict[str, int]]:
         out: dict[str, dict[str, int]] = {}
@@ -351,6 +378,16 @@ class RunStore:
         for l in losses:
             self.db.execute("INSERT OR REPLACE INTO loss VALUES (?,?,?,?,?,?,?)",
                             (run_id, rtype, key, l["field"], l["klass"], _j(l.get("original")), l.get("note")))
+
+    def record_losses(self, run_id: str, rtype: str, items: list[tuple[str, list[dict[str, Any]]]]) -> None:
+        """Bulk record_loss for distinct source keys."""
+        if not items:
+            return
+        self.db.executemany("DELETE FROM loss WHERE run_id=? AND rtype=? AND source_key=?",
+                            [(run_id, rtype, key) for key, _ in items])
+        self.db.executemany("INSERT OR REPLACE INTO loss VALUES (?,?,?,?,?,?,?)",
+                            [(run_id, rtype, key, l["field"], l["klass"], _j(l.get("original")), l.get("note"))
+                             for key, losses in items for l in losses])
 
     def loss_summary(self, run_id: str, rtype: str | None = None) -> list[dict[str, Any]]:
         sql = ("SELECT l.rtype, l.field, l.klass, COUNT(*) n, MIN(l.note) example FROM loss l JOIN records r"
