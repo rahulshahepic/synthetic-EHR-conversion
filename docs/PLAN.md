@@ -21,3 +21,4 @@ See `TASKS.md` for live task-level status. Milestone status is updated in this t
 
 - M0: done
 - M1: done (Nimbus service, 19 API tests)
+- M2: done (Halcyon generator; 500 patients ≈ 30k rows + feeds in <1s; ~40 planted issue types)
