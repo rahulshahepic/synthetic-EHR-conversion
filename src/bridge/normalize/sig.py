@@ -244,6 +244,10 @@ def parse_sig(text: str) -> SigResult:
             duration_days = int(round(n))
         work = _blank(work, dur.span())
 
+    # Inhalation verbs imply the inhaled route, not merely administration filler.
+    if re.search(r"\binhale\b", work):
+        route = "inhaled"
+
     # -- route phrases -----------------------------------------------------
     for pat, r in _PHRASE_ROUTES:
         m = pat.search(work)
@@ -304,6 +308,13 @@ def parse_sig(text: str) -> SigResult:
         n = _NUMBER_WORDS.get(m.group(1))
         _set_freq((int(n if n is not None else float(m.group(1))), 1.0, "d"))
         work = _blank(work, m.span())
+
+    # Sentence dose ranges preserve the lower bound and reduce confidence.
+    dose_range = re.search(r"\b(\d+(?:\.\d+)?)\s+to\s+(\d+(?:\.\d+)?)\s+(tablets?|capsules?|puffs?|units?)\b", work)
+    if dose_range:
+        range_notes.append(dose_range.group(0))
+        work = work[:dose_range.start()] + dose_range.group(1) + " " + dose_range.group(3) + work[dose_range.end():]
+    work = re.sub(r"\bone half\b", "1/2", work)
 
     # -- tokens --------------------------------------------------------------
     raw_tokens = work.split()
