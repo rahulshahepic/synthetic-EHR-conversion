@@ -34,6 +34,8 @@ CREATE TABLE IF NOT EXISTS identifiers (
   system TEXT NOT NULL, value TEXT NOT NULL, patient_id TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS ix_ident ON identifiers(system, value);
+-- _unindex() deletes by patient_id on every Patient insert; prevent quadratic scans.
+CREATE INDEX IF NOT EXISTS ix_ident_patient ON identifiers(patient_id);
 CREATE TABLE IF NOT EXISTS history (
   seq INTEGER PRIMARY KEY AUTOINCREMENT, rtype TEXT NOT NULL, id TEXT NOT NULL,
   batch_id TEXT, op TEXT NOT NULL, prior_data TEXT, prior_version INTEGER,
@@ -46,6 +48,8 @@ CREATE TABLE IF NOT EXISTS batches (
   accepted INTEGER NOT NULL DEFAULT 0, rejected INTEGER NOT NULL DEFAULT 0,
   unchanged INTEGER NOT NULL DEFAULT 0, system TEXT
 );
+CREATE INDEX IF NOT EXISTS ix_nimbus_batches_seq ON batches(seq);
+CREATE INDEX IF NOT EXISTS ix_resources_rtype_created_id ON resources(rtype, created_at, id);
 """
 
 MAX_RECORDS_PER_CALL = 500
