@@ -28,9 +28,13 @@ tests/                pytest suites
 ```
 pip install -e ".[dev]"
 python -m testbed.halcyon generate --out exports/seed42 --seed 42 --patients 500
-python -m bridge run --source exports/seed42 --run-db runs/r1.db      # in-process Nimbus by default
-python -m bridge status --run-db runs/r1.db
-python -m bridge mcp --run-db runs/r1.db                               # MCP server (stdio)
+python -m bridge --run-db runs/r1.db run --source exports/seed42     # embedded Nimbus (runs/r1_nimbus.db) by default
+python -m bridge --run-db runs/r1.db status                            # pauses show here, with the reason
+python -m bridge --run-db runs/r1.db questions                         # grouped reconciliation questions
+python -m bridge --run-db runs/r1.db answer <qid> <option> --by user:you
+python -m bridge --run-db runs/r1.db resume --note "why" --by user:you
+python -m bridge --run-db runs/r1.db revert --scope run --cascade      # or --scope batch|type --target-id X
+python -m bridge --run-db runs/r1.db mcp                               # MCP server (stdio) for AI assistants
 ```
 
 ## Working here as an AI agent (ChatGPT, Muse, Claude, ...)
