@@ -44,10 +44,9 @@ def monitor_database(path: Path, stop: threading.Event, started: float) -> None:
             try:
                 run = db.execute("SELECT id,status,pass_count FROM runs ORDER BY rowid DESC LIMIT 1").fetchone()
                 if run:
-                    batches = db.execute("SELECT COUNT(*), COALESCE(SUM(json_extract(counts,'$.attempted')),0) FROM batches WHERE run_id=?", (run[0],)).fetchone()
-                    statuses = dict(db.execute("SELECT status, COUNT(*) FROM records WHERE run_id=? GROUP BY status", (run[0],)))
-                    total = sum(statuses.values())
-                    assessed = total - statuses.get("pending", 0)
+                    batches = db.execute("SELECT COUNT(*), COALESCE(SUM(json_extract(counts,'$.attempted')),0) FROM batches WHERE run_id=? AND counts IS NOT NULL", (run[0],)).fetchone()
+                    total = db.execute("SELECT COUNT(*) FROM records WHERE run_id=?", (run[0],)).fetchone()[0]
+                    assessed = batches[1]
                     progress("heartbeat", started, run_status=run[1], passes=run[2],
                              staged_records=total, assessed_records=assessed,
                              assessed_percent=round(100 * assessed / total, 1) if total else None,
