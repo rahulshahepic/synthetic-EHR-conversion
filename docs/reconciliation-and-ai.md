@@ -49,6 +49,8 @@ Any MCP client (Claude Desktop, ChatGPT desktop with MCP, etc.) — stdio server
 ```json
 {"mcpServers": {"bridge": {"command": "python", "args": ["-m", "bridge", "--run-db", "/abs/path/runs/demo.db", "mcp"]}}}
 ```
+MCP clients start the server with a minimal environment: install the package (`pip install -e ".[dev]"`) in the Python the client launches, or add `"env": {"PYTHONPATH": "/abs/path/repo/src:/abs/path/repo"}` to the server config.
+
 Then e.g. *"Start a conversion of exports/seed42 and walk me through anything that needs my decision."*
 
 MCP resources: `bridge://runs/{id}/summary`, `bridge://docs/{name}` (these docs, so the assistant can learn the domain).
