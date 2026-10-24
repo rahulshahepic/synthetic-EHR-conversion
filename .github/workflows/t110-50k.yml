@@ -10,16 +10,6 @@ on:
       - 'src/nimbus/**'
       - 'tests/**'
   workflow_dispatch:
-    inputs:
-      benchmark_size:
-        description: 'Benchmark tier (larger runs require explicit dispatch)'
-        required: true
-        type: choice
-        default: short
-        options:
-          - short
-          - scaling
-          - full-50k
 
 concurrency:
   group: t110-50k-${{ github.ref }}
@@ -30,7 +20,7 @@ permissions:
 
 jobs:
   full-50k:
-    if: github.event_name == 'workflow_dispatch' && inputs.benchmark_size == 'full-50k'
+    needs: scaling-validation
     runs-on: ubuntu-latest
     timeout-minutes: 180
     steps:
@@ -71,7 +61,7 @@ jobs:
           if-no-files-found: warn
 
   scaling-validation:
-    if: github.event_name == 'workflow_dispatch' && inputs.benchmark_size == 'scaling'
+    needs: short-validation
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
@@ -97,7 +87,6 @@ jobs:
           path: benchmark-output/
 
   short-validation:
-    if: github.event_name == 'pull_request' || inputs.benchmark_size == 'short'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -106,7 +95,9 @@ jobs:
         with:
           python-version: '3.12'
           cache: pip
-      - run: python -m pip install -e ".[dev]"
+      - run: python -m pip install -e ".[dev]" pytest-xdist
+      - name: Regression tests
+        run: python -m pytest -q -n 4 --dist loadfile
       - name: Short smoke and scaling measurements (live output)
         timeout-minutes: 12
         run: |
