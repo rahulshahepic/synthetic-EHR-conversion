@@ -15,7 +15,7 @@ For `ready` helper tasks, Claude may have committed a small **v0** implementatio
 | M2 | Halcyon synthetic source generator | done |
 | M3 | Bridge core pipeline, metrics, monitors, pause/revert | done |
 | M4 | Remaining domains + HL7 ORU/SIU + CSV channels | done |
-| M5 | MCP server + reconciliation loop | claude |
+| M5 | MCP server + reconciliation loop | done |
 | M6 | Verification: read-back sampling, clinical sentinels, end-of-run reconciliation | claude |
 
 ## Helper tasks
@@ -60,8 +60,9 @@ Files: `src/bridge/report/`, tests
 Render a run's metrics, alerts, loss ledger, and question status to a single self-contained HTML file (no external assets) and Markdown.
 Read only through `bridge.runs.store.RunStore` and `bridge.status` (`run_summary`, `metrics_view`, `loss_summary`). Add a CLI subcommand `report --out <file.html>`. Test against a run produced by the fixtures in `tests/bridge/conftest.py`.
 
-### T-107 · Web dashboard (stretch) · `blocked (M5)`
-Read-only local web UI over the run DB: runs, batches, metric trends, alerts, questions.
+### T-107 · Web dashboard (stretch) · `ready`
+Files: `src/bridge/web/` (new), tests.
+Read-only local web UI over the run DB: runs, batches, metric trends, alerts, questions, record lineage. Use `bridge.assistant.BridgeAssistant` for all data (same operations the MCP server exposes). FastAPI + server-rendered HTML or a single static page; no external CDN assets. CLI: `python -m bridge --run-db ... web --port 8710`.
 
 ### T-108 · Second source profile for drift testing · `ready`
 Files: `testbed/halcyon/profiles/`, small hooks in `testbed/halcyon/generator.py` (`Config.rates`, `vocab.FACILITIES`)

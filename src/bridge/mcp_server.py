@@ -1,0 +1,115 @@
+"""MCP server exposing Bridge to AI assistants (stdio). Run: python -m bridge --run-db runs/r1.db mcp"""
+from __future__ import annotations
+
+from typing import Any
+
+from mcp.server.mcpserver import MCPServer
+
+from .assistant import DOCS, WORKFLOW, BridgeAssistant
+
+INSTRUCTIONS = WORKFLOW + """
+Rules: never answer a blocking or clinical question (identity, problem codes, medications, labs, DOB, allergies)
+without the user explicitly choosing; always pass answered_by="user:<name>" when relaying their choice.
+Group your questions to the user: one answer usually releases many records."""
+
+
+def build_server(run_db: str) -> MCPServer:
+    b = BridgeAssistant(run_db)
+    mcp = MCPServer(name="bridge", title="Bridge EHR conversion", instructions=INSTRUCTIONS, version="0.1")
+
+    @mcp.tool(description="How to work with Bridge: the reconciliation workflow and available docs.")
+    def guide() -> dict[str, Any]:
+        return b.guide()
+
+    @mcp.tool(description="List conversion runs in this run database.")
+    def list_runs() -> list[dict[str, Any]]:
+        return b.list_runs()
+
+    @mcp.tool(description="Run state, per-resource-type counts and fidelity, open alerts, open question counts. "
+                          "run_id defaults to the latest run.")
+    def run_status(run_id: str | None = None) -> dict[str, Any]:
+        return b.run_status(run_id)
+
+    @mcp.tool(description="Monitor alerts (status: open | acknowledged | None for all) with samples and suggested actions.")
+    def list_alerts(run_id: str | None = None, status: str | None = "open") -> list[dict[str, Any]]:
+        return b.list_alerts(run_id, status)
+
+    @mcp.tool(description="Per-batch metrics (reject/hold rates, fidelity, code coverage). Pass batch_id for full detail.")
+    def get_metrics(run_id: str | None = None, resource_type: str | None = None, batch_id: str | None = None) -> list[dict[str, Any]]:
+        return b.get_metrics(run_id, resource_type, batch_id)
+
+    @mcp.tool(description="Grouped reconciliation questions, blocking and highest-impact first. Each answer becomes a "
+                          "mapping rule applied to every affected record.")
+    def list_questions(run_id: str | None = None, kind: str | None = None, blocking_only: bool = False,
+                       status: str = "open", limit: int = 25) -> dict[str, Any]:
+        return b.list_questions(run_id, kind, blocking_only, status, limit)
+
+    @mcp.tool(description="Full context for one question, with example source records, to explain it to the user.")
+    def get_question(question_id: str) -> dict[str, Any]:
+        return b.get_question(question_id)
+
+    @mcp.tool(description="Record the USER's answer to a question. answered_by must be 'user:<name>' when relaying "
+                          "the user's choice, or 'assistant' (allowed only for non-blocking, non-clinical questions). "
+                          "Options with needs_value require `value`. Released records load on the next resume_run.")
+    def answer_question(question_id: str, option: str, answered_by: str, value: str | None = None,
+                        rationale: str = "") -> dict[str, Any]:
+        return b.answer_question(question_id, option, answered_by, value, rationale)
+
+    @mcp.tool(description="Lineage for a record: source rows/segments, mapped Nimbus payload, per-field fidelity "
+                          "annotations, Nimbus issues and id. Partial keys are searched.")
+    def explain_record(source_key: str, resource_type: str | None = None, run_id: str | None = None) -> list[dict[str, Any]]:
+        return b.explain_record(source_key, resource_type, run_id)
+
+    @mcp.tool(description="What fidelity was lost: counts of inferred/degraded/defaulted/dropped fields by type and field.")
+    def loss_report(run_id: str | None = None, resource_type: str | None = None, limit: int = 50) -> list[dict[str, Any]]:
+        return b.loss_report(run_id, resource_type, limit)
+
+    @mcp.tool(description="Active mapping rules created from answers.")
+    def list_rules(run_id: str | None = None) -> list[dict[str, Any]]:
+        return b.list_rules(run_id)
+
+    @mcp.tool(description="Recent run events (batches, pauses, answers, reverts).")
+    def recent_events(run_id: str | None = None, limit: int = 20) -> list[dict[str, Any]]:
+        return b.recent_events(run_id, limit)
+
+    @mcp.tool(description="Acknowledge an alert with a note; optionally set a new threshold for that rule and type.")
+    def acknowledge_alert(alert_id: str, note: str, by: str, new_threshold: float | None = None) -> dict[str, Any]:
+        return b.acknowledge_alert(alert_id, note, by, new_threshold)
+
+    @mcp.tool(description="Start a conversion of a Halcyon export directory. Runs until the first pause or completion.")
+    def start_run(source: str, target: str | None = None, batch_size: int = 200) -> dict[str, Any]:
+        return b.start_run(source, target, batch_size)
+
+    @mcp.tool(description="Resume a paused run (acknowledges open alerts with `note`). Get the user's go-ahead first.")
+    def resume_run(note: str, by: str, run_id: str | None = None) -> dict[str, Any]:
+        return b.resume_run(note, by, run_id)
+
+    @mcp.tool(description="Pause a run.")
+    def pause_run(reason: str, by: str, run_id: str | None = None) -> dict[str, Any]:
+        return b.pause_run(reason, by, run_id)
+
+    @mcp.tool(description="Requeue records with the given statuses (default: rejected) for another attempt on resume.")
+    def reprocess(run_id: str | None = None, statuses: list[str] | None = None, resource_type: str | None = None) -> dict[str, Any]:
+        return b.reprocess(run_id, statuses, resource_type)
+
+    @mcp.tool(description="DESTRUCTIVE: remove converted data from Nimbus by batch, resource type, or whole run. Only "
+                          "after the user explicitly confirms; pass confirm=true and confirmed_by='user:<name>'.")
+    def revert(scope: str, confirm: bool, confirmed_by: str, target: str | None = None, cascade: bool = False,
+               run_id: str | None = None) -> dict[str, Any]:
+        return b.revert(scope, confirm, confirmed_by, target, cascade, run_id)
+
+    @mcp.tool(description="Retire a mapping rule (future mapping will ask again).")
+    def retire_rule(rule_id: str, by: str) -> dict[str, Any]:
+        return b.retire_rule(rule_id, by)
+
+    @mcp.resource("bridge://docs/{name}", description="Bridge design docs (architecture, mapping, metrics, ...).",
+                  mime_type="text/markdown")
+    def doc(name: str) -> str:
+        path = DOCS / f"{name}.md"
+        return path.read_text() if path.exists() else f"no doc named {name}"
+
+    return mcp
+
+
+def serve(run_db: str) -> None:
+    build_server(run_db).run("stdio")
