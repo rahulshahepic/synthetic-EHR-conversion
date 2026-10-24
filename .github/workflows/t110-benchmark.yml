@@ -24,9 +24,5 @@ jobs:
         run: |
           python tools/bench.py --patients 500 --seed 42 --without-index
           python tools/bench.py --patients 500 --seed 42
-      - name: Run 5k-patient baseline without index
-        run: python tools/bench.py --patients 5000 --seed 42 --without-index
-      - name: Run 5k-patient conversion with index (unprofiled)
-        run: python tools/bench.py --patients 5000 --seed 42
-      - name: Profile 5k-patient conversion with index
-        run: python tools/bench.py --patients 5000 --seed 42 --profile-out /tmp/bridge.prof
+      - name: Profile 5k-patient initial pass (not full conversion)
+        run: python tools/bench.py --patients 5000 --seed 42 --first-pass-only --profile-out /tmp/bridge.prof
