@@ -122,6 +122,7 @@ _TOKEN_ROUTES: dict[str, Route] = {
 # multi-word route phrases, matched on the normalized text before tokenizing
 _PHRASE_ROUTES: list[tuple[re.Pattern[str], Route]] = [
     (re.compile(r"\bby mouth\b"), "oral"),
+    (re.compile(r"\bunder the skin\b"), "subcut"),
     (re.compile(r"\bunder (?:the )?tongue\b"), "sublingual"),
     (re.compile(r"\bin (?:each|both|the (?:left|right)) (?:eye|eyes)\b"), "ophthalmic"),
     (re.compile(r"\bin (?:each|both|the (?:left|right)) (?:ear|ears)\b"), "otic"),
@@ -149,7 +150,7 @@ _TIMING_PHRASES = [
 
 # filler / administration verbs: understood, carry no structured field
 _FILLER_TOKENS = {
-    "take", "use", "apply", "give", "inhale", "swish", "spit", "swallow",
+    "take", "use", "apply", "give", "inject", "inhale", "swish", "spit", "swallow",
     "instill", "insert", "place", "the", "a", "an", "and", "as", "per",
     "mouth", "by", "into", "in", "on", "to", "of", "for", "with", "x",
     "tablet", "tablets", "capsule", "capsules",  # only when unit-less leftovers
@@ -243,6 +244,10 @@ def parse_sig(text: str) -> SigResult:
             duration_days = int(round(n))
         work = _blank(work, dur.span())
 
+    # Inhalation verbs imply the inhaled route, not merely administration filler.
+    if re.search(r"\binhale\b", work):
+        route = "inhaled"
+
     # -- route phrases -----------------------------------------------------
     for pat, r in _PHRASE_ROUTES:
         m = pat.search(work)
@@ -268,6 +273,9 @@ def parse_sig(text: str) -> SigResult:
         (re.compile(r"\btwice (?:a|per) day\b"), (2, 1.0, "d")),
         (re.compile(r"\btwice daily\b"), (2, 1.0, "d")),
         (re.compile(r"\bthree times (?:a|per) day\b"), (3, 1.0, "d")),
+        (re.compile(r"\btwo times daily\b"), (2, 1.0, "d")),
+        (re.compile(r"\bthree times daily\b"), (3, 1.0, "d")),
+        (re.compile(r"\bfour times daily\b"), (4, 1.0, "d")),
         (re.compile(r"\bfour times (?:a|per) day\b"), (4, 1.0, "d")),
         (re.compile(r"\bat bedtime\b"), (1, 1.0, "d")),
         (re.compile(r"\bat night\b"), (1, 1.0, "d")),
@@ -285,6 +293,11 @@ def parse_sig(text: str) -> SigResult:
             _set_freq(value)  # type: ignore[arg-type]
             work = _blank(work, m.span())
 
+    m = re.search(r"\bevery (\d+(?:\.\d+)?)\s+to\s+(\d+(?:\.\d+)?) hours?\b", work)
+    if m:
+        _set_freq((1, float(m.group(2)), "h"))
+        range_notes.append(m.group(0))
+        work = _blank(work, m.span())
     m = re.search(r"\bevery (\d+(?:\.\d+)?) hours?\b", work)
     if m:
         _set_freq((1, float(m.group(1)), "h"))
@@ -295,6 +308,13 @@ def parse_sig(text: str) -> SigResult:
         n = _NUMBER_WORDS.get(m.group(1))
         _set_freq((int(n if n is not None else float(m.group(1))), 1.0, "d"))
         work = _blank(work, m.span())
+
+    # Sentence dose ranges preserve the lower bound and reduce confidence.
+    dose_range = re.search(r"\b(\d+(?:\.\d+)?)\s+to\s+(\d+(?:\.\d+)?)\s+(tablets?|capsules?|puffs?|units?)\b", work)
+    if dose_range:
+        range_notes.append(dose_range.group(0))
+        work = work[:dose_range.start()] + dose_range.group(1) + " " + dose_range.group(3) + work[dose_range.end():]
+    work = re.sub(r"\bone half\b", "1/2", work)
 
     # -- tokens --------------------------------------------------------------
     raw_tokens = work.split()
@@ -399,7 +419,9 @@ def parse_sig(text: str) -> SigResult:
     for i, tok in enumerate(tokens):
         if consumed[i] or not tok:
             continue
-        if tok in _FILLER_TOKENS or tok in _TIMING_TOKENS:
+        if tok in _TIMING_TOKENS:
+            continue
+        if tok in _FILLER_TOKENS and not (prn_index is not None and i > prn_index and tok == "of"):
             continue
         if prn_index is not None and i > prn_index:
             reason_tokens.append(tok)

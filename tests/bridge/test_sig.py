@@ -235,3 +235,116 @@ def test_result_is_immutable():
     result = parse_sig("1 tab po daily")
     with pytest.raises(Exception):
         result.dose_value = 99.0  # type: ignore[misc]
+
+
+@pytest.mark.parametrize(("sig", "expected"), [
+    ("inject 10 units under the skin at bedtime", {"route": "subcut", "dose_value": 10.0}),
+    ("take 1 tablet by mouth two times daily", {"frequency_count": 2}),
+    ("take 1 capsule by mouth three times daily for 10 days", {"frequency_count": 3, "duration_days": 10}),
+    ("swish and spit 10 mL four times daily as needed", {"frequency_count": 4, "as_needed": True}),
+    ("inhale 2 puffs every 4 to 6 hours as needed for wheezing", {"frequency_period": 6.0, "as_needed_reason": "wheezing", "confidence": 0.4}),
+])
+def test_lakeside_sentence_style(sig, expected):
+    parsed = parse_sig(sig)
+    for field, value in expected.items():
+        assert getattr(parsed, field) == value
+
+
+# Every generated source sig must remain parseable, not just handpicked examples.
+from testbed.halcyon.profiles.lakeside import LAKESIDE_SIGS
+from testbed.halcyon.vocab import FORMULARY
+
+
+@pytest.mark.parametrize(("code", "sig"), [
+    (code, sig) for code, variants in LAKESIDE_SIGS.items() for sig in variants
+])
+def test_every_lakeside_formulary_sig(code, sig):
+    assert code in FORMULARY
+    parsed = parse_sig(sig)
+    if sig == "see note":
+        assert parsed.confidence < 0.5
+        assert parsed.unparsed
+    elif "as directed" in sig:
+        assert parsed.confidence <= 0.3
+    else:
+        assert parsed.dose_value is not None, (code, sig, parsed)
+        assert parsed.frequency_count is not None, (code, sig, parsed)
+        assert parsed.frequency_period is not None, (code, sig, parsed)
+        assert parsed.confidence >= 0.4, (code, sig, parsed)
+    if "under the skin" in sig or "subcutaneously" in sig:
+        assert parsed.route == "subcut"
+    if sig.startswith("inhale"):
+        assert parsed.route == "inhaled"
+    if " to " in sig:
+        assert parsed.confidence < 0.5
+
+
+@pytest.mark.parametrize(("code", "sig"), [
+    (code, sig) for code, item in FORMULARY.items() for sig in item[3]
+])
+def test_every_default_formulary_sig(code, sig):
+    parsed = parse_sig(sig)
+    assert 0 <= parsed.confidence <= 1, (code, sig)
+    if "as directed" not in sig and "ud " not in sig and "see note" not in sig:
+        assert parsed.dose_value is not None or parsed.frequency_count is not None, (code, sig)
+
+
+# Explicit expectations for every sig variant in both source formularies.
+# Columns: dose, unit, route, count, period, period_unit, PRN, duration.
+N = None
+L = {
+ "HFORM0001": [(1,"{tab}","oral",1,1,"d",False,N)]*2,
+ "HFORM0002": [(1,"{tab}","oral",2,1,"d",False,N)]*2,
+ "HFORM0003": [(1,"{tab}","oral",1,1,"d",False,N)]*2,
+ "HFORM0004": [(1,"{tab}","oral",1,1,"d",False,N),(.5,"{tab}","oral",1,1,"d",False,N),(N,N,N,N,N,N,False,N)],
+ "HFORM0005": [(10,"[iU]","subcut",1,1,"d",False,N),(22,"[iU]","subcut",1,1,"d",False,N)],
+ "HFORM0006": [(1,"{cap}","oral",3,1,"d",False,10),(1,"{cap}","oral",1,8,"h",False,10)],
+ "HFORM0007": [(2,"{puff}","inhaled",1,6,"h",True,N),(2,"{puff}","inhaled",1,4,"h",True,N)],
+ "HFORM0008": [(1,"{tab}","oral",1,1,"d",False,N)]*2,
+ "HFORM0009": [(1,"{cap}","oral",1,1,"d",False,N)]*2,
+ "HFORM0010": [(1,"{tab}","oral",1,6,"h",True,N)]*2,
+ "HFORM0011": [(1,"{tab}","oral",2,1,"d",False,N)]*2,
+ "HFORM0012": [(1,"{tab}","oral",1,1,"d",False,N)]*2,
+ "HFORM0013": [(1,"{tab}","oral",3,1,"d",True,N),(1,"{tab}","oral",1,8,"h",True,N)],
+ "HFORM0014": [(N,N,N,N,N,N,False,N),(4,"{tab}","oral",1,1,"d",False,5)],
+ "HFORM0015": [(10,"mL",N,4,1,"d",True,N),(10,"mL",N,1,6,"h",True,N)],
+ "HFORM0099": [(N,N,N,N,N,N,False,N)],
+}
+R = {
+ "HFORM0001": [(1,"{tab}","oral",1,1,"d",False,N)]*3,
+ "HFORM0002": [(1,"{tab}","oral",2,1,"d",False,N)]*2+[(500,"mg","oral",2,1,"d",False,N)],
+ "HFORM0003": [(1,"{tab}","oral",1,1,"d",False,N)]*2,
+ "HFORM0004": [(1,"{tab}","oral",1,1,"d",False,N),(.5,"{tab}","oral",1,1,"d",False,N),(N,N,N,N,N,N,False,N)],
+ "HFORM0005": [(10,"[iU]","subcut",1,1,"d",False,N),(22,"[iU]","subcut",1,1,"d",False,N)],
+ "HFORM0006": [(1,"{cap}","oral",3,1,"d",False,10)]*2,
+ "HFORM0007": [(2,"{puff}","inhaled",1,6,"h",True,N),(2,"{puff}",N,1,4,"h",True,N)],
+ "HFORM0008": [(1,"{tab}","oral",1,1,"d",False,N)]*2,
+ "HFORM0009": [(1,"{cap}","oral",1,1,"d",False,N)]*2,
+ "HFORM0010": [(1,"{tab}","oral",1,6,"h",True,N)]*2,
+ "HFORM0011": [(1,"{tab}","oral",2,1,"d",False,N),(5,"mg","oral",2,1,"d",False,N)],
+ "HFORM0012": [(1,"{tab}","oral",1,1,"d",False,N)]*2,
+ "HFORM0013": [(1,"{tab}","oral",1,8,"h",True,N),(600,"mg","oral",3,1,"d",True,N)],
+ "HFORM0014": [(N,N,N,N,N,N,False,N),(4,"{tab}","oral",1,1,"d",False,5)],
+ "HFORM0015": [(10,"mL",N,4,1,"d",True,N)],
+ "HFORM0099": [(N,N,N,N,N,N,False,N)],
+}
+
+@pytest.mark.parametrize(("source", "code", "index", "sig", "expected"), [
+    (source, code, i, sig, cases[code][i])
+    for source, formulary, cases in (
+        ("lakeside", LAKESIDE_SIGS, L),
+        ("riverbend", {code: row[3] for code, row in FORMULARY.items()}, R),
+    )
+    for code, sigs in formulary.items()
+    for i, sig in enumerate(sigs)
+])
+def test_all_formulary_sig_expected_fields(source, code, index, sig, expected):
+    parsed = parse_sig(sig)
+    actual = (parsed.dose_value, parsed.dose_unit, parsed.route,
+              parsed.frequency_count, parsed.frequency_period,
+              parsed.frequency_period_unit, parsed.as_needed, parsed.duration_days)
+    assert actual == expected, (source, code, index, sig, actual, expected)
+    if " to " in sig or "1-2" in sig or "q4-6h" in sig:
+        assert parsed.confidence < 0.5
+    if sig == "inhale 2 puffs every 4 to 6 hours as needed for shortness of breath":
+        assert parsed.as_needed_reason == "shortness of breath"
