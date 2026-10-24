@@ -287,3 +287,64 @@ def test_every_default_formulary_sig(code, sig):
     assert 0 <= parsed.confidence <= 1, (code, sig)
     if "as directed" not in sig and "ud " not in sig and "see note" not in sig:
         assert parsed.dose_value is not None or parsed.frequency_count is not None, (code, sig)
+
+
+# Explicit expectations for every sig variant in both source formularies.
+# Columns: dose, unit, route, count, period, period_unit, PRN, duration.
+N = None
+L = {
+ "HFORM0001": [(1,"{tab}","oral",1,1,"d",False,N)]*2,
+ "HFORM0002": [(1,"{tab}","oral",2,1,"d",False,N)]*2,
+ "HFORM0003": [(1,"{tab}","oral",1,1,"d",False,N)]*2,
+ "HFORM0004": [(1,"{tab}","oral",1,1,"d",False,N),(.5,"{tab}","oral",1,1,"d",False,N),(N,N,N,N,N,N,False,N)],
+ "HFORM0005": [(10,"[iU]","subcut",1,1,"d",False,N),(22,"[iU]","subcut",1,1,"d",False,N)],
+ "HFORM0006": [(1,"{cap}","oral",3,1,"d",False,10),(1,"{cap}","oral",1,8,"h",False,10)],
+ "HFORM0007": [(2,"{puff}","inhaled",1,6,"h",True,N),(2,"{puff}","inhaled",1,4,"h",True,N)],
+ "HFORM0008": [(1,"{tab}","oral",1,1,"d",False,N)]*2,
+ "HFORM0009": [(1,"{cap}","oral",1,1,"d",False,N)]*2,
+ "HFORM0010": [(1,"{tab}","oral",1,6,"h",True,N)]*2,
+ "HFORM0011": [(1,"{tab}","oral",2,1,"d",False,N)]*2,
+ "HFORM0012": [(1,"{tab}","oral",1,1,"d",False,N)]*2,
+ "HFORM0013": [(1,"{tab}","oral",3,1,"d",True,N),(1,"{tab}","oral",1,8,"h",True,N)],
+ "HFORM0014": [(N,N,N,N,N,N,False,N),(4,"{tab}","oral",1,1,"d",False,5)],
+ "HFORM0015": [(10,"mL",N,4,1,"d",True,N),(10,"mL",N,1,6,"h",True,N)],
+ "HFORM0099": [(N,N,N,N,N,N,False,N)],
+}
+R = {
+ "HFORM0001": [(1,"{tab}","oral",1,1,"d",False,N)]*3,
+ "HFORM0002": [(1,"{tab}","oral",2,1,"d",False,N)]*2+[(500,"mg","oral",2,1,"d",False,N)],
+ "HFORM0003": [(1,"{tab}","oral",1,1,"d",False,N)]*2,
+ "HFORM0004": [(1,"{tab}","oral",1,1,"d",False,N),(.5,"{tab}","oral",1,1,"d",False,N),(N,N,N,N,N,N,False,N)],
+ "HFORM0005": [(10,"[iU]","subcut",1,1,"d",False,N),(22,"[iU]","subcut",1,1,"d",False,N)],
+ "HFORM0006": [(1,"{cap}","oral",3,1,"d",False,10)]*2,
+ "HFORM0007": [(2,"{puff}","inhaled",1,6,"h",True,N),(2,"{puff}",N,1,4,"h",True,N)],
+ "HFORM0008": [(1,"{tab}","oral",1,1,"d",False,N)]*2,
+ "HFORM0009": [(1,"{cap}","oral",1,1,"d",False,N)]*2,
+ "HFORM0010": [(1,"{tab}","oral",1,6,"h",True,N)]*2,
+ "HFORM0011": [(1,"{tab}","oral",2,1,"d",False,N),(5,"mg","oral",2,1,"d",False,N)],
+ "HFORM0012": [(1,"{tab}","oral",1,1,"d",False,N)]*2,
+ "HFORM0013": [(1,"{tab}","oral",1,8,"h",True,N),(600,"mg","oral",3,1,"d",True,N)],
+ "HFORM0014": [(N,N,N,N,N,N,False,N),(4,"{tab}","oral",1,1,"d",False,5)],
+ "HFORM0015": [(10,"mL",N,4,1,"d",True,N)],
+ "HFORM0099": [(N,N,N,N,N,N,False,N)],
+}
+
+@pytest.mark.parametrize(("source", "code", "index", "sig", "expected"), [
+    (source, code, i, sig, cases[code][i])
+    for source, formulary, cases in (
+        ("lakeside", LAKESIDE_SIGS, L),
+        ("riverbend", {code: row[3] for code, row in FORMULARY.items()}, R),
+    )
+    for code, sigs in formulary.items()
+    for i, sig in enumerate(sigs)
+])
+def test_all_formulary_sig_expected_fields(source, code, index, sig, expected):
+    parsed = parse_sig(sig)
+    actual = (parsed.dose_value, parsed.dose_unit, parsed.route,
+              parsed.frequency_count, parsed.frequency_period,
+              parsed.frequency_period_unit, parsed.as_needed, parsed.duration_days)
+    assert actual == expected, (source, code, index, sig, actual, expected)
+    if " to " in sig or "1-2" in sig or "q4-6h" in sig:
+        assert parsed.confidence < 0.5
+    if sig == "inhale 2 puffs every 4 to 6 hours as needed for shortness of breath":
+        assert parsed.as_needed_reason == "shortness of breath"
