@@ -149,6 +149,11 @@ class BridgeAssistant:
         except RevertBlocked as e:
             return {"error": str(e), "blocking_batches": e.blocking}
 
+    def verify_run(self, run_id: str | None = None) -> dict[str, Any]:
+        from .verify import verify_run
+        rid = self._rid(run_id)
+        return verify_run(self.store, self.runner(rid).client, rid)
+
     def retire_rule(self, rule_id: str, by: str) -> dict[str, Any]:
         row = self.store.db.execute("SELECT run_id, kind, match_key FROM rules WHERE id=?", (rule_id,)).fetchone()
         if row is None:

@@ -16,7 +16,7 @@ For `ready` helper tasks, Claude may have committed a small **v0** implementatio
 | M3 | Bridge core pipeline, metrics, monitors, pause/revert | done |
 | M4 | Remaining domains + HL7 ORU/SIU + CSV channels | done |
 | M5 | MCP server + reconciliation loop | done |
-| M6 | Verification: read-back sampling, clinical sentinels, end-of-run reconciliation | claude |
+| M6 | Verification: read-back sampling, clinical sentinels, end-of-run reconciliation | done |
 | M7 | Rehearsals: rule carry-over, run-vs-run comparison | claude |
 | M8 | Cutover delta load + source deletions | claude |
 | M9 | Late identity merges via Nimbus $merge | claude |
