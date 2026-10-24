@@ -83,6 +83,8 @@ def main(argv: list[str] | None = None) -> int:
     e = sub.add_parser("explain")
     e.add_argument("source_key")
     e.add_argument("--type")
+    rep = sub.add_parser("report")
+    rep.add_argument("--out", required=True, help="self-contained .html or .md report")
     sub.add_parser("verify")
     sub.add_parser("mcp")
     args = p.parse_args(argv)
@@ -152,6 +154,15 @@ def main(argv: list[str] | None = None) -> int:
     elif args.cmd == "compare":
         from .compare import compare, run_profile
         out(compare(run_profile(RunStore(args.other_run_db)), run_profile(store, args.run_id)))
+    elif args.cmd == "report":
+        from .report import report_data, render_html, render_markdown
+        data = report_data(store, args.run_id)
+        destination = Path(args.out)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        if destination.suffix.lower() not in {".html", ".md"}:
+            p.error("report --out requires .html or .md")
+        destination.write_text(render_html(data) if destination.suffix.lower() == ".html" else render_markdown(data), encoding="utf-8")
+        out({"report": str(destination), "run_id": data["summary"]["run_id"]})
     elif args.cmd == "verify":
         from .verify import verify_run
         runner, rid = _runner(store, args.run_id)
