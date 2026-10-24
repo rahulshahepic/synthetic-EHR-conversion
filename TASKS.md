@@ -14,12 +14,13 @@ For `ready` helper tasks, Claude may have committed a small **v0** implementatio
 | M1 | Nimbus target EHR + import API | done |
 | M2 | Halcyon synthetic source generator | done |
 | M3 | Bridge core pipeline, metrics, monitors, pause/revert | done |
-| M4 | Remaining domains + HL7 ORU/SIU + CSV channels | claude |
+| M4 | Remaining domains + HL7 ORU/SIU + CSV channels | done |
 | M5 | MCP server + reconciliation loop | claude |
+| M6 | Verification: read-back sampling, clinical sentinels, end-of-run reconciliation | claude |
 
 ## Helper tasks
 
-### T-101 · HL7 v2 parser · `review`
+### T-101 · HL7 v2 parser · `done`
 Files: `src/bridge/extract/hl7.py`, `tests/bridge/test_hl7.py`
 - `parse_message(text: str) -> Message`; `iter_messages(path: Path) -> Iterator[Message]` (files contain many messages separated by blank lines or `\r\n`/`\n`/`\r` before `MSH`).
 - `Message.segments: list[Segment]`, `Message.type` (e.g. `"ADT^A08"`), `Message.control_id`.
@@ -28,13 +29,13 @@ Files: `src/bridge/extract/hl7.py`, `tests/bridge/test_hl7.py`
 - Tolerate: trailing separators, missing trailing fields, latin-1 bytes (decode with fallback), Z-segments.
 - Acceptance: ≥20 tests including the above edge cases; no third-party HL7 libs.
 
-### T-102 · Free-text medication sig parser · `review`
+### T-102 · Free-text medication sig parser · `done`
 Files: `src/bridge/normalize/sig.py`, `tests/bridge/test_sig.py`
 - `parse_sig(text: str) -> SigResult` (dataclass) with fields: `dose_value: float | None`, `dose_unit: str | None` (UCUM-ish: `mg`, `mL`, `{tab}`, `{cap}`, `{puff}`, `[iU]`, `{drop}`), `route: str | None` ∈ `oral, iv, im, subcut, topical, inhaled, rectal, ophthalmic, otic, nasal, transdermal, sublingual`, `frequency_count: int | None`, `frequency_period: float | None`, `frequency_period_unit: "h" | "d" | "wk" | None`, `as_needed: bool`, `as_needed_reason: str | None`, `duration_days: int | None`, `confidence: float` (0–1), `unparsed: str` (tokens not understood).
 - Handle Latin abbreviations (`po, bid, tid, qid, qd, qhs, q4-6h, prn, ac, pc, x10d, ud`), fractions (`1/2 tab`, `½`), ranges (`1-2 tabs` → take lower bound value, note in `unparsed`? — document your choice), "as directed".
 - Acceptance: ≥50 parametrized cases; `confidence < 0.5` whenever any clinically material token is unparsed.
 
-### T-103 · Units and lab value normalization · `review`
+### T-103 · Units and lab value normalization · `done`
 Files: `src/bridge/normalize/units.py`, `tests/bridge/test_units.py`
 - `normalize_unit(raw: str) -> str | None` → UCUM (`"mg/dl"`→`"mg/dL"`, `"MEQ/L"`→`"meq/L"`, `"K/uL"`→`"10*3/uL"`, `"%"`, `"mmHg"` → `"mm[Hg]"`, `"F"`→`"[degF]"`, `"lbs"`→`"[lb_av]"`...). Unknown → `None`.
 - `parse_result_value(raw: str) -> ParsedValue` with `kind: "quantity" | "coded" | "string"`, `value: float | None`, `comparator: "<" | "<=" | ">" | ">=" | None`, `code: str | None` (`POS/NEG/DET/ND/TRACE` → `positive/negative/detected/not-detected/trace`), `text: str`.
@@ -42,7 +43,7 @@ Files: `src/bridge/normalize/units.py`, `tests/bridge/test_units.py`
 - `convert(value, from_unit, to_unit) -> float` for temp (°F↔°C), weight (lb↔kg), height (in↔cm), glucose (mg/dL↔mmol/L).
 - Acceptance: ≥40 tests.
 
-### T-104 · Demographic normalizers · `review`
+### T-104 · Demographic normalizers · `done`
 Files: `src/bridge/normalize/demographics.py`, `tests/bridge/test_demographics.py`
 - `parse_name("LAST,FIRST MIDDLE") -> Name(family, given: list[str], suffix: list[str])`; handle `"O'NEIL, MARY-JO"`, `"DE LA CRUZ,JOSE A JR"`, provider style `"SMITH, JOHN Q MD"` (credentials → `suffix`). Title-case smartly (`McDonald`, `O'Neil`, `de la Cruz`).
 - `normalize_phone(raw, default_region="US") -> str | None` E.164; handle `(555) 123-4567`, `555.123.4567`, `5551234567x22` (drop ext, flag), `123-4567` (no area code → None).
@@ -65,3 +66,11 @@ Read-only local web UI over the run DB: runs, batches, metric trends, alerts, qu
 ### T-108 · Second source profile for drift testing · `review`
 Files: `testbed/halcyon/profiles/`, small hooks in `testbed/halcyon/generator.py` (`Config.rates`, `vocab.FACILITIES`)
 A "Lakeside facility" profile: metric units, different visit codes, different sig style, so the drift monitors have something to catch mid-run.
+
+### T-109 · Answer-key scoring harness · `ready`
+Files: `testbed/scoring.py` (new), `tests/testbed/test_scoring.py`
+Given a Halcyon export dir and a Bridge run DB, report for every planted issue type in `answer_key/issues.jsonl` how many were *surfaced* by Bridge (a question linked to the record, a lossy fidelity annotation on it, or a dropped/superseded/held status), and identity accuracy (`answer_key/persons.json` vs Bridge's `xref` kind `pat`: pairwise precision/recall). Read the run DB with plain `sqlite3` (tables documented in `src/bridge/runs/store.py`) — `testbed/` must not import `bridge`. Output JSON + a short Markdown table. Acceptance: tests generate a small export, run Bridge via the fixtures pattern in `tests/bridge/conftest.py`, and assert the report has an entry for every issue type.
+
+### T-110 · Performance at 50k patients · `ready`
+Files: `tools/bench.py` (new) plus targeted changes in `src/bridge/runs/store.py` and `src/nimbus/service.py` only.
+Today a 500-patient run (~52k Nimbus records) takes ~26s. Profile (`python -m cProfile`) a 5k-patient run and remove the top hotspots (e.g. the `work_queue` blocked-record EXISTS join that concatenates strings, per-record JSON parsing, per-record Nimbus history inserts). Keep behavior identical: the full test suite must pass unchanged. Report before/after timings in the PR.
