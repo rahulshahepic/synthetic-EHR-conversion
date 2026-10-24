@@ -18,7 +18,7 @@ For `ready` helper tasks, Claude may have committed a small **v0** implementatio
 
 ## Helper tasks
 
-### T-101 · HL7 v2 parser · `ready`
+### T-101 · HL7 v2 parser · `review`
 Files: `src/bridge/extract/hl7.py`, `tests/bridge/test_hl7.py`
 - `parse_message(text: str) -> Message`; `iter_messages(path: Path) -> Iterator[Message]` (files contain many messages separated by blank lines or `\r\n`/`\n`/`\r` before `MSH`).
 - `Message.segments: list[Segment]`, `Message.type` (e.g. `"ADT^A08"`), `Message.control_id`.
