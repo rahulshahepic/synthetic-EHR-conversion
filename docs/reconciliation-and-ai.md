@@ -31,6 +31,7 @@ Question {
 | `get_metrics(run_id?, resource_type?, batch_id?)` | Per-batch metric trend, or full detail for one batch. |
 | `list_questions(run_id?, kind?, blocking_only?, status?, limit?)` | Grouped questions, blocking and highest impact first; flags `clinical`. |
 | `get_question(id)` | Prompt, options, context and example source records. |
+| `ask_user(id)` | Shows the question to the human as a form via MCP **elicitation** (options as an enum + their name); records their choice as `user:<name>`. Without elicitation support it returns plain-language text to relay. |
 | `answer_question(id, option, answered_by, value?, rationale?)` | Answer → mapping rule → held records released / defaulted records requeued. |
 | `explain_record(source_key, resource_type?)` | Lineage: source → mapped payload → fidelity annotations → Nimbus result. |
 | `loss_report(run_id?, resource_type?)` | Dropped/degraded/inferred/defaulted fields summary. |

@@ -22,7 +22,7 @@ For `ready` helper tasks, Claude may have committed a small **v0** implementatio
 | M9 | Late identity merges via Nimbus $merge | done |
 | M10 | Scripted end-to-end demo | done |
 | M11 | Second source system (Lakeside) onboarding | done |
-| M12 | Ask the user natively via MCP elicitation | claude |
+| M12 | Ask the user natively via MCP elicitation | done |
 | M13 | Go-live readiness + sign-offs | claude |
 
 ## Helper tasks
