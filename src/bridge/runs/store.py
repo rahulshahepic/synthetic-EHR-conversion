@@ -26,6 +26,7 @@ CREATE INDEX IF NOT EXISTS ix_records_batch ON records(run_id, batch_id);
 -- Accelerate the work_queue blocker lookup without changing its key semantics.
 CREATE INDEX IF NOT EXISTS ix_records_blocker_key
   ON records(run_id, (rtype || '/' || source_key), status);
+CREATE INDEX IF NOT EXISTS ix_records_waiting_on ON records(run_id, blocked_by) WHERE status='blocked';
 CREATE TABLE IF NOT EXISTS xref (run_id TEXT, kind TEXT, key TEXT, value TEXT, PRIMARY KEY (run_id, kind, key));
 CREATE TABLE IF NOT EXISTS batches (
   id TEXT PRIMARY KEY, run_id TEXT, rtype TEXT, seq INTEGER, nimbus_batch_id TEXT, status TEXT,
@@ -158,22 +159,23 @@ class RunStore:
         row = self.db.execute("SELECT status FROM records WHERE run_id=? AND rtype=? AND source_key=?", (run_id, rtype, key)).fetchone()
         return row[0] if row else None
 
+    def release_ready_blocked(self, run_id: str) -> int:
+        """Migrate previously blocked rows whose dependency is already terminal."""
+        cursor = self.db.execute(
+            """UPDATE records SET status='pending', note='released by ' || blocked_by,
+                      blocked_by=NULL, updated_at=?
+               WHERE run_id=? AND status='blocked'
+                 AND EXISTS (SELECT 1 FROM records b WHERE b.run_id=records.run_id
+                   AND b.rtype || '/' || b.source_key=records.blocked_by
+                   AND b.status IN ('loaded','superseded'))""", (now(), run_id))
+        return cursor.rowcount
+
     def work_queue(self, run_id: str, rtype: str, limit: int = -1) -> list[dict[str, Any]]:
-        """Pending records plus blocked ones whose blocker has since loaded."""
+        """Ready records only; dependency transitions release blocked rows into pending."""
         rows = self.db.execute(
-            """SELECT * FROM (
-                 SELECT r.* FROM records r INDEXED BY ix_records_pending_seq
-                 WHERE r.run_id=? AND r.rtype=? AND r.status='pending' ORDER BY r.seq LIMIT ?
-               )
-               UNION ALL
-               SELECT * FROM (
-                 SELECT r.* FROM records r INDEXED BY ix_records_blocked_seq
-                 WHERE r.run_id=? AND r.rtype=? AND r.status='blocked'
-                   AND EXISTS (SELECT 1 FROM records b WHERE b.run_id=r.run_id
-                     AND b.rtype || '/' || b.source_key=r.blocked_by
-                     AND b.status IN ('loaded','superseded')) ORDER BY r.seq LIMIT ?
-               )
-               ORDER BY seq LIMIT ?""", (run_id, rtype, limit, run_id, rtype, limit, limit))
+            """SELECT * FROM records INDEXED BY ix_records_pending_seq
+               WHERE run_id=? AND rtype=? AND status='pending'
+               ORDER BY seq LIMIT ?""", (run_id, rtype, limit))
         return [self._rec(r) for r in rows]
 
     def update_record(self, run_id: str, rtype: str, key: str, **fields: Any) -> None:
@@ -184,6 +186,12 @@ class RunStore:
         cols = ", ".join(f"{k}=?" for k in fields)
         self.db.execute(f"UPDATE records SET {cols} WHERE run_id=? AND rtype=? AND source_key=?",
                         (*fields.values(), run_id, rtype, key))
+        if fields.get("status") in (LOADED, SUPERSEDED):
+            # Targeted wakeup replaces repeated full scans of blocked records.
+            self.db.execute(
+                """UPDATE records SET status='pending', blocked_by=NULL, note=?, updated_at=?
+                   WHERE run_id=? AND blocked_by=? AND status='blocked'""",
+                (f"released by {rtype}/{key}", now(), run_id, f"{rtype}/{key}"))
 
     def status_counts(self, run_id: str) -> dict[str, dict[str, int]]:
         out: dict[str, dict[str, int]] = {}

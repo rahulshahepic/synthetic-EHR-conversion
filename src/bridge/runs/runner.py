@@ -58,6 +58,7 @@ class Runner:
             raise RuntimeError(f"run is {run['status']}")
         self.store.set_status(run_id, "running")
         self.store.bump_pass(run_id)
+        self.store.release_ready_blocked(run_id)
         types = run["config"]["types"]
         size = run["config"]["batch_size"]
         progress = True
