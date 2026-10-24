@@ -1,0 +1,17 @@
+local_code,loinc,ucum_unit,display
+GLU,2345-7,mg/dL,Glucose
+K,2823-3,meq/L,Potassium
+NA,2951-2,meq/L,Sodium
+CREAT,2160-0,mg/dL,Creatinine
+HGBA1C,4548-4,%,Hemoglobin A1c
+CHOL,2093-3,mg/dL,Cholesterol total
+LDL,13457-7,mg/dL,LDL cholesterol (calculated)
+HDL,2085-9,mg/dL,HDL cholesterol
+WBC,6690-2,10*3/uL,Leukocytes
+HGB,718-7,g/dL,Hemoglobin
+PLT,777-3,10*3/uL,Platelets
+TSH,3016-3,mIU/L,Thyrotropin
+INR,6301-6,{INR},INR
+VITD,1989-3,ng/mL,25-hydroxyvitamin D
+UAPROT,20454-5,,Protein urine qualitative
+STREP,78012-2,,Strep A antigen rapid

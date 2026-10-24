@@ -143,13 +143,13 @@ class RunStore:
         row = self.db.execute("SELECT status FROM records WHERE run_id=? AND rtype=? AND source_key=?", (run_id, rtype, key)).fetchone()
         return row[0] if row else None
 
-    def work_queue(self, run_id: str, rtype: str) -> list[dict[str, Any]]:
+    def work_queue(self, run_id: str, rtype: str, limit: int = -1) -> list[dict[str, Any]]:
         """Pending records plus blocked ones whose blocker has since loaded."""
         rows = self.db.execute(
             """SELECT r.* FROM records r WHERE r.run_id=? AND r.rtype=? AND (r.status='pending' OR (r.status='blocked'
                AND EXISTS (SELECT 1 FROM records b WHERE b.run_id=r.run_id
                  AND b.rtype || '/' || b.source_key = r.blocked_by AND b.status IN ('loaded','superseded'))))
-               ORDER BY r.seq""", (run_id, rtype))
+               ORDER BY r.seq LIMIT ?""", (run_id, rtype, limit))
         return [self._rec(r) for r in rows]
 
     def update_record(self, run_id: str, rtype: str, key: str, **fields: Any) -> None:

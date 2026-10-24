@@ -7,7 +7,7 @@ from typing import Any
 
 from ..extract.halcyon import HalcyonExport, stage_all
 from ..load.client import NimbusClient
-from ..mapping import core  # noqa: F401  (registers mappers)
+from ..mapping import clinical, core  # noqa: F401  (registers mappers)
 from ..mapping.base import MAPPERS, MapContext, run_mapper
 from ..monitor import rules as monitor_rules
 from ..monitor.metrics import batch_metrics
@@ -53,11 +53,11 @@ class Runner:
             progress = False
             for rtype in types:
                 while True:
-                    queue = self.store.work_queue(run_id, rtype)
+                    queue = self.store.work_queue(run_id, rtype, size)
                     if not queue:
                         break
                     progress = True
-                    paused = self.process_batch(run_id, rtype, queue[:size])
+                    paused = self.process_batch(run_id, rtype, queue)
                     if paused:
                         return "paused"
         counts = self.store.status_counts(run_id)
@@ -88,20 +88,21 @@ class Runner:
     def process_batch(self, run_id: str, rtype: str, recs: list[dict[str, Any]]) -> bool:
         results: list[dict[str, Any]] = []
         submit: list[tuple[dict[str, Any], MapContext, dict[str, Any]]] = []
-        for rec in recs:
-            ctx = MapContext(self.store, run_id, rtype, rec, self.profile)
-            try:
-                outcome = run_mapper(ctx)
-            except Exception as exc:  # a mapper bug must surface as a rejection, not vanish
-                results.append(self._finish(run_id, rtype, rec, ctx, S.REJECTED, issues=[{
-                    "code": "BRIDGE_MAPPER_ERROR", "message": f"{type(exc).__name__}: {exc}", "severity": "error",
-                    "trace": traceback.format_exc(limit=3)}]))
-                continue
-            if outcome.status == "ok":
-                submit.append((rec, ctx, outcome.payload))
-            else:
-                status = {"held": S.HELD, "blocked": S.BLOCKED, "dropped": S.DROPPED, "superseded": S.SUPERSEDED}[outcome.status]
-                results.append(self._finish(run_id, rtype, rec, ctx, status, note=outcome.note))
+        with self.store.tx():
+            for rec in recs:
+                ctx = MapContext(self.store, run_id, rtype, rec, self.profile)
+                try:
+                    outcome = run_mapper(ctx)
+                except Exception as exc:  # a mapper bug must surface as a rejection, not vanish
+                    results.append(self._finish(run_id, rtype, rec, ctx, S.REJECTED, issues=[{
+                        "code": "BRIDGE_MAPPER_ERROR", "message": f"{type(exc).__name__}: {exc}", "severity": "error",
+                        "trace": traceback.format_exc(limit=3)}]))
+                    continue
+                if outcome.status == "ok":
+                    submit.append((rec, ctx, outcome.payload))
+                else:
+                    status = {"held": S.HELD, "blocked": S.BLOCKED, "dropped": S.DROPPED, "superseded": S.SUPERSEDED}[outcome.status]
+                    results.append(self._finish(run_id, rtype, rec, ctx, status, note=outcome.note))
 
         nimbus_batch = None
         bridge_batch_id = None
@@ -111,6 +112,13 @@ class Runner:
             self.store.db.execute("UPDATE batches SET nimbus_batch_id=? WHERE id=?", (nimbus_batch, bridge_batch_id))
             resp = self.client.submit(nimbus_batch, [{"sourceKey": r["source_key"], "resource": p} for r, _, p in submit])
             self.client.close(nimbus_batch)
+            self._persist_results(run_id, rtype, submit, resp, bridge_batch_id, results)
+        else:
+            bridge_batch_id = self.store.create_batch(run_id, rtype, "")
+        return self._measure(run_id, rtype, results, bridge_batch_id, nimbus_batch)
+
+    def _persist_results(self, run_id, rtype, submit, resp, bridge_batch_id, results) -> None:
+        with self.store.tx():
             for (rec, ctx, payload), res in zip(submit, resp):
                 if res["status"] in ("accepted", "unchanged"):
                     results.append(self._finish(run_id, rtype, rec, ctx, S.LOADED, payload=payload, target_id=res.get("targetId"),
@@ -118,9 +126,9 @@ class Runner:
                 else:
                     results.append(self._finish(run_id, rtype, rec, ctx, S.REJECTED, payload=payload, issues=res.get("issues"),
                                                 batch_id=bridge_batch_id))
-        else:
-            bridge_batch_id = self.store.create_batch(run_id, rtype, "")
 
+    def _measure(self, run_id: str, rtype: str, results: list[dict[str, Any]], bridge_batch_id: str,
+                 nimbus_batch: str | None) -> bool:
         m = batch_metrics(results)
         samples = {
             "target_reject_rate": [{"source_key": r["source_key"], "issue": (r["issues"] or [{}])[0]} for r in results if r["status"] == S.REJECTED],

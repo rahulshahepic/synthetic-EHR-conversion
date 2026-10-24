@@ -1,0 +1,5 @@
+local_code,loinc,display
+PN,11506-3,Progress note
+HP,34117-2,History and physical note
+DS,18842-5,Discharge summary
+TEL,34748-4,Telephone encounter note

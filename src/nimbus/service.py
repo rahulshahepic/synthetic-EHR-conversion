@@ -124,14 +124,20 @@ class NimbusService:
                 raise Conflict("E_BATCH_STATE", f"batch is {b['status']}")
             results = []
             counts = {"accepted": 0, "rejected": 0, "unchanged": 0}
-            for rec in records:
-                res = self._submit_one(b, rec)
-                results.append(res)
-                counts[res["status"] if res["status"] in counts else "accepted"] += 1
-            self._db.execute(
-                "UPDATE batches SET accepted=accepted+?, rejected=rejected+?, unchanged=unchanged+? WHERE id=?",
-                (counts["accepted"], counts["rejected"], counts["unchanged"], batch_id),
-            )
+            self._db.execute("BEGIN")
+            try:
+                for rec in records:
+                    res = self._submit_one(b, rec)
+                    results.append(res)
+                    counts[res["status"] if res["status"] in counts else "accepted"] += 1
+                self._db.execute(
+                    "UPDATE batches SET accepted=accepted+?, rejected=rejected+?, unchanged=unchanged+? WHERE id=?",
+                    (counts["accepted"], counts["rejected"], counts["unchanged"], batch_id),
+                )
+                self._db.execute("COMMIT")
+            except Exception:
+                self._db.execute("ROLLBACK")
+                raise
         return {"batchId": batch_id, "results": results}
 
     def _submit_one(self, batch: dict[str, Any], rec: dict[str, Any]) -> dict[str, Any]:
