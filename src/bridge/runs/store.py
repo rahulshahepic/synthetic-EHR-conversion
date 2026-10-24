@@ -21,6 +21,9 @@ CREATE TABLE IF NOT EXISTS records (
 CREATE INDEX IF NOT EXISTS ix_records_status ON records(run_id, rtype, status);
 CREATE INDEX IF NOT EXISTS ix_records_held ON records(run_id, held_by);
 CREATE INDEX IF NOT EXISTS ix_records_batch ON records(run_id, batch_id);
+-- Accelerate the work_queue blocker lookup without changing its key semantics.
+CREATE INDEX IF NOT EXISTS ix_records_blocker_key
+  ON records(run_id, (rtype || '/' || source_key), status);
 CREATE TABLE IF NOT EXISTS xref (run_id TEXT, kind TEXT, key TEXT, value TEXT, PRIMARY KEY (run_id, kind, key));
 CREATE TABLE IF NOT EXISTS batches (
   id TEXT PRIMARY KEY, run_id TEXT, rtype TEXT, seq INTEGER, nimbus_batch_id TEXT, status TEXT,

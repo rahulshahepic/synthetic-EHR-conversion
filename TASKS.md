@@ -79,7 +79,7 @@ A "Lakeside facility" profile: metric units, different visit codes, different si
 Files: `testbed/scoring.py` (new), `tests/testbed/test_scoring.py`
 Given a Halcyon export dir and a Bridge run DB, report for every planted issue type in `answer_key/issues.jsonl` how many were *surfaced* by Bridge (a question linked to the record, a lossy fidelity annotation on it, or a dropped/superseded/held status), and identity accuracy (`answer_key/persons.json` vs Bridge's `xref` kind `pat`: pairwise precision/recall). Read the run DB with plain `sqlite3` (tables documented in `src/bridge/runs/store.py`) — `testbed/` must not import `bridge`. Output JSON + a short Markdown table. Acceptance: tests generate a small export, run Bridge via the fixtures pattern in `tests/bridge/conftest.py`, and assert the report has an entry for every issue type.
 
-### T-110 · Performance at 50k patients · `ready`
+### T-110 · Performance at 50k patients · `review`
 Files: `tools/bench.py` (new) plus targeted changes in `src/bridge/runs/store.py` and `src/nimbus/service.py` only.
 Today a 500-patient run (~52k Nimbus records) takes ~26s. Profile (`python -m cProfile`) a 5k-patient run and remove the top hotspots (e.g. the `work_queue` blocked-record EXISTS join that concatenates strings, per-record JSON parsing, per-record Nimbus history inserts). Keep behavior identical: the full test suite must pass unchanged. Report before/after timings in the PR.
 
