@@ -52,6 +52,10 @@ jobs:
           assert data["run_status"] == "completed", data["run_status"]
           assert data["records_total"] >= 50000, data.get("records_total")
           assert data["loaded_records"] > 0, data.get("loaded_records")
+          assert data.get("verification") and data["verification"].get("ok") is True, data.get("verification")
+          assert data.get("fidelity_mean_loaded") is not None, data.get("fidelity_mean_loaded")
+          assert data.get("conversion_seconds", 0) > 0, data.get("conversion_seconds")
+          assert data.get("peak_rss_mb", 0) > 0, data.get("peak_rss_mb")
           print("FULL_50K_VERIFIED", data["conversion_seconds"])
           PY
       - name: Upload logs even on failure
