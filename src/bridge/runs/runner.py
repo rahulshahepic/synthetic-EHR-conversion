@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import traceback
+from time import perf_counter
 from datetime import date
 from typing import Any
 
@@ -100,6 +101,7 @@ class Runner:
 
     # ---------------------------------------------------------------- one batch
     def process_batch(self, run_id: str, rtype: str, recs: list[dict[str, Any]]) -> bool:
+        started = perf_counter()
         results: list[dict[str, Any]] = []
         submit: list[tuple[dict[str, Any], MapContext, dict[str, Any]]] = []
         with self.store.tx():
@@ -118,6 +120,7 @@ class Runner:
                     status = {"held": S.HELD, "blocked": S.BLOCKED, "dropped": S.DROPPED, "superseded": S.SUPERSEDED}[outcome.status]
                     results.append(self._finish(run_id, rtype, rec, ctx, status, note=outcome.note))
 
+        map_seconds = perf_counter() - started
         nimbus_batch = None
         bridge_batch_id = None
         if submit:
@@ -129,8 +132,9 @@ class Runner:
             self._persist_results(run_id, rtype, submit, resp, bridge_batch_id, results)
         else:
             bridge_batch_id = self.store.create_batch(run_id, rtype, "")
+        load_seconds = perf_counter() - started - map_seconds
         released = sum(1 for r in recs if r["status"] == S.BLOCKED or (r.get("note") or "").startswith("released by"))
-        return self._measure(run_id, rtype, results, bridge_batch_id, nimbus_batch, released)
+        return self._measure(run_id, rtype, results, bridge_batch_id, nimbus_batch, released, {'map_seconds': map_seconds, 'load_seconds': load_seconds})
 
     def _persist_results(self, run_id, rtype, submit, resp, bridge_batch_id, results) -> None:
         with self.store.tx():
@@ -144,8 +148,9 @@ class Runner:
                                                 batch_id=bridge_batch_id))
 
     def _measure(self, run_id: str, rtype: str, results: list[dict[str, Any]], bridge_batch_id: str,
-                 nimbus_batch: str | None, released: int = 0) -> bool:
+                 nimbus_batch: str | None, released: int = 0, timings: dict | None = None) -> bool:
         m = batch_metrics(results)
+        m['timings'] = timings or {}
         # records released by answers (or by a parent loading) are not a fair sample for drift baselines
         m["released_share"] = round(released / len(results), 4) if results else 0.0
         samples = {
