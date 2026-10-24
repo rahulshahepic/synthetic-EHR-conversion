@@ -1,0 +1,116 @@
+name: T-110 autonomous 1k-to-50k validation
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/t110-50k.yml'
+      - 'tools/bench.py'
+      - 'src/bridge/**'
+      - 'src/nimbus/**'
+      - 'tests/**'
+  workflow_dispatch:
+
+concurrency:
+  group: t110-autonomous-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  full-50k:
+    needs: scaling-validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install package
+        run: python -m pip install -e ".[dev]"
+      - name: Full end-to-end 50,000-patient conversion
+        run: |
+          mkdir -p benchmark-output
+          /usr/bin/time -v python -u tools/bench.py --patients 50000 --seed 42 > benchmark-output/50k.json 2> >(tee benchmark-output/resources-and-progress.log >&2)
+          cat benchmark-output/50k.json
+          cat benchmark-output/resources-and-progress.log
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          data = json.loads(Path("benchmark-output/50k.json").read_text())
+          assert data["patients"] == 50000
+          assert data["first_pass_only"] is False
+          assert data["run_status"] == "completed", data["run_status"]
+          assert data["records_total"] >= 50000, data.get("records_total")
+          assert data["loaded_records"] > 0, data.get("loaded_records")
+          assert data.get("verification") and data["verification"].get("ok") is True, data.get("verification")
+          assert data.get("fidelity_mean_loaded") is not None, data.get("fidelity_mean_loaded")
+          assert data.get("conversion_seconds", 0) > 0, data.get("conversion_seconds")
+          assert data.get("peak_rss_mb", 0) > 0, data.get("peak_rss_mb")
+          print("FULL_50K_VERIFIED", data["conversion_seconds"])
+          PY
+      - name: Upload logs even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: t110-full-50k
+          path: benchmark-output/
+          if-no-files-found: warn
+
+  scaling-validation:
+    needs: short-validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: python -m pip install -e ".[dev]"
+      - name: Complete 2k, 5k, and 10k-patient conversions
+        run: |
+          mkdir -p benchmark-output
+          for n in 2000 5000 10000; do
+            echo "::group::Benchmark $n patients"
+            /usr/bin/time -v python -u tools/bench.py --patients "$n" --seed 42 > "benchmark-output/$n.json" 2> >(tee "benchmark-output/$n.log" >&2)
+            python -c 'import json,sys; d=json.load(open(sys.argv[1])); print("RESULT",d["patients"],d["run_status"],d["conversion_seconds"],d["loaded_records"],flush=True); assert d["run_status"] == "completed" and d["loaded_records"] > 0 and d["verification"]["ok"]' "benchmark-output/$n.json"
+            echo "::endgroup::"
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: t110-scaling-validation
+          path: benchmark-output/
+
+  short-validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: python -m pip install -e ".[dev]" pytest-xdist
+      - name: Regression tests
+        run: python -m pytest -q -n 4 --dist loadfile
+      - name: Short smoke and scaling measurements (live output)
+        timeout-minutes: 12
+        run: |
+          mkdir -p benchmark-output
+          for n in 100 250 500 1000; do
+            echo "::group::Benchmark $n patients"
+            echo "Starting $n patients at $(date -u +%FT%TZ)"
+            /usr/bin/time -v python -u tools/bench.py --patients "$n" --seed 42 > "benchmark-output/$n.json" 2> >(tee "benchmark-output/$n.log" >&2)
+            python -c 'import json,sys; d=json.load(open(sys.argv[1])); print("RESULT",d["patients"],d["run_status"],d["conversion_seconds"],d["loaded_records"],flush=True); assert d["run_status"] == "completed" and d["loaded_records"] > 0' "benchmark-output/$n.json"
+            echo "::endgroup::"
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: t110-short-validation
+          path: benchmark-output/
