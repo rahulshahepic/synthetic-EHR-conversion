@@ -58,7 +58,7 @@ Files: `src/bridge/normalize/demographics.py`, `tests/bridge/test_demographics.p
 - `parse_legacy_date("19840312" | "031284" | "00000000" | "1984-03-12") -> DateParse(value: date | None, precision: "day"|"month"|"year"|None, inferred: bool)`. 2-digit years pivot: assume not in future relative to a given `as_of`.
 - Acceptance: ≥40 tests.
 
-### T-105 · Synthetic terminology crosswalks · `ready`
+### T-105 · Synthetic terminology crosswalks · `review`
 Files: `src/bridge/terminology/data/*.csv`, `tests/bridge/test_terminology_data.py`
 Today several local codes intentionally have no crosswalk row, so they become reconciliation questions (e.g. `HZ099`, unrecognized specialty/race text, uncodable allergens). Write a script `tools/crosswalk_gaps.py` that runs a conversion on a generated export and lists every question kind+key that a crosswalk row could have prevented; then extend the CSVs (keep a few deliberate gaps, documented in `data/README.md`) so that every local code in `testbed/halcyon/vocab.py` either maps or is listed as a deliberate gap. Include ICD-9→ICD-10 1:many rows. All codes must be labeled synthetic where invented.
 

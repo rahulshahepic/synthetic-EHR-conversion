@@ -5,3 +5,8 @@ ER,emergency
 IP,inpatient
 OBS,observation
 TEL,virtual
+EST,ambulatory
+NEW,ambulatory
+URG,emergency
+DAY,observation
+VID,virtual
