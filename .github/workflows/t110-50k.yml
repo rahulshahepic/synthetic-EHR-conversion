@@ -62,7 +62,7 @@ jobs:
 
   short-validation:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -72,12 +72,16 @@ jobs:
       - run: python -m pip install -e ".[dev]"
       - name: Regression tests
         run: python -m pytest -q
-      - name: Scaling measurements
+      - name: Short smoke and scaling measurements (live output)
+        timeout-minutes: 12
         run: |
           mkdir -p benchmark-output
-          for n in 1000 2000 5000 10000; do
-            python -u tools/bench.py --patients "$n" --seed 42 > "benchmark-output/$n.json" 2> "benchmark-output/$n.log"
-            python -c 'import json,sys; d=json.load(open(sys.argv[1])); print(d["patients"],d["run_status"],d["conversion_seconds"],d["loaded_records"]); assert d["run_status"] == "completed" and d["loaded_records"] > 0' "benchmark-output/$n.json"
+          for n in 100 250 500 1000; do
+            echo "::group::Benchmark $n patients"
+            echo "Starting $n patients at $(date -u +%FT%TZ)"
+            /usr/bin/time -v python -u tools/bench.py --patients "$n" --seed 42 > "benchmark-output/$n.json" 2> >(tee "benchmark-output/$n.log" >&2)
+            python -c 'import json,sys; d=json.load(open(sys.argv[1])); print("RESULT",d["patients"],d["run_status"],d["conversion_seconds"],d["loaded_records"],flush=True); assert d["run_status"] == "completed" and d["loaded_records"] > 0' "benchmark-output/$n.json"
+            echo "::endgroup::"
           done
       - uses: actions/upload-artifact@v4
         if: always()
