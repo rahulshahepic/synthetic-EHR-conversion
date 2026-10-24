@@ -29,6 +29,8 @@ CREATE TABLE IF NOT EXISTS batches (
   id TEXT PRIMARY KEY, run_id TEXT, rtype TEXT, seq INTEGER, nimbus_batch_id TEXT, status TEXT,
   created_at TEXT, counts TEXT, metrics TEXT
 );
+-- create_batch repeatedly computes MAX(seq) for the current run.
+CREATE INDEX IF NOT EXISTS ix_bridge_batches_run_seq ON batches(run_id, seq);
 CREATE TABLE IF NOT EXISTS alerts (
   id TEXT PRIMARY KEY, run_id TEXT, batch_id TEXT, rtype TEXT, rule TEXT, metric TEXT, observed REAL,
   threshold REAL, severity TEXT, status TEXT, message TEXT, samples TEXT, suggested TEXT, created_at TEXT,
