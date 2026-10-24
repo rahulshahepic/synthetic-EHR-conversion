@@ -34,7 +34,7 @@ Files: `src/bridge/normalize/sig.py`, `tests/bridge/test_sig.py`
 - Handle Latin abbreviations (`po, bid, tid, qid, qd, qhs, q4-6h, prn, ac, pc, x10d, ud`), fractions (`1/2 tab`, `½`), ranges (`1-2 tabs` → take lower bound value, note in `unparsed`? — document your choice), "as directed".
 - Acceptance: ≥50 parametrized cases; `confidence < 0.5` whenever any clinically material token is unparsed.
 
-### T-103 · Units and lab value normalization · `ready`
+### T-103 · Units and lab value normalization · `review`
 Files: `src/bridge/normalize/units.py`, `tests/bridge/test_units.py`
 - `normalize_unit(raw: str) -> str | None` → UCUM (`"mg/dl"`→`"mg/dL"`, `"MEQ/L"`→`"meq/L"`, `"K/uL"`→`"10*3/uL"`, `"%"`, `"mmHg"` → `"mm[Hg]"`, `"F"`→`"[degF]"`, `"lbs"`→`"[lb_av]"`...). Unknown → `None`.
 - `parse_result_value(raw: str) -> ParsedValue` with `kind: "quantity" | "coded" | "string"`, `value: float | None`, `comparator: "<" | "<=" | ">" | ">=" | None`, `code: str | None` (`POS/NEG/DET/ND/TRACE` → `positive/negative/detected/not-detected/trace`), `text: str`.
