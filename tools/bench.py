@@ -23,7 +23,7 @@ from bridge.runs.store import RunStore
 from testbed.halcyon.generator import generate
 
 
-def benchmark(patients: int = 5000, seed: int = 42, profile_out: str | None = None) -> dict:
+def benchmark(patients: int = 5000, seed: int = 42, profile_out: str | None = None, *, without_index: bool = False) -> dict:
     if patients < 1:
         raise ValueError("patients must be positive")
     with tempfile.TemporaryDirectory(prefix="bridge-bench-") as scratch:
@@ -35,6 +35,8 @@ def benchmark(patients: int = 5000, seed: int = 42, profile_out: str | None = No
         db = root / "run.db"
         target = f"embedded:{root / 'nimbus.db'}"
         store = RunStore(str(db))
+        if without_index:
+            store.db.execute("DROP INDEX IF EXISTS ix_records_blocker_key")
         runner = Runner(store, connect(target))
         profiler = cProfile.Profile() if profile_out else None
         began = time.perf_counter()
@@ -51,7 +53,7 @@ def benchmark(patients: int = 5000, seed: int = 42, profile_out: str | None = No
             pstats.Stats(profiler).strip_dirs().sort_stats("cumulative").print_stats(30)
         counts = store.status_counts(run_id)
         return {
-            "seed": seed, "patients": patients,
+            "seed": seed, "patients": patients, "without_index": without_index,
             "generation_seconds": round(generation_seconds, 3),
             "conversion_seconds": round(conversion_seconds, 3),
             "records_by_status": counts,
@@ -65,8 +67,9 @@ def main() -> None:
     parser.add_argument("--patients", type=int, default=5000)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--profile-out", default=None)
+    parser.add_argument("--without-index", action="store_true", help="drop blocker index for same-revision control")
     args = parser.parse_args()
-    print(json.dumps(benchmark(args.patients, args.seed, args.profile_out), indent=2))
+    print(json.dumps(benchmark(args.patients, args.seed, args.profile_out, without_index=args.without_index), indent=2))
 
 
 if __name__ == "__main__":
