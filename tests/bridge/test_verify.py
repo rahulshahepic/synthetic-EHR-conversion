@@ -1,6 +1,6 @@
 from bridge.mapping import base
 from bridge.reconcile.answers import answer
-from bridge.verify import _same, verify_run
+from bridge.verify import _nimbus_all, _same, verify_run
 
 
 def test_same_compares_refs_by_source_key_and_ignores_nimbus_additions():
@@ -42,3 +42,22 @@ def test_sentinel_catches_silently_inactivated_anticoagulants(env, export_dir, m
     alert = next(a for a in store.alerts(rid) if a["rule"] == "clinical_sentinel")
     assert alert["metric"] == "active_anticoagulants"
     assert store.run(rid)["status"] == "paused"
+
+
+def test_nimbus_sentinel_scan_streams_pages_without_collecting_all_records():
+    class FakeClient:
+        def __init__(self):
+            self.offsets = []
+
+        def search(self, rtype, *, limit, offset):
+            assert rtype == "Observation" and limit == 1000
+            self.offsets.append(offset)
+            return [{"id": str(i)} for i in range(offset, offset + (1000 if offset == 0 else 2))]
+
+    client = FakeClient()
+    records = _nimbus_all(client, "Observation")
+    assert client.offsets == []  # lazy until consumed
+    assert next(records)["id"] == "0"
+    assert client.offsets == [0]
+    assert len(list(records)) == 1001
+    assert client.offsets == [0, 1000]
