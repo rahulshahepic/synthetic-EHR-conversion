@@ -86,6 +86,11 @@ def main(argv: list[str] | None = None) -> int:
     rep = sub.add_parser("report")
     rep.add_argument("--out", required=True, help="self-contained .html or .md report")
     sub.add_parser("verify")
+    so = sub.add_parser("signoff")
+    so.add_argument("--domain", required=True)
+    so.add_argument("--by", required=True)
+    so.add_argument("--note", default="")
+    sub.add_parser("readiness")
     web = sub.add_parser("web")
     web.add_argument("--port", type=int, default=8710)
     web.add_argument("--host", default="127.0.0.1")
@@ -166,6 +171,13 @@ def main(argv: list[str] | None = None) -> int:
             p.error("report --out requires .html or .md")
         destination.write_text(render_html(data) if destination.suffix.lower() == ".html" else render_markdown(data), encoding="utf-8")
         out({"report": str(destination), "run_id": data["summary"]["run_id"]})
+    elif args.cmd == "signoff":
+        from .readiness import signoff
+        out(signoff(store, store.run(args.run_id)["id"], args.domain, args.by, args.note))
+    elif args.cmd == "readiness":
+        from .readiness import readiness
+        runner, rid = _runner(store, args.run_id)
+        out(readiness(store, runner.client, rid))
     elif args.cmd == "verify":
         from .verify import verify_run
         runner, rid = _runner(store, args.run_id)

@@ -126,6 +126,14 @@ def main() -> None:
     nimbus_patients = a1.runner().client.count("Patient")["active"]
     t.say(f"Identity: Nimbus holds **{nimbus_patients} active patients**; the answer key says there are {len(persons)} real people.")
 
+    r = a1.readiness()
+    t.say(f"Go-live readiness: **{r['decision']}** (reasons: {', '.join(r['reasons']) or 'none'}).")
+    missing = next(c for c in r["checks"] if c["check"] == "fidelity_loss_signed_off")["detail"]["missing"]
+    for domain in missing:
+        a1.signoff_domain(domain, "user:sim-domain-owner", "reviewed the loss report for this domain")
+    r = a1.readiness()
+    t.say(f"After domain owners sign off the loss for {len(missing)} resource types: **{r['decision']}**"
+          + (f" (warnings: {', '.join(r['warnings'])})" if r["warnings"] else "") + ".")
     from bridge.report import render_html, report_data
     (out / "rehearsal1_report.html").write_text(render_html(report_data(a1.store)), encoding="utf-8")
     t.say("Full run report: `rehearsal1_report.html` (metrics per batch, alerts, loss ledger, questions).")
