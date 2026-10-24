@@ -58,7 +58,7 @@ Files: `src/bridge/normalize/demographics.py`, `tests/bridge/test_demographics.p
 - `parse_legacy_date("19840312" | "031284" | "00000000" | "1984-03-12") -> DateParse(value: date | None, precision: "day"|"month"|"year"|None, inferred: bool)`. 2-digit years pivot: assume not in future relative to a given `as_of`.
 - Acceptance: ≥40 tests.
 
-### T-105 · Synthetic terminology crosswalks · `review`
+### T-105 · Synthetic terminology crosswalks · `done`
 Files: `src/bridge/terminology/data/*.csv`, `tests/bridge/test_terminology_data.py`
 Today several local codes intentionally have no crosswalk row, so they become reconciliation questions (e.g. `HZ099`, unrecognized specialty/race text, uncodable allergens). Write a script `tools/crosswalk_gaps.py` that runs a conversion on a generated export and lists every question kind+key that a crosswalk row could have prevented; then extend the CSVs (keep a few deliberate gaps, documented in `data/README.md`) so that every local code in `testbed/halcyon/vocab.py` either maps or is listed as a deliberate gap. Include ICD-9→ICD-10 1:many rows. All codes must be labeled synthetic where invented.
 
@@ -67,7 +67,7 @@ Files: `src/bridge/report/`, tests
 Render a run's metrics, alerts, loss ledger, and question status to a single self-contained HTML file (no external assets) and Markdown.
 Read only through `bridge.runs.store.RunStore` and `bridge.status` (`run_summary`, `metrics_view`, `loss_summary`). Add a CLI subcommand `report --out <file.html>`. Test against a run produced by the fixtures in `tests/bridge/conftest.py`.
 
-### T-107 · Web dashboard (stretch) · `review`
+### T-107 · Web dashboard (stretch) · `done`
 Files: `src/bridge/web/` (new), tests.
 Read-only local web UI over the run DB: runs, batches, metric trends, alerts, questions, record lineage. Use `bridge.assistant.BridgeAssistant` for all data (same operations the MCP server exposes). FastAPI + server-rendered HTML or a single static page; no external CDN assets. CLI: `python -m bridge --run-db ... web --port 8710`.
 
@@ -79,11 +79,11 @@ A "Lakeside facility" profile: metric units, different visit codes, different si
 Files: `testbed/scoring.py` (new), `tests/testbed/test_scoring.py`
 Given a Halcyon export dir and a Bridge run DB, report for every planted issue type in `answer_key/issues.jsonl` how many were *surfaced* by Bridge (a question linked to the record, a lossy fidelity annotation on it, or a dropped/superseded/held status), and identity accuracy (`answer_key/persons.json` vs Bridge's `xref` kind `pat`: pairwise precision/recall). Read the run DB with plain `sqlite3` (tables documented in `src/bridge/runs/store.py`) — `testbed/` must not import `bridge`. Output JSON + a short Markdown table. Acceptance: tests generate a small export, run Bridge via the fixtures pattern in `tests/bridge/conftest.py`, and assert the report has an entry for every issue type.
 
-### T-110 · Performance at 50k patients · `review`
+### T-110 · Performance at 50k patients · `done`
 Files: `tools/bench.py` (new) plus targeted changes in `src/bridge/runs/store.py` and `src/nimbus/service.py` only.
 Today a 500-patient run (~52k Nimbus records) takes ~26s. Profile (`python -m cProfile`) a 5k-patient run and remove the top hotspots (e.g. the `work_queue` blocked-record EXISTS join that concatenates strings, per-record JSON parsing, per-record Nimbus history inserts). Keep behavior identical: the full test suite must pass unchanged. Report before/after timings in the PR.
 
-### T-111 · Export mutator for cutover testing · `review`
+### T-111 · Export mutator for cutover testing · `done`
 Files: `testbed/halcyon/mutate.py` (new), CLI `python -m testbed.halcyon mutate --from <exportA> --out <exportB> --seed N`, `tests/testbed/test_mutate.py`
 Produce export B from export A as "the same system some weeks later": keep every existing primary key stable; add new patients (with charts), new visits/labs/notes for existing patients, demographic changes on ~5% of patients (also emitted as ADT A08 in B's feeds), status changes (meds discontinued, appointments completed/cancelled), and delete a small number of rows (e.g. entered-in-error problems, cancelled-and-purged appointments). Copy feeds/extracts and append new messages. Write `answer_key/delta.json` listing every added/changed/deleted key by table. Do not import `bridge` or `nimbus`. Acceptance: deterministic for a seed; tests assert keys in A remain stable in B except listed deletions, and that delta.json is complete (diff A vs B tables equals delta.json).
 

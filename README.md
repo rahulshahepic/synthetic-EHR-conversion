@@ -24,6 +24,17 @@ tests/                pytest suites
 - [Metrics, monitoring, pause & revert](docs/metrics-and-monitoring.md)
 - [Reconciliation & AI (MCP)](docs/reconciliation-and-ai.md)
 
+## Chat with the demo (no local setup)
+The repo is wired so an AI coding agent can run a conversion *with you*: it starts the run, puts each decision to you in
+plain language, records your answer under your name, resumes, and explains the results. Instructions for agents are in
+[`AGENTS.md`](AGENTS.md).
+
+| Assistant | How |
+|---|---|
+| **Claude Code on the web** (claude.ai/code, works on a phone) | Start a session on this repo and say: *"Run the guided conversion demo with me."* The `bridge` MCP tools are preconfigured (`.mcp.json`, installed by `scripts/session-start.sh`). |
+| **ChatGPT → Codex** (chatgpt.com/codex) | Start a task on this repo: *"Follow AGENTS.md: run the guided conversion demo and ask me each decision."* Codex drives the CLI (`python3 -m bridge ... next / answer / resume`). Reply to each question in the task thread. |
+| **Muse / any agent with a shell** | Same prompt as Codex; `AGENTS.md` has the full playbook. |
+
 ## See the runs on GitHub (no local setup)
 **Demo site:** https://rahulshahepic.github.io/synthetic-EHR-conversion/ (rebuilt after every merge to `main`).
 

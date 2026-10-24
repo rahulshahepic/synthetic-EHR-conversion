@@ -1,0 +1,28 @@
+name: T-110 benchmark validation
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'tools/bench.py'
+      - 'src/bridge/runs/store.py'
+      - '.github/workflows/t110-benchmark.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: python -m pip install -e ".[dev]"
+      - name: Compare 500-patient baseline and indexed runs
+        run: |
+          python tools/bench.py --patients 500 --seed 42 --without-index
+          python tools/bench.py --patients 500 --seed 42
+      - name: Profile 5k-patient initial pass (not full conversion)
+        run: python tools/bench.py --patients 5000 --seed 42 --first-pass-only --profile-out /tmp/bridge.prof

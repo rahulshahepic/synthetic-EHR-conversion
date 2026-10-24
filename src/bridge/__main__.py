@@ -94,6 +94,7 @@ def main(argv: list[str] | None = None) -> int:
     web = sub.add_parser("web")
     web.add_argument("--port", type=int, default=8710)
     web.add_argument("--host", default="127.0.0.1")
+    sub.add_parser("next", help="plain-text: what to ask the human next (for chat assistants without MCP)")
     sub.add_parser("mcp")
     args = p.parse_args(argv)
 
@@ -186,6 +187,12 @@ def main(argv: list[str] | None = None) -> int:
         import uvicorn
         from .web import create_app
         uvicorn.run(create_app(args.run_db), host=args.host, port=args.port)
+    elif args.cmd == "next":
+        from .assistant import BridgeAssistant
+        step = BridgeAssistant(args.run_db).next_step(args.run_id)
+        print(step["present_to_user"])
+        print("\n---")
+        print(json.dumps({k: v for k, v in step.items() if k != "present_to_user"}, indent=1))
     elif args.cmd == "mcp":
         from .mcp_server import serve
         serve(args.run_db)
