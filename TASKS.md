@@ -67,7 +67,7 @@ Files: `src/bridge/report/`, tests
 Render a run's metrics, alerts, loss ledger, and question status to a single self-contained HTML file (no external assets) and Markdown.
 Read only through `bridge.runs.store.RunStore` and `bridge.status` (`run_summary`, `metrics_view`, `loss_summary`). Add a CLI subcommand `report --out <file.html>`. Test against a run produced by the fixtures in `tests/bridge/conftest.py`.
 
-### T-107 · Web dashboard (stretch) · `ready`
+### T-107 · Web dashboard (stretch) · `review`
 Files: `src/bridge/web/` (new), tests.
 Read-only local web UI over the run DB: runs, batches, metric trends, alerts, questions, record lineage. Use `bridge.assistant.BridgeAssistant` for all data (same operations the MCP server exposes). FastAPI + server-rendered HTML or a single static page; no external CDN assets. CLI: `python -m bridge --run-db ... web --port 8710`.
 
@@ -75,7 +75,7 @@ Read-only local web UI over the run DB: runs, batches, metric trends, alerts, qu
 Files: `testbed/halcyon/profiles/`, small hooks in `testbed/halcyon/generator.py` (`Config.rates`, `vocab.FACILITIES`)
 A "Lakeside facility" profile: metric units, different visit codes, different sig style, so the drift monitors have something to catch mid-run.
 
-### T-109 · Answer-key scoring harness · `ready`
+### T-109 · Answer-key scoring harness · `review`
 Files: `testbed/scoring.py` (new), `tests/testbed/test_scoring.py`
 Given a Halcyon export dir and a Bridge run DB, report for every planted issue type in `answer_key/issues.jsonl` how many were *surfaced* by Bridge (a question linked to the record, a lossy fidelity annotation on it, or a dropped/superseded/held status), and identity accuracy (`answer_key/persons.json` vs Bridge's `xref` kind `pat`: pairwise precision/recall). Read the run DB with plain `sqlite3` (tables documented in `src/bridge/runs/store.py`) — `testbed/` must not import `bridge`. Output JSON + a short Markdown table. Acceptance: tests generate a small export, run Bridge via the fixtures pattern in `tests/bridge/conftest.py`, and assert the report has an entry for every issue type.
 
