@@ -59,7 +59,7 @@ Files: `src/bridge/normalize/demographics.py`, `tests/bridge/test_demographics.p
 Files: `src/bridge/terminology/data/*.csv`, `tests/bridge/test_terminology_data.py`
 Today several local codes intentionally have no crosswalk row, so they become reconciliation questions (e.g. `HZ099`, unrecognized specialty/race text, uncodable allergens). Write a script `tools/crosswalk_gaps.py` that runs a conversion on a generated export and lists every question kind+key that a crosswalk row could have prevented; then extend the CSVs (keep a few deliberate gaps, documented in `data/README.md`) so that every local code in `testbed/halcyon/vocab.py` either maps or is listed as a deliberate gap. Include ICD-9→ICD-10 1:many rows. All codes must be labeled synthetic where invented.
 
-### T-106 · Run report renderer · `in-progress (ChatGPT)`
+### T-106 · Run report renderer · `review`
 Files: `src/bridge/report/`, tests
 Render a run's metrics, alerts, loss ledger, and question status to a single self-contained HTML file (no external assets) and Markdown.
 Read only through `bridge.runs.store.RunStore` and `bridge.status` (`run_summary`, `metrics_view`, `loss_summary`). Add a CLI subcommand `report --out <file.html>`. Test against a run produced by the fixtures in `tests/bridge/conftest.py`.
