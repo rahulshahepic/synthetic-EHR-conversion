@@ -19,6 +19,8 @@ CREATE TABLE IF NOT EXISTS records (
   PRIMARY KEY (run_id, rtype, source_key)
 );
 CREATE INDEX IF NOT EXISTS ix_records_status ON records(run_id, rtype, status);
+CREATE INDEX IF NOT EXISTS ix_records_pending_seq ON records(run_id, rtype, seq) WHERE status='pending';
+CREATE INDEX IF NOT EXISTS ix_records_blocked_seq ON records(run_id, rtype, seq) WHERE status='blocked';
 CREATE INDEX IF NOT EXISTS ix_records_held ON records(run_id, held_by);
 CREATE INDEX IF NOT EXISTS ix_records_batch ON records(run_id, batch_id);
 -- Accelerate the work_queue blocker lookup without changing its key semantics.
@@ -153,10 +155,19 @@ class RunStore:
     def work_queue(self, run_id: str, rtype: str, limit: int = -1) -> list[dict[str, Any]]:
         """Pending records plus blocked ones whose blocker has since loaded."""
         rows = self.db.execute(
-            """SELECT r.* FROM records r WHERE r.run_id=? AND r.rtype=? AND (r.status='pending' OR (r.status='blocked'
-               AND EXISTS (SELECT 1 FROM records b WHERE b.run_id=r.run_id
-                 AND b.rtype || '/' || b.source_key = r.blocked_by AND b.status IN ('loaded','superseded'))))
-               ORDER BY r.seq LIMIT ?""", (run_id, rtype, limit))
+            """SELECT * FROM (
+                 SELECT r.* FROM records r INDEXED BY ix_records_pending_seq
+                 WHERE r.run_id=? AND r.rtype=? AND r.status='pending' ORDER BY r.seq LIMIT ?
+               )
+               UNION ALL
+               SELECT * FROM (
+                 SELECT r.* FROM records r INDEXED BY ix_records_blocked_seq
+                 WHERE r.run_id=? AND r.rtype=? AND r.status='blocked'
+                   AND EXISTS (SELECT 1 FROM records b WHERE b.run_id=r.run_id
+                     AND b.rtype || '/' || b.source_key=r.blocked_by
+                     AND b.status IN ('loaded','superseded')) ORDER BY r.seq LIMIT ?
+               )
+               ORDER BY seq LIMIT ?""", (run_id, rtype, limit, run_id, rtype, limit, limit))
         return [self._rec(r) for r in rows]
 
     def update_record(self, run_id: str, rtype: str, key: str, **fields: Any) -> None:
