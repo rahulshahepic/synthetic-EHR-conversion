@@ -106,7 +106,9 @@ def headline(demo: Path) -> tuple[list[tuple[str, str, str]], list[tuple[str, fl
         (f"{weighted:.3f}", "mean fidelity (1.0 = lossless)", ""),
         (str(answered), "human decisions (grouped)", ""),
         (str(pauses), "safety pauses", ""),
-        ("OK" if verif.get("ok") else "FAILED", "end-of-run verification", "good" if verif.get("ok") else "bad"),
+        ("Passed" if verif.get("ok") else "Failed",
+         f"end-of-run checks: counts, read-back, {len(verif.get('sentinels', {}))} clinical sentinels",
+         "good" if verif.get("ok") else "bad"),
         (ready.get("decision", "n/a"), "go-live readiness", "good" if ready.get("decision") == "GO" else "bad"),
     ]
     return cards, sorted(fids, key=lambda x: x[1])
