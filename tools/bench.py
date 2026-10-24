@@ -15,6 +15,10 @@ import json
 import pstats
 import tempfile
 import time
+import sys
+import threading
+import sqlite3
+import resource
 from pathlib import Path
 
 from bridge.load.client import connect
@@ -25,6 +29,32 @@ from testbed.simulated_user import SimulatedAnalyst
 from bridge.reconcile.answers import answer
 
 
+def progress(stage: str, started: float, **details: object) -> None:
+    elapsed = round(time.perf_counter() - started, 1)
+    rss_mb = round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024, 1)
+    print(json.dumps({"stage": stage, "elapsed_seconds": elapsed, "peak_rss_mb": rss_mb, **details}),
+          file=sys.stderr, flush=True)
+
+
+def monitor_database(path: Path, stop: threading.Event, started: float) -> None:
+    """Observe committed progress via a separate connection without blocking converter writes."""
+    while not stop.wait(15):
+        try:
+            db = sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=1)
+            try:
+                run = db.execute("SELECT id,status,pass_count FROM runs ORDER BY rowid DESC LIMIT 1").fetchone()
+                if run:
+                    batches = db.execute("SELECT COUNT(*), COALESCE(SUM(json_extract(counts,'$.attempted')),0) FROM batches WHERE run_id=?", (run[0],)).fetchone()
+                    progress("heartbeat", started, run_status=run[1], passes=run[2],
+                             completed_batches=batches[0], attempted_records=batches[1])
+                else:
+                    progress("heartbeat", started, state="generating_or_preparing")
+            finally:
+                db.close()
+        except (sqlite3.Error, OSError) as exc:
+            progress("heartbeat", started, note=type(exc).__name__)
+
+
 def benchmark(patients: int = 5000, seed: int = 42, profile_out: str | None = None, *, without_index: bool = False, first_pass_only: bool = False) -> dict:
     if patients < 1:
         raise ValueError("patients must be positive")
@@ -32,7 +62,9 @@ def benchmark(patients: int = 5000, seed: int = 42, profile_out: str | None = No
         root = Path(scratch)
         export = root / "export"
         began = time.perf_counter()
+        progress("generation_started", began, patients=patients)
         generate(export, seed=seed, patients=patients)
+        progress("generation_completed", began, patients=patients)
         generation_seconds = time.perf_counter() - began
         db = root / "run.db"
         target = f"embedded:{root / 'nimbus.db'}"
@@ -42,6 +74,10 @@ def benchmark(patients: int = 5000, seed: int = 42, profile_out: str | None = No
         runner = Runner(store, connect(target))
         profiler = cProfile.Profile() if profile_out else None
         began = time.perf_counter()
+        stopped = threading.Event()
+        watcher = threading.Thread(target=monitor_database, args=(db, stopped, began), daemon=True)
+        watcher.start()
+        progress("conversion_started", began, patients=patients)
         if profiler:
             profiler.enable()
         try:
@@ -69,9 +105,12 @@ def benchmark(patients: int = 5000, seed: int = 42, profile_out: str | None = No
                 else:
                     raise RuntimeError("benchmark did not resolve pauses within 100 rounds")
         finally:
+            stopped.set()
+            watcher.join(timeout=2)
             if profiler:
                 profiler.disable()
         conversion_seconds = time.perf_counter() - began
+        progress("conversion_completed", began, patients=patients, duration=round(conversion_seconds, 2))
         if profiler:
             profiler.dump_stats(profile_out)
             pstats.Stats(profiler).strip_dirs().sort_stats("cumulative").print_stats(30)
