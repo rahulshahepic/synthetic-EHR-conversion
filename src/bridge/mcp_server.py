@@ -121,6 +121,16 @@ def build_server(run_db: str) -> MCPServer:
     def merge_patients(survivor: str, duplicate: str, confirmed_by: str, run_id: str | None = None) -> dict[str, Any]:
         return b.merge_patients(survivor, duplicate, confirmed_by, run_id)
 
+    @mcp.tool(description="Go-live readiness: GO / NO-GO with reasons (blocking questions, unresolved records, unacknowledged "
+                          "pause alerts, verification, fidelity-loss sign-offs) and warnings.")
+    def readiness(run_id: str | None = None) -> dict[str, Any]:
+        return b.readiness(run_id)
+
+    @mcp.tool(description="A named owner accepts the current fidelity loss for one resource type (see loss_report). Only "
+                          "relay this for the user who owns that domain: by='user:<name>'. Re-sign if the loss changes.")
+    def signoff_domain(domain: str, by: str, note: str = "", run_id: str | None = None) -> dict[str, Any]:
+        return b.signoff_domain(domain, by, note, run_id)
+
     @mcp.tool(description="Compare this run with an earlier rehearsal (other_run_db): questions, pauses, counts, fidelity.")
     def compare_runs(other_run_db: str, run_id: str | None = None) -> dict[str, Any]:
         return b.compare_runs(other_run_db, run_id)

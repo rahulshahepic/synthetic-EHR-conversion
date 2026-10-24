@@ -167,6 +167,18 @@ class BridgeAssistant:
         from .runs.delta import delta_summary
         return delta_summary(self.store, run_id)
 
+    def readiness(self, run_id: str | None = None) -> dict[str, Any]:
+        from .readiness import readiness
+        rid = self._rid(run_id)
+        return readiness(self.store, self.runner(rid).client, rid)
+
+    def signoff_domain(self, domain: str, by: str, note: str = "", run_id: str | None = None) -> dict[str, Any]:
+        from .readiness import signoff
+        try:
+            return signoff(self.store, self._rid(run_id), domain, by, note)
+        except ValueError as e:
+            return {"error": str(e)}
+
     def compare_runs(self, other_run_db: str, run_id: str | None = None) -> dict[str, Any]:
         from .compare import compare, run_profile
         return compare(run_profile(RunStore(other_run_db)), run_profile(self.store, run_id))

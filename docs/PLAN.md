@@ -49,6 +49,6 @@ See `TASKS.md` for live task-level status. Milestone status is updated in this t
 - M9: done (late merges of already-loaded patients via Nimbus $merge; CLI/MCP `merge_patients`; revertible)
 - M8: done (`run --prior-run <run.db>`: same target, carried answers and duplicate ownership, created/updated/unchanged per type, source deletions → `source_deleted` question with keep/retire; `delta` CLI, MCP `delta_summary`)
 - M12: done (`ask_user` elicitation tool; tested with an in-memory MCP client: accept, decline, unsupported)
-- M13: next
+- M13: done (readiness GO/NO-GO + named sign-offs; CLI `readiness`/`signoff`, MCP `readiness`/`signoff_domain`; in the demo)
 - M11: done (found and fixed: 3,263 vitals silently dropped + Chicago time assumed for Mountain facilities when the profile was unknown; new `drop_rate` monitor)
 - M10: done (`python -m testbed.demo`: simulated analyst answers from the answer key; 200/200 identities correct; rehearsal 2 has 0 blocking questions; exact cutover delta)

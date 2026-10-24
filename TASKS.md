@@ -23,7 +23,7 @@ For `ready` helper tasks, Claude may have committed a small **v0** implementatio
 | M10 | Scripted end-to-end demo | done |
 | M11 | Second source system (Lakeside) onboarding | done |
 | M12 | Ask the user natively via MCP elicitation | done |
-| M13 | Go-live readiness + sign-offs | claude |
+| M13 | Go-live readiness + sign-offs | done |
 
 ## Helper tasks
 

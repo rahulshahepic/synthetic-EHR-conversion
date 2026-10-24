@@ -11,4 +11,5 @@ def test_demo_runs_end_to_end(tmp_path, monkeypatch):
     assert "Rehearsal 2" in text and "Cutover" in text
     assert "counts OK" in text and "FAIL" not in text
     assert "with 0 blocking questions" in text
+    assert "Go-live readiness: **NO-GO**" in text and ": **GO**" in text
     assert (out / "rehearsal1_report.html").read_text().lstrip().lower().startswith("<!doctype html")
