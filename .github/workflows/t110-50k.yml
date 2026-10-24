@@ -18,6 +18,7 @@ permissions:
 
 jobs:
   full-50k:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 180
     steps:
@@ -60,3 +61,28 @@ jobs:
           name: t110-full-50k
           path: benchmark-output/
           if-no-files-found: warn
+
+  short-validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: python -m pip install -e ".[dev]"
+      - name: Regression tests
+        run: python -m pytest -q tests/bridge/test_work_queue_performance.py tests/nimbus/test_reference_index.py tests/test_scalability_indexes.py
+      - name: Scaling measurements
+        run: |
+          mkdir -p benchmark-output
+          for n in 1000 2000 5000 10000; do
+            python -u tools/bench.py --patients "$n" --seed 42 > "benchmark-output/$n.json" 2> "benchmark-output/$n.log"
+            python -c 'import json,sys; d=json.load(open(sys.argv[1])); print(d["patients"],d["run_status"],d["conversion_seconds"],d["loaded_records"]); assert d["run_status"] == "completed" and d["loaded_records"] > 0' "benchmark-output/$n.json"
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: t110-short-validation
+          path: benchmark-output/
