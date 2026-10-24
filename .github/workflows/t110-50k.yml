@@ -8,14 +8,27 @@ on:
       - 'tools/bench.py'
   workflow_dispatch:
 
+concurrency:
+  group: t110-50k-scalability
+  cancel-in-progress: true
+
 permissions:
   contents: read
+  actions: write
 
 jobs:
   full-50k:
     runs-on: ubuntu-latest
     timeout-minutes: 180
     steps:
+      - name: Cancel superseded 50k benchmarks
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for id in 40129668644 40135474549 40135491980 40135502861 40135570842; do
+            echo "Canceling obsolete run $id"
+            gh api -X POST "repos/${{ github.repository }}/actions/runs/$id/cancel" || true
+          done
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
