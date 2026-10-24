@@ -419,7 +419,9 @@ def parse_sig(text: str) -> SigResult:
     for i, tok in enumerate(tokens):
         if consumed[i] or not tok:
             continue
-        if tok in _FILLER_TOKENS or tok in _TIMING_TOKENS:
+        if tok in _TIMING_TOKENS:
+            continue
+        if tok in _FILLER_TOKENS and not (prn_index is not None and i > prn_index and tok == "of"):
             continue
         if prn_index is not None and i > prn_index:
             reason_tokens.append(tok)
