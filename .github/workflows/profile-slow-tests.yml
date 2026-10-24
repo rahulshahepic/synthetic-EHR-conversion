@@ -44,7 +44,9 @@ jobs:
               result = pytest.main(["-q", "-x", "-k", test, "--durations=3"])
               profiler.disable()
               print(f"Elapsed: {time.perf_counter()-start:.2f}s; pytest exit: {result}", flush=True)
-              pstats.Stats(profiler).strip_dirs().sort_stats("cumulative").print_stats(25)
+              pstats.Stats(profiler).sort_stats("cumulative").print_stats(80)
+              print("=== Highest self-time functions ===", flush=True)
+              pstats.Stats(profiler).sort_stats("tottime").print_stats(35)
               if result != 0:
                   raise SystemExit(result)
           PY
