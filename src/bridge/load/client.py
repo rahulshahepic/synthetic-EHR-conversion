@@ -9,7 +9,7 @@ Targets:
 from __future__ import annotations
 
 import importlib
-from typing import Any
+from typing import Any, Iterator
 
 import httpx
 
@@ -59,6 +59,29 @@ class NimbusClient:
 
     def search(self, rtype: str, **params: Any) -> list[dict[str, Any]]:
         return self._req("GET", f"/api/v1/{rtype}", params=params)["items"]
+
+    def iter_search(self, rtype: str, page_size: int = 1000) -> Iterator[dict[str, Any]]:
+        """Traverse a collection with indexed keyset pagination instead of OFFSET scans."""
+        if not 1 <= page_size <= 1000:
+            raise ValueError("page_size must be between 1 and 1000")
+        cursor = None
+        while True:
+            params: dict[str, Any] = {"limit": page_size}
+            if cursor is not None:
+                params["afterCreatedAt"], params["afterId"] = cursor
+            page = self.search(rtype, **params)
+            yield from page
+            if len(page) < page_size:
+                return
+            last = page[-1]
+            created = last.get("meta", {}).get("createdAt")
+            rid = last.get("id")
+            if not created or not rid:
+                raise ValueError("Nimbus search response missing keyset cursor metadata")
+            next_cursor = (created, rid)
+            if next_cursor == cursor:
+                raise RuntimeError("Nimbus search cursor did not advance")
+            cursor = next_cursor
 
     def merge(self, target_id: str, source_id: str, batch_id: str | None = None) -> dict[str, Any]:
         return self._req("POST", f"/api/v1/patients/{target_id}/$merge",

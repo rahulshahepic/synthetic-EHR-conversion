@@ -65,8 +65,9 @@ def create_app(service: NimbusService | None = None) -> FastAPI:
 
     @app.get("/api/v1/{resource_type}")
     def search(resource_type: str, sourceKey: str | None = None, identifier: str | None = None,
-               patient: str | None = None, limit: int = 100, offset: int = 0) -> dict[str, Any]:
-        items = svc.search(resource_type, sourceKey, identifier, patient, min(limit, 1000), offset)
+               patient: str | None = None, limit: int = 100, offset: int = 0,
+               afterCreatedAt: str | None = None, afterId: str | None = None) -> dict[str, Any]:
+        items = svc.search(resource_type, sourceKey, identifier, patient, min(limit, 1000), offset, afterCreatedAt, afterId)
         return {"resourceType": resource_type, "items": items}
 
     return app

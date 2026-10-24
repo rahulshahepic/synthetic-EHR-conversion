@@ -47,17 +47,35 @@ def test_sentinel_catches_silently_inactivated_anticoagulants(env, export_dir, m
 def test_nimbus_sentinel_scan_streams_pages_without_collecting_all_records():
     class FakeClient:
         def __init__(self):
-            self.offsets = []
+            self.started = False
 
-        def search(self, rtype, *, limit, offset):
-            assert rtype == "Observation" and limit == 1000
-            self.offsets.append(offset)
-            return [{"id": str(i)} for i in range(offset, offset + (1000 if offset == 0 else 2))]
+        def iter_search(self, rtype):
+            assert rtype == "Observation"
+            self.started = True
+            for i in range(1002):
+                yield {"id": str(i)}
 
     client = FakeClient()
     records = _nimbus_all(client, "Observation")
-    assert client.offsets == []  # lazy until consumed
+    assert not client.started
     assert next(records)["id"] == "0"
-    assert client.offsets == [0]
+    assert client.started
     assert len(list(records)) == 1001
-    assert client.offsets == [0, 1000]
+
+
+def test_sentinel_counts_streamed_units_and_statuses():
+    from bridge.verify import _sentinel
+    from bridge.runs.store import LOADED, HELD, DROPPED
+    rows = [
+        {"source_key": "A1", "status": LOADED, "patient": "P1"},
+        {"source_key": "A2", "status": LOADED, "patient": "P1"},
+        {"source_key": "A3", "status": HELD, "patient": "P2"},
+        {"source_key": "A4", "status": DROPPED, "patient": "P3"},
+    ]
+    out = _sentinel("allergies", "patients with allergies", iter(rows),
+                    lambda r: True, 1, unit=lambda r: r["patient"])
+    assert out["ok"]
+    assert out["source"] == 3
+    assert out["expected_in_nimbus"] == 1
+    assert out["not_loaded_by_status"] == {HELD: 1, DROPPED: 1}
+    assert out["not_loaded_examples"] == ["A3", "A4"]

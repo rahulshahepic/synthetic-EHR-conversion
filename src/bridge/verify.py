@@ -6,6 +6,7 @@ source-vs-target difference must be explained by a record-level status (held, dr
 from __future__ import annotations
 
 import random
+import json
 from collections import Counter
 from typing import Any, Callable, Iterable, Iterator
 
@@ -86,42 +87,47 @@ def _source_records(store: S.RunStore, run_id: str, rtype: str, where: str = "")
     # Stream rather than materializing millions of clinical source rows at 50k patients.
     for r in store.db.execute(f"SELECT source_key, status, source FROM records WHERE run_id=? AND rtype=? {where}",
                               (run_id, rtype)):
-        yield {"source_key": r["source_key"], "status": r["status"], "source": __import__("json").loads(r["source"])}
+        yield {"source_key": r["source_key"], "status": r["status"], "source": json.loads(r["source"])}
 
 
 def _nimbus_all(client: NimbusClient, rtype: str) -> Iterator[dict[str, Any]]:
-    # Keep at most one API page in memory; avoid collecting every target record.
-    offset = 0
-    while True:
-        page = client.search(rtype, limit=1000, offset=offset)
-        yield from page
-        if len(page) < 1000:
-            return
-        offset += 1000
+    # Cursor-backed scan: bounded memory and no quadratic OFFSET walk.
+    yield from client.iter_search(rtype)
 
 
 def _sentinel(name: str, description: str, source: Iterable[dict[str, Any]], keep: Callable[[dict[str, Any]], bool],
-              nimbus_count: int, unit: Callable[[dict[str, Any]], str] = lambda r: r["source_key"]) -> dict[str, Any]:
-    """Source items matching `keep`; every one must be in Nimbus or explained by a record status."""
-    by_status = Counter()
-    all_units, loaded_units, examples = set(), set(), []
-    for record in source:
-        if not keep(record):
+              nimbus_count: int, unit: Callable[[dict[str, Any]], str] | None = None) -> dict[str, Any]:
+    """Reconcile source statuses in one pass, retaining only distinct units when needed."""
+    by_status: Counter[str] = Counter()
+    seen: set[str] = set()
+    loaded: set[str] = set()
+    source_count = loaded_count = 0
+    examples: list[str] = []
+    for rec in source:
+        if not keep(rec):
             continue
-        by_status[record["status"]] += 1
-        key = unit(record)
-        all_units.add(key)
-        if record["status"] == S.LOADED:
-            loaded_units.add(key)
-        elif len(examples) < 10:
-            examples.append(record["source_key"])
-    expected = len(loaded_units)
-    unexplained = nimbus_count - expected
-    return {"name": name, "description": description, "source": len(all_units),
-            "expected_in_nimbus": expected, "nimbus": nimbus_count,
-            "not_loaded_by_status": {status: n for status, n in by_status.items() if status != S.LOADED},
-            "unexplained_delta": unexplained, "ok": unexplained == 0,
-            "not_loaded_examples": examples}
+        status = rec["status"]
+        by_status[status] += 1
+        if unit is None:
+            # source_key is unique per resource type within a run.
+            source_count += 1
+            if status == S.LOADED:
+                loaded_count += 1
+        else:
+            key = unit(rec)
+            seen.add(key)
+            if status == S.LOADED:
+                loaded.add(key)
+        if status != S.LOADED and len(examples) < 10:
+            examples.append(rec["source_key"])
+    if unit is not None:
+        source_count, loaded_count = len(seen), len(loaded)
+    explained = {st: count for st, count in by_status.items() if st != S.LOADED}
+    delta = nimbus_count - loaded_count
+    return {"name": name, "description": description, "source": source_count,
+            "expected_in_nimbus": loaded_count, "nimbus": nimbus_count,
+            "not_loaded_by_status": explained, "unexplained_delta": delta,
+            "ok": delta == 0, "not_loaded_examples": examples}
 
 
 def sentinels(store: S.RunStore, client: NimbusClient, run_id: str) -> dict[str, Any]:

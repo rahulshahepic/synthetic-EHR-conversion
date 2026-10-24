@@ -133,9 +133,10 @@ class NimbusService:
             results = []
             counts = {"accepted": 0, "rejected": 0, "unchanged": 0}
             self._db.execute("BEGIN")
+            ref_cache: dict[tuple[str, str, str], sqlite3.Row] = {}
             try:
                 for rec in records:
-                    res = self._submit_one(b, rec)
+                    res = self._submit_one(b, rec, ref_cache)
                     results.append(res)
                     counts[res["status"] if res["status"] in counts else "accepted"] += 1
                 self._db.execute(
@@ -148,7 +149,8 @@ class NimbusService:
                 raise
         return {"batchId": batch_id, "results": results}
 
-    def _submit_one(self, batch: dict[str, Any], rec: dict[str, Any]) -> dict[str, Any]:
+    def _submit_one(self, batch: dict[str, Any], rec: dict[str, Any],
+                    ref_cache: dict[tuple[str, str, str], sqlite3.Row] | None = None) -> dict[str, Any]:
         rt = batch["resourceType"]
         sk = rec.get("sourceKey")
         payload = rec.get("resource")
@@ -157,7 +159,7 @@ class NimbusService:
             return {**out, "status": "rejected", "issues": [Issue("E_REQUIRED", "sourceKey and resource required").to_dict()]}
         model, issues = parse(rt, payload)
         if model is not None:
-            issues += self._resolve_refs(rt, model)
+            issues += self._resolve_refs(rt, model, ref_cache)
         existing = self._row_by_sk(rt, sk)
         if model is not None and not any(i.severity == "error" for i in issues):
             issues += self._contextual_checks(rt, model, existing["id"] if existing else None)
@@ -188,6 +190,9 @@ class NimbusService:
                 (rt, rid, sk, 1, json.dumps(data), batch["batchId"], now, now),
             )
         self._index(rt, rid, data, model=model, existing=existing is not None)
+        if ref_cache is not None:
+            ref_cache.pop((rt, "id", rid), None)
+            ref_cache.pop((rt, "sk", sk), None)
         return {**out, "status": "accepted", "operation": "updated" if existing is not None else "created", "targetId": rid}
 
     # ------------------------------------------------------------------ helpers
@@ -197,18 +202,31 @@ class NimbusService:
     def _row(self, rt: str, rid: str) -> sqlite3.Row | None:
         return self._db.execute("SELECT * FROM resources WHERE rtype=? AND id=?", (rt, rid)).fetchone()
 
-    def _resolve_refs(self, rt: str, model: Any) -> list[Issue]:
+    def _resolve_refs(self, rt: str, model: Any,
+                      cache: dict[tuple[str, str, str], sqlite3.Row] | None = None) -> list[Issue]:
         issues = []
+        if cache is None:
+            cache = {}
         for field, ref, target in iter_refs(rt, model):
             row = None
             if ref.id:
-                row = self._row(target, ref.id)
+                ck = (target, "id", ref.id)
+                row = cache.get(ck)
+                if row is None:
+                    row = self._row(target, ref.id)
+                    if row is not None:
+                        cache[ck] = row
             elif ref.sourceKey:
                 rtype, _, key = ref.sourceKey.partition("/")
                 if rtype != target or not key:
                     issues.append(Issue("E_REF_TYPE", f"{field} must reference {target} ('{target}/<key>')", field))
                     continue
-                row = self._row_by_sk(target, key)
+                ck = (target, "sk", key)
+                row = cache.get(ck)
+                if row is None:
+                    row = self._row_by_sk(target, key)
+                    if row is not None:
+                        cache[ck] = row
             else:
                 issues.append(Issue("E_REQUIRED", "reference needs id or sourceKey", field))
                 continue
@@ -414,7 +432,7 @@ class NimbusService:
     def _out(self, rt: str, row: sqlite3.Row) -> dict[str, Any]:
         return {
             "resourceType": rt, "id": row["id"], "sourceKey": row["source_key"],
-            "meta": {"version": row["version"], "updatedAt": row["updated_at"]},
+            "meta": {"version": row["version"], "createdAt": row["created_at"], "updatedAt": row["updated_at"]},
             "provenance": {"importBatchId": row["batch_id"]},
             **json.loads(row["data"]),
         }
@@ -426,7 +444,8 @@ class NimbusService:
         return self._out(rt, row)
 
     def search(self, rt: str, source_key: str | None = None, identifier: str | None = None,
-               patient: str | None = None, limit: int = 100, offset: int = 0) -> list[dict[str, Any]]:
+               patient: str | None = None, limit: int = 100, offset: int = 0,
+               after_created_at: str | None = None, after_id: str | None = None) -> list[dict[str, Any]]:
         if rt not in m.RESOURCE_MODELS:
             raise NimbusError("E_RESOURCE_TYPE", f"unknown resource type {rt!r}")
         sql, args = "SELECT r.* FROM resources r", []
@@ -442,6 +461,11 @@ class NimbusService:
         if patient:
             where.append("r.id IN (SELECT owner_id FROM refs WHERE owner_rtype=? AND target_rtype='Patient' AND target_id=?)")
             args += [rt, patient]
+        if (after_created_at is None) != (after_id is None):
+            raise NimbusError("E_CURSOR", "both cursor fields are required")
+        if after_created_at is not None:
+            where.append("(r.created_at, r.id) > (?, ?)")
+            args.extend((after_created_at, after_id))
         sql += " WHERE " + " AND ".join(where) + " ORDER BY r.created_at, r.id LIMIT ? OFFSET ?"
         args += [limit, offset]
         return [self._out(rt, r) for r in self._db.execute(sql, args)]
