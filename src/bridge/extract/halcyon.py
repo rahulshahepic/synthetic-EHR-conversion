@@ -56,6 +56,10 @@ def stage_all(store: RunStore, run_id: str, export: HalcyonExport, profile: Any)
     pat_by_id = {p["PAT_ID"]: p for p in pats}
     mrn_to_pat = {(p["FAC_ID"], p["MRN"]): p["PAT_ID"] for p in pats}
 
+    store.xset(run_id, "meta", "facilities", sorted(fac))
+    store.xset(run_id, "meta", "facility_names", {k: v["FAC_NAME"] for k, v in fac.items()})
+    store.xset(run_id, "meta", "manifest_notes", export.manifest.get("notes", {}))
+
     # --- organizations & locations (Halcyon: facility > dept; Nimbus: system > site > department)
     orgs = [(profile.SYSTEM_ORG["key"], {"kind": "system", "name": profile.SYSTEM_ORG["name"]},
              {"channel": "profile", "note": "Halcyon has no system level; synthesized"})]

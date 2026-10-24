@@ -21,6 +21,9 @@ For `ready` helper tasks, Claude may have committed a small **v0** implementatio
 | M8 | Cutover delta load + source deletions | done |
 | M9 | Late identity merges via Nimbus $merge | done |
 | M10 | Scripted end-to-end demo | done |
+| M11 | Second source system (Lakeside) onboarding | done |
+| M12 | Ask the user natively via MCP elicitation | done |
+| M13 | Go-live readiness + sign-offs | claude |
 
 ## Helper tasks
 
@@ -59,7 +62,7 @@ Files: `src/bridge/normalize/demographics.py`, `tests/bridge/test_demographics.p
 Files: `src/bridge/terminology/data/*.csv`, `tests/bridge/test_terminology_data.py`
 Today several local codes intentionally have no crosswalk row, so they become reconciliation questions (e.g. `HZ099`, unrecognized specialty/race text, uncodable allergens). Write a script `tools/crosswalk_gaps.py` that runs a conversion on a generated export and lists every question kind+key that a crosswalk row could have prevented; then extend the CSVs (keep a few deliberate gaps, documented in `data/README.md`) so that every local code in `testbed/halcyon/vocab.py` either maps or is listed as a deliberate gap. Include ICD-9→ICD-10 1:many rows. All codes must be labeled synthetic where invented.
 
-### T-106 · Run report renderer · `review`
+### T-106 · Run report renderer · `done`
 Files: `src/bridge/report/`, tests
 Render a run's metrics, alerts, loss ledger, and question status to a single self-contained HTML file (no external assets) and Markdown.
 Read only through `bridge.runs.store.RunStore` and `bridge.status` (`run_summary`, `metrics_view`, `loss_summary`). Add a CLI subcommand `report --out <file.html>`. Test against a run produced by the fixtures in `tests/bridge/conftest.py`.
@@ -83,3 +86,7 @@ Today a 500-patient run (~52k Nimbus records) takes ~26s. Profile (`python -m cP
 ### T-111 · Export mutator for cutover testing · `ready` (Bridge side done in M8; `tests/bridge/test_delta.py::_mutate` is a tiny hand-rolled example to replace)
 Files: `testbed/halcyon/mutate.py` (new), CLI `python -m testbed.halcyon mutate --from <exportA> --out <exportB> --seed N`, `tests/testbed/test_mutate.py`
 Produce export B from export A as "the same system some weeks later": keep every existing primary key stable; add new patients (with charts), new visits/labs/notes for existing patients, demographic changes on ~5% of patients (also emitted as ADT A08 in B's feeds), status changes (meds discontinued, appointments completed/cancelled), and delete a small number of rows (e.g. entered-in-error problems, cancelled-and-purged appointments). Copy feeds/extracts and append new messages. Write `answer_key/delta.json` listing every added/changed/deleted key by table. Do not import `bridge` or `nimbus`. Acceptance: deterministic for a seed; tests assert keys in A remain stable in B except listed deletions, and that delta.json is complete (diff A vs B tables equals delta.json).
+
+### T-112 · Sentence-style sigs (Lakeside) · `ready`
+Files: `src/bridge/normalize/sig.py`, `tests/bridge/test_sig.py`
+The Lakeside profile (`testbed/halcyon/profiles/lakeside.py`, `LAKESIDE_SIGS`) writes sigs as full sentences ("Take 1 tablet by mouth every 4 to 6 hours as needed for wheezing", "Inject 10 units under the skin at bedtime"). Today ~45% of Lakeside sigs fall back to text (see `python -m testbed.halcyon generate --profile lakeside` then a Bridge run's `loss` report: `MedicationRequest dosage degraded`). Extend the parser to handle spelled-out frequencies/intervals/ranges ("every 4 to 6 hours", "three times a day", "for 10 days", "as needed for X", "under the skin", "inhale"), keeping the T-102 contract (ranges lower confidence). Acceptance: every sig in `LAKESIDE_SIGS` and `vocab.FORMULARY` parametrized in tests with expected fields; no regressions in existing tests.

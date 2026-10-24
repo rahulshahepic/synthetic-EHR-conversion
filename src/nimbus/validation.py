@@ -38,7 +38,7 @@ UCUM_UNITS = {
     "pg/mL", "mIU/L", "uIU/mL", "fL", "pg", "mL/min/{1.73_m2}", "mm[Hg]", "Cel", "[degF]",
     "kg", "g", "[lb_av]", "cm", "[in_i]", "/min", "kg/m2", "s", "{ratio}", "{INR}", "mg",
     "ug", "mL", "L", "[iU]", "{tab}", "{cap}", "{puff}", "{drop}", "{patch}", "{spray}",
-    "mg/L", "ug/dL", "ng/dL", "umol/L", "mm/h", "1", "mg/mL", "[iU]/mL", "mL/h",
+    "mg/L", "ug/dL", "ng/dL", "umol/L", "mm/h", "1", "mg/mL", "[iU]/mL", "mL/h", "10*9/L", "nmol/L",
 }
 
 # Physiologic plausibility for vital signs: loinc -> {unit: (low, high)}

@@ -22,7 +22,16 @@ Real conversions run several *rehearsal* conversions, then a final *cutover* wit
 | M7 | **Rehearsals**: carry answered rules from a prior run (`run --rules-from <run.db>` / `rules export|import` JSON); run-vs-run comparison report (metrics, question counts, fidelity per type) | `claude/m7-*` | Claude | Second rehearsal on the same export asks zero already-answered questions; comparison shows the delta |
 | M8 | **Cutover delta**: export mutator (T-111) produces "export B" = A + new/changed/deleted records; Bridge delta run against the same Nimbus: created / updated / unchanged per type; records present in the prior run but gone from the source become `source_deleted` questions (never silent deletes) | `claude/m8-*`, `task/T-111` | Claude + helper | Delta run on B touches only changed records; deletions surface as questions |
 | M9 | **Late identity merges**: an identity question answered "same" after both patients loaded uses Nimbus `$merge`, relinks Bridge xrefs, and is revertible | `claude/m9-*` | Claude | Test: load both, answer same, Nimbus has one active patient with all clinical data |
+| M11 | **Second source system**: run Muse's Lakeside profile (T-108) through Bridge with no code changes for its conventions: unknown facilities' time zone and vital-unit system become grouped questions, valid non-house lab units are kept as reported, and a drop-rate monitor pauses runs that silently drop records | `claude/m11-*` | Claude | Lakeside export converts with <2% Observation drops and passes verification |
 | M10 | **Demo scenario**: `python -m testbed.demo` runs a scripted end-to-end conversion with a simulated user answering questions, producing a narrated transcript and the run report (T-106) | `claude/m10-*` | Claude | One command shows the whole story |
+
+### Phase 3 — the human in the loop, and go-live
+| # | Milestone | Branch | Owner | Exit criteria |
+|---|---|---|---|---|
+| M12 | **Ask the user natively**: MCP tool `ask_user(question_id)` uses MCP *elicitation* so the client shows the question's options as a form to the human; the answer is recorded as that user's (never the assistant's). Falls back to returning plain-language text when the client lacks elicitation | `claude/m12-*` | Claude | Test with an elicitation-capable in-memory client: choosing an option answers the question and releases records |
+| M13 | **Go-live readiness**: `readiness` report + MCP tool: blocking questions = 0, every pause alert acknowledged by a named user, verification green, per-domain loss summary signed off by a named owner (`signoff --domain Observation --by user:x`), rehearsal-to-rehearsal stability; outputs GO / NO-GO with reasons | `claude/m13-*` | Claude | NO-GO until sign-offs exist; GO after; test both |
+| T-107 | Web dashboard | `task/T-107-*` | helper | see TASKS.md |
+| T-109/T-110/T-111/T-112 | scoring harness, performance, export mutator, sentence sigs | `task/*` | helpers | see TASKS.md |
 
 Stretch: web dashboard for runs; second source profile (e.g. a facility with metric units and different conventions) to exercise drift monitors; performance at 50k patients.
 
@@ -39,4 +48,7 @@ See `TASKS.md` for live task-level status. Milestone status is updated in this t
 - M7: done (rules carry over via `run --rules-from <run.db|rules.json>`; `rules-export`; `compare --other-run-db`; MCP `compare_runs`)
 - M9: done (late merges of already-loaded patients via Nimbus $merge; CLI/MCP `merge_patients`; revertible)
 - M8: done (`run --prior-run <run.db>`: same target, carried answers and duplicate ownership, created/updated/unchanged per type, source deletions → `source_deleted` question with keep/retire; `delta` CLI, MCP `delta_summary`)
+- M12: done (`ask_user` elicitation tool; tested with an in-memory MCP client: accept, decline, unsupported)
+- M13: next
+- M11: done (found and fixed: 3,263 vitals silently dropped + Chicago time assumed for Mountain facilities when the profile was unknown; new `drop_rate` monitor)
 - M10: done (`python -m testbed.demo`: simulated analyst answers from the answer key; 200/200 identities correct; rehearsal 2 has 0 blocking questions; exact cutover delta)

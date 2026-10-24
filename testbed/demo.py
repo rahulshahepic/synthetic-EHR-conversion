@@ -126,6 +126,10 @@ def main() -> None:
     nimbus_patients = a1.runner().client.count("Patient")["active"]
     t.say(f"Identity: Nimbus holds **{nimbus_patients} active patients**; the answer key says there are {len(persons)} real people.")
 
+    from bridge.report import render_html, report_data
+    (out / "rehearsal1_report.html").write_text(render_html(report_data(a1.store)), encoding="utf-8")
+    t.say("Full run report: `rehearsal1_report.html` (metrics per batch, alerts, loss ledger, questions).")
+
     t.h("3. Rehearsal 2: same export, answers carried over")
     a2 = BridgeAssistant(str(out / "rehearsal2.db"))
     a2.start_run(str(out / "exportA"), rules_from=str(out / "rehearsal1.db"))

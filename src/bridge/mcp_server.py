@@ -1,9 +1,10 @@
 """MCP server exposing Bridge to AI assistants (stdio). Run: python -m bridge --run-db runs/r1.db mcp"""
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
-from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver import Context, MCPServer
+from pydantic import Field, create_model
 
 from .assistant import DOCS, WORKFLOW, BridgeAssistant
 
@@ -54,6 +55,33 @@ def build_server(run_db: str) -> MCPServer:
     def answer_question(question_id: str, option: str, answered_by: str, value: str | None = None,
                         rationale: str = "") -> dict[str, Any]:
         return b.answer_question(question_id, option, answered_by, value, rationale)
+
+    @mcp.tool(description="Ask the human directly: shows the question's options to the user as a form via MCP elicitation "
+                          "and records their choice as their answer (never as the assistant's). If the client cannot elicit, "
+                          "returns plain-language text for you to relay, then call answer_question with the user's choice.")
+    async def ask_user(question_id: str, ctx: Context) -> dict[str, Any]:
+        q = b.get_question(question_id)
+        if q["status"] != "open":
+            return {"error": f"question {question_id} is {q['status']}"}
+        text = present(q)
+        caps = ctx.client_capabilities
+        if caps is None or getattr(caps, "elicitation", None) is None:
+            return {"elicitation": "unsupported", "present_to_user": text}
+        keys = tuple(o["key"] for o in q["options"])
+        fields: dict[str, Any] = {
+            "choice": (Literal[keys], Field(description="; ".join(f"{o['key']} = {o['label']}" for o in q["options"]))),
+            "your_name": (str, Field(description="your name, recorded as the person who decided")),
+        }
+        if any(o.get("needs_value") for o in q["options"]):
+            fields["value"] = (str, Field(default="", description="required if your choice asks you to enter a value"))
+        schema = create_model("BridgeAnswer", **fields)
+        result = await ctx.elicit(text, schema)
+        if result.action != "accept" or result.data is None:
+            return {"action": result.action, "note": "no answer recorded"}
+        data = result.data
+        name = "".join(ch for ch in data.your_name.strip().lower().replace(" ", "-") if ch.isalnum() or ch in "-_.") or "unknown"
+        return b.answer_question(question_id, data.choice, f"user:{name}", value=getattr(data, "value", "") or None,
+                                 rationale="answered by the user via elicitation")
 
     @mcp.tool(description="Lineage for a record: source rows/segments, mapped Nimbus payload, per-field fidelity "
                           "annotations, Nimbus issues and id. Partial keys are searched.")
@@ -131,6 +159,16 @@ def build_server(run_db: str) -> MCPServer:
         return path.read_text() if path.exists() else f"no doc named {name}"
 
     return mcp
+
+
+def present(q: dict[str, Any]) -> str:
+    """Plain-language rendering of a question for a human."""
+    lines = [q["prompt"], "", f"Affects {q['records_affected']} record(s)."]
+    for ex in q.get("examples", [])[:2]:
+        src = {k: v for k, v in (ex.get("source") or {}).items() if not k.startswith("_") and v not in ("", None)}
+        lines.append(f"Example {ex['source_key']}: " + ", ".join(f"{k}={v}" for k, v in list(src.items())[:8]))
+    lines += ["", "Options:"] + [f"  - {o['key']}: {o['label']}" for o in q["options"]]
+    return "\n".join(lines)
 
 
 def serve(run_db: str) -> None:

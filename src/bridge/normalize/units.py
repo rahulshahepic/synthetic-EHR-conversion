@@ -42,6 +42,8 @@ _UNITS: dict[str, str] = {
     "u/l": "U/L", "bpm": "/min", "/min": "/min",
     "ml": "mL", "l": "L", "ul": "uL", "µl": "uL", "μl": "uL",
     "ms": "ms", "s": "s", "ph": "[pH]", "[ph]": "[pH]",
+    "umol/l": "umol/L", "µmol/l": "umol/L", "μmol/l": "umol/L", "nmol/l": "nmol/L",
+    "10*9/l": "10*9/L", "10^9/l": "10*9/L", "miu/l": "mIU/L", "uiu/ml": "uIU/mL",
 }
 
 
