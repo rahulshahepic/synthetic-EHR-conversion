@@ -124,7 +124,7 @@ def benchmark(patients: int = 5000, seed: int = 42, profile_out: str | None = No
         progress("conversion_completed", began, patients=patients, duration=round(conversion_seconds, 2))
         if profiler:
             profiler.dump_stats(profile_out)
-            pstats.Stats(profiler).strip_dirs().sort_stats("cumulative").print_stats(30)
+            pstats.Stats(profiler, stream=sys.stderr).strip_dirs().sort_stats("cumulative").print_stats(30)
         counts = store.status_counts(run_id)
         status = store.run(run_id)["status"]
         if not first_pass_only and status not in ("completed", "completed_with_exceptions"):
@@ -142,7 +142,25 @@ def benchmark(patients: int = 5000, seed: int = 42, profile_out: str | None = No
             (e["detail"] for e in store.events(run_id, limit=50) if e["kind"] == "verification"),
             None,
         )
+        # Timings are persisted per batch, so this summary is cheap and reproducible.
+        batch_timings: dict[str, float] = {}
+        for (metrics_json,) in store.db.execute(
+            "SELECT metrics FROM batches WHERE run_id=? AND metrics IS NOT NULL", (run_id,)
+        ):
+            for name, seconds in json.loads(metrics_json).get("timings", {}).items():
+                batch_timings[name] = batch_timings.get(name, 0.0) + float(seconds)
+        stage_row = store.db.execute(
+            "SELECT json_extract(detail, '$.seconds') FROM events"
+            " WHERE run_id=? AND kind='staging_timing' ORDER BY id DESC LIMIT 1", (run_id,)
+        ).fetchone()
+        verify_row = store.db.execute(
+            "SELECT json_extract(detail, '$.seconds') FROM events"
+            " WHERE run_id=? AND kind='verification_timing' ORDER BY id DESC LIMIT 1", (run_id,)
+        ).fetchone()
         return {
+            "staging_seconds": round(stage_row[0], 3) if stage_row else None,
+            "verification_seconds": round(verify_row[0], 3) if verify_row else None,
+            "batch_timing_seconds": {k: round(v, 3) for k, v in batch_timings.items()},
             "records_total": total_records,
             "loaded_records": loaded_records,
             "terminal_records": terminal_records,
