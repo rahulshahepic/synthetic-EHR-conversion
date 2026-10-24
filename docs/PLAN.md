@@ -36,4 +36,5 @@ See `TASKS.md` for live task-level status. Milestone status is updated in this t
 - M4: done (all 17 Nimbus resource types; ORU/SIU/registry channels; 500 patients ≈ 26s)
 - M5: done (MCP server over stdio with 20 tools + docs resources; server-side guards for clinical answers and revert)
 - M6: done (verification: count reconciliation, read-back sampling, clinical sentinels)
-- M7: in progress
+- M7: done (rules carry over via `run --rules-from <run.db|rules.json>`; `rules-export`; `compare --other-run-db`; MCP `compare_runs`)
+- M8: in progress
