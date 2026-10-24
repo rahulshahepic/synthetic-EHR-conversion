@@ -38,6 +38,7 @@ def progress(stage: str, started: float, **details: object) -> None:
 
 def monitor_database(path: Path, stop: threading.Event, started: float) -> None:
     """Observe committed progress via a separate connection without blocking converter writes."""
+    staged_total = None
     while not stop.wait(15):
         try:
             db = sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=1)
@@ -45,7 +46,9 @@ def monitor_database(path: Path, stop: threading.Event, started: float) -> None:
                 run = db.execute("SELECT id,status,pass_count FROM runs ORDER BY rowid DESC LIMIT 1").fetchone()
                 if run:
                     batches = db.execute("SELECT COUNT(*), COALESCE(SUM(json_extract(counts,'$.attempted')),0) FROM batches WHERE run_id=? AND counts IS NOT NULL", (run[0],)).fetchone()
-                    total = db.execute("SELECT COUNT(*) FROM records WHERE run_id=?", (run[0],)).fetchone()[0]
+                    if staged_total is None:
+                        staged_total = db.execute("SELECT COUNT(*) FROM records WHERE run_id=?", (run[0],)).fetchone()[0]
+                    total = staged_total
                     assessed = batches[1]
                     progress("heartbeat", started, run_status=run[1], passes=run[2],
                              staged_records=total, assessed_records=assessed,
