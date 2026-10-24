@@ -6,6 +6,9 @@ on:
     paths:
       - '.github/workflows/t110-50k.yml'
       - 'tools/bench.py'
+      - 'src/bridge/**'
+      - 'src/nimbus/**'
+      - 'tests/**'
   workflow_dispatch:
 
 concurrency:
