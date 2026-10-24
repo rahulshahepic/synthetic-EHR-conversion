@@ -26,7 +26,7 @@ jobs:
       - name: Full end-to-end 50,000-patient conversion
         run: |
           mkdir -p benchmark-output
-          /usr/bin/time -v python -u tools/bench.py --patients 50000 --seed 42 > benchmark-output/50k.json 2> benchmark-output/resources.txt
+          /usr/bin/time -v python -u tools/bench.py --patients 50000 --seed 42 > benchmark-output/50k.json 2> >(tee benchmark-output/resources-and-progress.log >&2)
           cat benchmark-output/50k.json
           cat benchmark-output/resources.txt
           python - <<'PY'
