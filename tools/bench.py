@@ -39,6 +39,7 @@ def progress(stage: str, started: float, **details: object) -> None:
 def monitor_database(path: Path, stop: threading.Event, started: float) -> None:
     """Observe committed progress via a separate connection without blocking converter writes."""
     staged_total = None
+    last_status = None
     while not stop.wait(15):
         try:
             db = sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=1)
@@ -46,10 +47,14 @@ def monitor_database(path: Path, stop: threading.Event, started: float) -> None:
                 run = db.execute("SELECT id,status,pass_count FROM runs ORDER BY rowid DESC LIMIT 1").fetchone()
                 if run:
                     batches = db.execute("SELECT COUNT(*), COALESCE(SUM(json_extract(counts,'$.attempted')),0) FROM batches WHERE run_id=? AND counts IS NOT NULL", (run[0],)).fetchone()
-                    if staged_total is None:
+                    if staged_total is None or run[1] == "extracting" or last_status == "extracting":
                         staged_total = db.execute("SELECT COUNT(*) FROM records WHERE run_id=?", (run[0],)).fetchone()[0]
+                    last_status = run[1]
                     total = staged_total
-                    assessed = batches[1]
+                    assessed = db.execute(
+                        "SELECT COUNT(*) FROM records WHERE run_id=?"
+                        " AND status IN ('loaded','dropped','superseded','rejected')", (run[0],)
+                    ).fetchone()[0]
                     latest = db.execute("SELECT rtype, metrics FROM batches WHERE run_id=? AND metrics IS NOT NULL ORDER BY seq DESC LIMIT 1", (run[0],)).fetchone()
                     last_type = latest[0] if latest else None
                     last_timings = json.loads(latest[1]).get("timings", {}) if latest else {}
