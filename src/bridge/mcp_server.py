@@ -98,6 +98,11 @@ def build_server(run_db: str) -> MCPServer:
                run_id: str | None = None) -> dict[str, Any]:
         return b.revert(scope, confirm, confirmed_by, target, cascade, run_id)
 
+    @mcp.tool(description="End-of-run verification: Nimbus vs Bridge counts, read-back sample comparison, and clinical "
+                          "sentinels (active anticoagulants/insulin, patients with allergies, abnormal labs).")
+    def verify_run(run_id: str | None = None) -> dict[str, Any]:
+        return b.verify_run(run_id)
+
     @mcp.tool(description="Retire a mapping rule (future mapping will ask again).")
     def retire_rule(rule_id: str, by: str) -> dict[str, Any]:
         return b.retire_rule(rule_id, by)

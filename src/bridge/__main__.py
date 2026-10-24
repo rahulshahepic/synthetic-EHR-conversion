@@ -78,6 +78,7 @@ def main(argv: list[str] | None = None) -> int:
     e = sub.add_parser("explain")
     e.add_argument("source_key")
     e.add_argument("--type")
+    sub.add_parser("verify")
     sub.add_parser("mcp")
     args = p.parse_args(argv)
 
@@ -130,6 +131,10 @@ def main(argv: list[str] | None = None) -> int:
         out(store.events(store.run(args.run_id)["id"]))
     elif args.cmd == "explain":
         out(st.explain(store, store.run(args.run_id)["id"], args.source_key, args.type))
+    elif args.cmd == "verify":
+        from .verify import verify_run
+        runner, rid = _runner(store, args.run_id)
+        out(verify_run(store, runner.client, rid))
     elif args.cmd == "mcp":
         from .mcp_server import serve
         serve(args.run_db)

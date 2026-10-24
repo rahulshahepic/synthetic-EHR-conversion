@@ -22,6 +22,7 @@ See `TASKS.md` for live task-level status. Milestone status is updated in this t
 - M0: done
 - M1: done (Nimbus service, 19 API tests)
 - M2: done (Halcyon generator; 500 patients ≈ 30k rows + feeds in <1s; ~40 planted issue types)
+- M6: done (verification: count reconciliation, read-back sampling, clinical sentinels; auto-run at end of pass)
 - M5: done (MCP server over stdio with 19 tools + docs resources; server-side guards for clinical answers and revert)
 - M4: done (all 17 Nimbus resource types; ORU/SIU/registry channels; 500 patients ≈ 26s)
 - M3: done (Bridge core: 10 resource types, identity, metrics/monitors, pause/answer/resume, revert, CLI; 500-patient run ≈ 8s)
