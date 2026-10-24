@@ -9,6 +9,7 @@ Targets:
 from __future__ import annotations
 
 import importlib
+import weakref
 from typing import Any, Iterator
 
 import httpx
@@ -94,5 +95,10 @@ def connect(target: str) -> NimbusClient:
         api = importlib.import_module("nimbus.api")
         service = importlib.import_module("nimbus.service")
         from fastapi.testclient import TestClient
-        return NimbusClient(TestClient(api.create_app(service.NimbusService(db))))
+        # Reuse one AnyIO portal for all embedded requests.
+        http = TestClient(api.create_app(service.NimbusService(db)))
+        http.__enter__()
+        client = NimbusClient(http)
+        weakref.finalize(client, http.__exit__, None, None, None)
+        return client
     return NimbusClient(httpx.Client(base_url=target, timeout=60))

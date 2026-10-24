@@ -20,7 +20,7 @@ permissions:
 
 jobs:
   full-50k:
-    needs: short-validation
+    needs: scaling-validation
     runs-on: ubuntu-latest
     timeout-minutes: 180
     steps:
@@ -59,6 +59,32 @@ jobs:
           name: t110-full-50k
           path: benchmark-output/
           if-no-files-found: warn
+
+  scaling-validation:
+    needs: short-validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: python -m pip install -e ".[dev]"
+      - name: Complete 2k, 5k, and 10k-patient conversions
+        run: |
+          mkdir -p benchmark-output
+          for n in 2000 5000 10000; do
+            echo "::group::Benchmark $n patients"
+            /usr/bin/time -v python -u tools/bench.py --patients "$n" --seed 42 > "benchmark-output/$n.json" 2> >(tee "benchmark-output/$n.log" >&2)
+            python -c 'import json,sys; d=json.load(open(sys.argv[1])); print("RESULT",d["patients"],d["run_status"],d["conversion_seconds"],d["loaded_records"],flush=True); assert d["run_status"] == "completed" and d["loaded_records"] > 0 and d["verification"]["ok"]' "benchmark-output/$n.json"
+            echo "::endgroup::"
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: t110-scaling-validation
+          path: benchmark-output/
 
   short-validation:
     runs-on: ubuntu-latest
