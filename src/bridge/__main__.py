@@ -86,6 +86,9 @@ def main(argv: list[str] | None = None) -> int:
     rep = sub.add_parser("report")
     rep.add_argument("--out", required=True, help="self-contained .html or .md report")
     sub.add_parser("verify")
+    web = sub.add_parser("web")
+    web.add_argument("--port", type=int, default=8710)
+    web.add_argument("--host", default="127.0.0.1")
     sub.add_parser("mcp")
     args = p.parse_args(argv)
 
@@ -167,6 +170,10 @@ def main(argv: list[str] | None = None) -> int:
         from .verify import verify_run
         runner, rid = _runner(store, args.run_id)
         out(verify_run(store, runner.client, rid))
+    elif args.cmd == "web":
+        import uvicorn
+        from .web import create_app
+        uvicorn.run(create_app(args.run_db), host=args.host, port=args.port)
     elif args.cmd == "mcp":
         from .mcp_server import serve
         serve(args.run_db)
