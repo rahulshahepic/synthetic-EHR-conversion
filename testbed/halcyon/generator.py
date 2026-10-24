@@ -681,7 +681,7 @@ class Generator:
         when = datetime.strptime(appt["APPT_DT"], "%Y%m%d%H%M") - timedelta(days=self.r.randint(1, 20) if event == "S15" else 30)
         status = "Booked" if event == "S12" else "Cancelled"
         segs = [self._msh(f"SIU^{event}", min(when, datetime.combine(self.cfg.as_of, datetime.min.time()))),
-                f"SCH|{appt['APPT_ID']}||||||{appt['REASON']}||||^^{appt['DURATION_MIN']}^{appt['APPT_DT']}|||||||||||||{status}",
+                f"SCH|{appt['APPT_ID']}||||||{appt['REASON']}||||^^{appt['DURATION_MIN']}^{appt['APPT_DT']}||||||||||||||{status}",
                 self._pid(pat_id), f"AIP|1||{appt['PROV_ID']}", f"AIL|1||{appt['DEPT_ID']}"]
         self.feeds["siu"].append("\r".join(segs))
 
