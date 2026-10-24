@@ -58,7 +58,7 @@ def _merge_identity(store: S.RunStore, run_id: str, q: dict[str, Any]) -> None:
         surv_key = store.xget(run_id, "superseded", f"Patient/{surv_key}")
     dup, surv = store.record(run_id, "Patient", dup_key), store.record(run_id, "Patient", surv_key)
     if dup["status"] == S.LOADED:
-        raise AnswerError(f"{dup_key} was already loaded as a separate patient; use a Nimbus $merge instead")
+        raise AnswerError(f"{dup_key} was already loaded as a separate patient; use merge_patients instead")
     src, extra = surv["source"], dup["source"]
     src["members"] += extra["members"]
     src["links"].update({m["PAT_ID"]: "user-confirmed" for m in extra["members"]})

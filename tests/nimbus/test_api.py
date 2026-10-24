@@ -246,3 +246,16 @@ def test_generic_user_and_charge_rules(client):
     b = batch(client, "UserAccount")
     res = submit(client, b, [{"sourceKey": "u", "resource": {"username": "FRONTDESK1", "personName": {"family": "Desk"}}}])
     assert res[0]["issues"][0]["code"] == "E_GENERIC_ACCOUNT"
+
+
+def test_rollback_of_update_batch_not_blocked_by_earlier_references(client):
+    load_patient(client)
+    b2 = batch(client, "Condition")
+    submit(client, b2, [{"sourceKey": "C1", "resource": {
+        "patient": {"sourceKey": "Patient/P1"}, "clinicalStatus": "active",
+        "code": {"coding": [{"system": "ICD-10-CM", "code": "I10"}]}}}])
+    b3 = batch(client, "Patient")
+    submit(client, b3, [{"sourceKey": "P1", "resource": patient(name={"family": "Renamed", "given": []})}])
+    r = client.post(f"/api/v1/import/batches/{b3}/rollback")
+    assert r.status_code == 200, r.text
+    assert client.get("/api/v1/Condition/$count").json()["total"] == 1

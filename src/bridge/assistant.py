@@ -151,6 +151,16 @@ class BridgeAssistant:
         except RevertBlocked as e:
             return {"error": str(e), "blocking_batches": e.blocking}
 
+    def merge_patients(self, survivor: str, duplicate: str, confirmed_by: str, run_id: str | None = None) -> dict[str, Any]:
+        from .reconcile.merge import MergeError, merge_loaded_patients
+        if not confirmed_by.startswith("user:"):
+            return {"error": "merging patients is an identity decision: the user must confirm (confirmed_by='user:<name>')"}
+        rid = self._rid(run_id)
+        try:
+            return merge_loaded_patients(self.store, self.runner(rid).client, rid, survivor, duplicate, confirmed_by)
+        except MergeError as e:
+            return {"error": str(e)}
+
     def compare_runs(self, other_run_db: str, run_id: str | None = None) -> dict[str, Any]:
         from .compare import compare, run_profile
         return compare(run_profile(RunStore(other_run_db)), run_profile(self.store, run_id))

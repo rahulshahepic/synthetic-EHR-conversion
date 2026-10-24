@@ -315,8 +315,9 @@ class NimbusService:
 
     def _rollback_blockers(self, batch_id: str) -> set[str]:
         """Other live batches that overwrote, or reference, records this batch created/changed."""
-        touched = {(h["rtype"], h["id"]) for h in self._db.execute(
-            "SELECT rtype, id FROM history WHERE batch_id=?", (batch_id,))}
+        hist = self._db.execute("SELECT rtype, id, op FROM history WHERE batch_id=?", (batch_id,)).fetchall()
+        touched = {(h["rtype"], h["id"]) for h in hist}
+        created = {(h["rtype"], h["id"]) for h in hist if h["op"] == "create"}
         blockers: set[str] = set()
         for rt, rid in touched:
             row = self._row(rt, rid)
@@ -328,6 +329,8 @@ class NimbusService:
                 " (SELECT seq FROM batches WHERE id=?)", (rt, rid, batch_id)
             ):
                 blockers.add(later[0])
+            if (rt, rid) not in created:  # updated records are restored, not deleted: references stay valid
+                continue
             for ref in self._db.execute(
                 "SELECT r.batch_id FROM refs f JOIN resources r ON r.rtype=f.owner_rtype AND r.id=f.owner_id"
                 " WHERE f.target_rtype=? AND f.target_id=?", (rt, rid)
