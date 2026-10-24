@@ -3,9 +3,19 @@ import json
 
 import pytest
 
+from bridge.load.client import connect
+from bridge.runs.runner import Runner
 from bridge.runs.store import RunStore
 from testbed.halcyon.generator import generate
 from testbed.scoring import main, render_markdown, score
+
+
+@pytest.fixture
+def env(tmp_path):
+    # tests/bridge/conftest.py fixtures are scoped to tests/bridge only.
+    store = RunStore(str(tmp_path / "run.db"))
+    client = connect("embedded::memory:")
+    return store, client, Runner(store, client)
 
 
 def _key(tmp_path, persons, issues):
