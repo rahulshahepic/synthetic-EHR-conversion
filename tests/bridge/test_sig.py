@@ -235,3 +235,16 @@ def test_result_is_immutable():
     result = parse_sig("1 tab po daily")
     with pytest.raises(Exception):
         result.dose_value = 99.0  # type: ignore[misc]
+
+
+@pytest.mark.parametrize(("sig", "expected"), [
+    ("inject 10 units under the skin at bedtime", {"route": "subcut", "dose_value": 10.0}),
+    ("take 1 tablet by mouth two times daily", {"frequency_count": 2}),
+    ("take 1 capsule by mouth three times daily for 10 days", {"frequency_count": 3, "duration_days": 10}),
+    ("swish and spit 10 mL four times daily as needed", {"frequency_count": 4, "as_needed": True}),
+    ("inhale 2 puffs every 4 to 6 hours as needed for wheezing", {"frequency_period": 6.0, "as_needed_reason": "wheezing", "confidence": 0.4}),
+])
+def test_lakeside_sentence_style(sig, expected):
+    parsed = parse_sig(sig)
+    for field, value in expected.items():
+        assert getattr(parsed, field) == value
