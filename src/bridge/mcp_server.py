@@ -6,7 +6,7 @@ from typing import Any, Literal
 from mcp.server.mcpserver import Context, MCPServer
 from pydantic import Field, create_model
 
-from .assistant import DOCS, WORKFLOW, BridgeAssistant
+from .assistant import DOCS, WORKFLOW, BridgeAssistant, present
 
 INSTRUCTIONS = WORKFLOW + """
 Rules: never answer a blocking or clinical question (identity, problem codes, medications, labs, DOB, allergies)
@@ -21,6 +21,11 @@ def build_server(run_db: str) -> MCPServer:
     @mcp.tool(description="How to work with Bridge: the reconciliation workflow and available docs.")
     def guide() -> dict[str, Any]:
         return b.guide()
+
+    @mcp.tool(description="What to do next in the guided demo: the next human question rendered in plain language "
+                          "(action=ask_user), or resume / review / wait. Call it after every answer or resume.")
+    def next_step(run_id: str | None = None) -> dict[str, Any]:
+        return b.next_step(run_id)
 
     @mcp.tool(description="List conversion runs in this run database.")
     def list_runs() -> list[dict[str, Any]]:
@@ -169,16 +174,6 @@ def build_server(run_db: str) -> MCPServer:
         return path.read_text() if path.exists() else f"no doc named {name}"
 
     return mcp
-
-
-def present(q: dict[str, Any]) -> str:
-    """Plain-language rendering of a question for a human."""
-    lines = [q["prompt"], "", f"Affects {q['records_affected']} record(s)."]
-    for ex in q.get("examples", [])[:2]:
-        src = {k: v for k, v in (ex.get("source") or {}).items() if not k.startswith("_") and v not in ("", None)}
-        lines.append(f"Example {ex['source_key']}: " + ", ".join(f"{k}={v}" for k, v in list(src.items())[:8]))
-    lines += ["", "Options:"] + [f"  - {o['key']}: {o['label']}" for o in q["options"]]
-    return "\n".join(lines)
 
 
 def serve(run_db: str) -> None:
