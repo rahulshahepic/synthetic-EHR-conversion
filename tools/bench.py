@@ -50,7 +50,11 @@ def monitor_database(path: Path, stop: threading.Event, started: float) -> None:
                         staged_total = db.execute("SELECT COUNT(*) FROM records WHERE run_id=?", (run[0],)).fetchone()[0]
                     total = staged_total
                     assessed = batches[1]
+                    latest = db.execute("SELECT rtype, metrics FROM batches WHERE run_id=? AND metrics IS NOT NULL ORDER BY seq DESC LIMIT 1", (run[0],)).fetchone()
+                    last_type = latest[0] if latest else None
+                    last_timings = json.loads(latest[1]).get("timings", {}) if latest else {}
                     progress("heartbeat", started, run_status=run[1], passes=run[2],
+                             last_resource_type=last_type, last_batch_timings=last_timings,
                              staged_records=total, assessed_records=assessed,
                              assessed_percent=round(100 * assessed / total, 1) if total else None,
                              completed_batches=batches[0], attempted_records=batches[1])
