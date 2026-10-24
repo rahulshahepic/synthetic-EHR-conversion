@@ -36,3 +36,9 @@ On PAUSE the runner finishes the in-flight API call, closes the batch, persists 
 - Every Nimbus write is tagged with Bridge's batch id. Bridge's run DB keeps the batch ledger (`batch_id, resource_type, nimbus_batch_id, status, source_keys`).
 - `revert --batch X`, `revert --type Observation`, `revert --run` call Nimbus rollback in **reverse dependency order**, then verify `$count` returns to its pre-batch value.
 - Reverts are themselves logged and are idempotent.
+
+## End-of-run verification (`src/bridge/verify.py`)
+Runs automatically when a pass finishes (and on demand: CLI `verify`, MCP `verify_run`). Any failure pauses the run with a `pause` alert.
+- **Count reconciliation**: for every type, Nimbus `$count` == Bridge `loaded`, and staged == loaded + dropped + superseded + held + blocked + rejected + pending.
+- **Read-back sampling**: 25 random loaded records per type are fetched from Nimbus and compared field by field with what Bridge sent (references compared by `sourceKey`; fields Nimbus adds are ignored).
+- **Clinical sentinels**: active anticoagulant orders, active insulin orders, distinct patients with ≥1 real allergy, abnormal-flagged labs. Each source item must be in Nimbus with the same clinical meaning, or be explained by a record status (held, dropped, ...). An unexplained delta is a patient-safety finding — the test suite plants a mapping bug that silently marks warfarin/apixaban orders completed, and verification catches it although Nimbus accepted every record.

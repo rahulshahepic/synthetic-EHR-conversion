@@ -63,6 +63,11 @@ class Runner:
         counts = self.store.status_counts(run_id)
         outstanding = sum(c.get(S.HELD, 0) + c.get(S.BLOCKED, 0) + c.get(S.REJECTED, 0) for c in counts.values())
         status = "completed" if not outstanding else "completed_with_exceptions"
+        from ..verify import verify_run
+        report = verify_run(self.store, self.client, run_id)
+        if not report["ok"]:
+            self.store.set_status(run_id, "paused", "end-of-run verification failed: see alerts")
+            return "paused"
         self.store.set_status(run_id, status)
         return status
 
