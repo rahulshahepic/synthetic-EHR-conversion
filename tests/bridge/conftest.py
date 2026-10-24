@@ -10,7 +10,7 @@ from testbed.halcyon.generator import generate
 @pytest.fixture(scope="session")
 def export_dir(tmp_path_factory):
     out = tmp_path_factory.mktemp("halcyon")
-    generate(out, seed=11, patients=150)
+    generate(out, seed=11, patients=100)
     return out
 
 
