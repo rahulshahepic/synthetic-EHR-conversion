@@ -19,15 +19,38 @@ def _yn(v: str) -> bool:
     return v.strip().upper() == "Y"
 
 
-def _tz(ctx: MapContext, fac: str) -> str:
-    return ctx.profile.FACILITY_TZ.get(fac, ctx.profile.DEFAULT_TZ)
+US_ZONES = ["America/New_York", "America/Chicago", "America/Denver", "America/Phoenix", "America/Los_Angeles",
+            "America/Anchorage", "Pacific/Honolulu"]
+
+
+def facility_context(ctx: MapContext, fac: str) -> dict[str, Any]:
+    return {"facility": fac, "facility_name": ctx.store.xget(ctx.run_id, "meta", "facility_names", {}).get(fac),
+            "source_documentation": ctx.store.xget(ctx.run_id, "meta", "manifest_notes", {})}
+
+
+def _tz(ctx: MapContext, fac: str) -> str | None:
+    """Facility time zone from the source profile; unknown facilities become a (grouped, blocking) question."""
+    tz = ctx.profile.FACILITY_TZ.get(fac)
+    if tz:
+        return tz
+    if not fac:
+        return ctx.profile.DEFAULT_TZ
+    d = ctx.decide(
+        "facility_timezone", fac,
+        f"Facility {fac} is not in Bridge's source profile. Halcyon stores local times without a UTC offset; "
+        f"which time zone does {fac} chart in? (Every timestamp from this facility depends on the answer.)",
+        [{"key": z, "label": z} for z in US_ZONES], blocking=True, context=facility_context(ctx, fac))
+    return d["option"] if d else None
 
 
 def _zoned(ctx: MapContext, raw: str, fac: str, field: str, weight: float = 1.0) -> datetime | None:
     naive = parse_local(raw)
     if naive is None:
         return None
-    aware, flag = localize(naive, _tz(ctx, fac))
+    tz = _tz(ctx, fac)
+    if tz is None:
+        return None
+    aware, flag = localize(naive, tz)
     if flag == "ambiguous":
         ctx.note(field, "inferred", weight, "DST fall-back hour is ambiguous; first occurrence assumed", raw)
     elif flag == "nonexistent":
@@ -58,7 +81,8 @@ def map_organization(ctx: MapContext) -> dict[str, Any] | None:
             f"Halcyon department {s['DEPT_ID']} ({s['DEPT_NAME']}) is shared by all facilities, but every Nimbus "
             f"department must belong to exactly one site. How should it be represented?",
             [{"key": "duplicate", "label": "Create one copy under every site (encounters attach to the patient's facility)"}]
-            + [{"key": f, "label": f"Create it only under site {f}"} for f in ctx.profile.FACILITY_TZ],
+            + [{"key": f, "label": f"Create it only under site {f}"}
+               for f in ctx.store.xget(ctx.run_id, "meta", "facilities", list(ctx.profile.FACILITY_TZ))],
             blocking=True, context={"dept": s["DEPT_ID"], "name": s["DEPT_NAME"]})
         if d is None:
             return None
@@ -375,11 +399,12 @@ def map_coverage(ctx: MapContext) -> dict[str, Any] | None:
     out: dict[str, Any] = {"patient": patient, "payer": payer, "plan": plan, "memberId": s["MEMBER_ID"],
                            "subscriberRelationship": rel, "order": order}
     eff = parse_local(s["EFF_DT"])
-    if eff:
-        out["period"] = {"start": localize(eff, _tz(ctx, s["_PAT_FAC"]))[0].isoformat()}
+    tz = _tz(ctx, s["_PAT_FAC"]) if eff else None
+    if eff and tz:
+        out["period"] = {"start": localize(eff, tz)[0].isoformat()}
         term = parse_local(s["TERM_DT"])
         if term:
-            out["period"]["end"] = localize(term, _tz(ctx, s["_PAT_FAC"]))[0].isoformat()
+            out["period"]["end"] = localize(term, tz)[0].isoformat()
         ctx.note("period", "transformed", 0.5)
     ctx.note("memberId", "exact", 1.0)
     return out

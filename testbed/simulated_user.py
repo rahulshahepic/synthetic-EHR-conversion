@@ -18,6 +18,9 @@ class SimulatedAnalyst:
         self.persons: dict[str, list[str]] = json.loads((key / "persons.json").read_text())
         self.truth: dict[str, dict[str, Any]] = json.loads((key / "truth.json").read_text())
         self.person_of = {pat: person for person, pats in self.persons.items() for pat in pats}
+        from testbed.halcyon.profiles import get_profile
+        manifest = json.loads((Path(export_dir) / "manifest.json").read_text())
+        self.facilities = get_profile(manifest.get("profile", "default")).facilities
 
     def choose(self, q: dict[str, Any], example_source: dict[str, Any] | None) -> tuple[str, str | None, str]:
         """Return (option, value, rationale) for a question (as returned by BridgeAssistant.get_question)."""
@@ -40,6 +43,13 @@ class SimulatedAnalyst:
             if dob:
                 return "value", dob, "verified with patient registration"
             return "placeholder", None, "registration follow-up"
+        if kind in ("facility_timezone", "facility_vital_units"):
+            fac = q["context"].get("facility")
+            row = next((f for f in self.facilities if f[0] == fac), None)
+            if row and kind == "facility_timezone":
+                return row[2], None, "facility documentation"
+            if row:
+                return ("metric" if row[3] == "kg" else "us"), None, "facility documentation"
         preferred = {"shared_department": "duplicate", "unknown_visit_type": "ambulatory",
                      "missing_discharge": "unknown_end", "unmapped_medication": "exclude", "unmapped_lab": "exclude"}
         opt = preferred.get(kind)

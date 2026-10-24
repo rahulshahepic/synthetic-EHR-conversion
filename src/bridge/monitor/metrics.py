@@ -33,6 +33,7 @@ def batch_metrics(results: list[dict[str, Any]]) -> dict[str, Any]:
         "updated": sum(1 for r in loaded if r.get("operation") == "updated"),
         "target_reject_rate": round(st["rejected"] / submitted, 4) if submitted else 0.0,
         "hold_rate": round(st["held"] / attempted, 4) if attempted else 0.0,
+        "drop_rate": round(st["dropped"] / attempted, 4) if attempted else 0.0,
         "fidelity_mean": round(sum(fid) / len(fid), 4) if fid else None,
         "low_fidelity_share": round(sum(1 for f in fid if f < 0.7) / len(fid), 4) if fid else 0.0,
         "code_coverage": round(coded_good / coded_total, 4) if coded_total else None,

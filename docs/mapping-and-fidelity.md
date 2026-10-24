@@ -41,3 +41,8 @@ Answers to questions become **mapping rules** (`scope`: this record / this sourc
 9. **Unrepresentable data**: generic user accounts, truncated notes, retired codes.
 
 Crosswalk tables live in `src/bridge/terminology/data/*.csv` (synthetic, small, invented codes where real standards would be licensed — clearly labeled).
+
+## Source profiles and unknown facilities
+`src/bridge/profiles/halcyon.py` holds what the conversion team learned about a source install (facility time zones, vital unit conventions, charge-amount era). A facility that is not in the profile is never guessed: Bridge asks `facility_timezone` and `facility_vital_units` (one grouped question per facility, with the export's own documentation notes in the question context). This is how a second Halcyon install (the Lakeside profile) converts without code changes.
+
+Lab results reported in a valid UCUM unit that differs from the crosswalk's house unit (e.g. glucose in mmol/L) are kept exactly as reported, with the reference range in the same unit, rather than converted or degraded.

@@ -11,7 +11,7 @@ from ..normalize.sig import parse_sig
 from ..normalize.time import parse_date8
 from ..normalize.units import normalize_unit, parse_reference_range, parse_result_value
 from .base import MapContext, mapper
-from .core import _zoned, location_key
+from .core import _zoned, facility_context, location_key
 
 # ----------------------------------------------------------------------------- medications
 MED_STATUS = {"A": "active", "D": "stopped", "C": "completed", "H": "on-hold"}
@@ -97,6 +97,29 @@ PLAUSIBLE = {"/min": (2, 300), "%": (40, 100), "[degF]": (77, 113), "Cel": (25, 
 INTERP = {"H": "high", "L": "low", "A": "abnormal", "HH": "critical-high", "LL": "critical-low", "N": "normal"}
 
 
+UNIT_SYSTEMS = {"us": {"WT": "[lb_av]", "TEMP": "[degF]", "HT": "[in_i]"},
+                "metric": {"WT": "kg", "TEMP": "Cel", "HT": "cm"}}
+# UCUM units Nimbus accepts for results (subset of nimbus.validation.UCUM_UNITS Bridge relies on)
+TARGET_UNITS = {"mg/dL", "mmol/L", "meq/L", "g/dL", "g/L", "%", "10*3/uL", "10*9/L", "10*6/uL", "U/L", "ng/mL", "nmol/L",
+                "pg/mL", "mIU/L", "uIU/mL", "umol/L", "mg/L", "ug/dL", "{INR}"}
+
+
+def facility_vital_unit(ctx: MapContext, fac: str, field: str) -> str | None:
+    known = ctx.profile.VITAL_UNITS.get(fac)
+    if known:
+        return known.get(field)
+    d = ctx.decide(
+        "facility_vital_units", fac or "(none)",
+        f"Facility {fac} is not in Bridge's source profile, and Halcyon VITALS rows have no unit columns. Which unit "
+        "system does this facility chart weight, temperature and height in?",
+        [{"key": "us", "label": "US customary (lb, degF, in)"}, {"key": "metric", "label": "Metric (kg, degC, cm)"}],
+        blocking=True, context=facility_context(ctx, fac))
+    if d is None:
+        return None
+    ctx.note("valueQuantity.unit", "inferred", 1.0, f"unit system for {fac} set by user rule ({d['option']})")
+    return UNIT_SYSTEMS[d["option"]][field]
+
+
 def _plausible(value: float, unit: str) -> bool:
     lo, hi = PLAUSIBLE.get(unit, (float("-inf"), float("inf")))
     return lo <= value <= hi
@@ -166,9 +189,10 @@ def _vital(ctx: MapContext, s: dict[str, Any], out: dict[str, Any]) -> dict[str,
         unit = normalize_unit(m.group(2))
         ctx.note("valueQuantity.unit", "transformed", 1.0, "unit embedded in value text")
     else:
-        unit = ctx.profile.VITAL_UNITS.get(s["_PAT_FAC"], {}).get(f)
+        unit = facility_vital_unit(ctx, s["_PAT_FAC"], f)
         if unit is None:
-            ctx.note("record", "dropped", 2.0, f"no unit convention for facility {s['_PAT_FAC']}", raw)
+            if not ctx.held_by:
+                ctx.note("record", "dropped", 2.0, f"no unit convention for facility {s['_PAT_FAC']}", raw)
             return None
         ctx.note("valueQuantity.unit", "inferred", 1.0, f"unit {unit} inferred from facility {s['_PAT_FAC']} convention")
     if not _plausible(value, unit):
@@ -220,7 +244,14 @@ def _lab(ctx: MapContext, s: dict[str, Any], out: dict[str, Any]) -> dict[str, A
             out["valueString"] = s["RESULT_VAL"]
             ctx.note("value", "degraded", 2.0, "numeric result without a known unit kept as text", s["RESULT_VAL"])
         else:
-            if src_unit and ucum and src_unit != ucum:
+            if src_unit and ucum and src_unit != ucum and src_unit in TARGET_UNITS:
+                # reported in a different (valid) unit than the house unit: keep exactly what the lab reported
+                q2: dict[str, Any] = {"value": pv.value, "unit": src_unit}
+                if pv.comparator:
+                    q2["comparator"] = pv.comparator
+                out["valueQuantity"] = q2
+                ctx.note("valueQuantity", "exact", 2.0, f"reported in {src_unit} (house unit {ucum}); kept as reported")
+            elif src_unit and ucum and src_unit != ucum:
                 ctx.note("valueQuantity.unit", "dropped", 2.0, f"source unit {s['UNITS']} differs from expected {ucum}", s["UNITS"])
                 out["valueString"] = f"{s['RESULT_VAL']} {s['UNITS']}"
             else:

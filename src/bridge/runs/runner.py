@@ -152,6 +152,9 @@ class Runner:
             "target_reject_rate": [{"source_key": r["source_key"], "issue": (r["issues"] or [{}])[0]} for r in results if r["status"] == S.REJECTED],
             "ref_unresolved": [{"source_key": r["source_key"], "issue": i} for r in results for i in (r["issues"] or []) if i.get("code") == "E_REF_UNRESOLVED"],
             "hold_rate": [{"source_key": r["source_key"], "question": r.get("held_by")} for r in results if r["status"] == S.HELD],
+            "drop_rate": [{"source_key": r["source_key"], "reason": next((a["note"] for a in reversed(r["annotations"])
+                                                                          if a["klass"] == "dropped"), None)}
+                          for r in results if r["status"] == S.DROPPED],
             "fidelity_mean": sorted(({"source_key": r["source_key"], "fidelity": r["fidelity"]} for r in results
                                      if r["status"] == S.LOADED), key=lambda x: x["fidelity"])[:10],
         }
