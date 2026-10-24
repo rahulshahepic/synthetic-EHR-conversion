@@ -248,3 +248,42 @@ def test_lakeside_sentence_style(sig, expected):
     parsed = parse_sig(sig)
     for field, value in expected.items():
         assert getattr(parsed, field) == value
+
+
+# Every generated source sig must remain parseable, not just handpicked examples.
+from testbed.halcyon.profiles.lakeside import LAKESIDE_SIGS
+from testbed.halcyon.vocab import FORMULARY
+
+
+@pytest.mark.parametrize(("code", "sig"), [
+    (code, sig) for code, variants in LAKESIDE_SIGS.items() for sig in variants
+])
+def test_every_lakeside_formulary_sig(code, sig):
+    assert code in FORMULARY
+    parsed = parse_sig(sig)
+    if sig == "see note":
+        assert parsed.confidence < 0.5
+        assert parsed.unparsed
+    elif "as directed" in sig:
+        assert parsed.confidence <= 0.3
+    else:
+        assert parsed.dose_value is not None, (code, sig, parsed)
+        assert parsed.frequency_count is not None, (code, sig, parsed)
+        assert parsed.frequency_period is not None, (code, sig, parsed)
+        assert parsed.confidence >= 0.4, (code, sig, parsed)
+    if "under the skin" in sig or "subcutaneously" in sig:
+        assert parsed.route == "subcut"
+    if sig.startswith("inhale"):
+        assert parsed.route == "inhaled"
+    if " to " in sig:
+        assert parsed.confidence < 0.5
+
+
+@pytest.mark.parametrize(("code", "sig"), [
+    (code, sig) for code, item in FORMULARY.items() for sig in item[3]
+])
+def test_every_default_formulary_sig(code, sig):
+    parsed = parse_sig(sig)
+    assert 0 <= parsed.confidence <= 1, (code, sig)
+    if "as directed" not in sig and "ud " not in sig and "see note" not in sig:
+        assert parsed.dose_value is not None or parsed.frequency_count is not None, (code, sig)
