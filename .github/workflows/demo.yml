@@ -1,7 +1,9 @@
 name: Conversion demo
 
-# Runs the end-to-end demo (rehearsal 1, verification, readiness, rehearsal 2, cutover) and publishes the
-# narrated transcript as this run's Summary page, plus the HTML run report as a downloadable artifact.
+# Runs the end-to-end demo (rehearsal 1, verification, readiness, rehearsal 2, cutover) and publishes:
+#  - the narrated transcript as this run's Summary page, plus the HTML run report as a downloadable artifact;
+#  - a styled site on GitHub Pages: https://rahulshahepic.github.io/synthetic-EHR-conversion/
+#    (one-time repo setting: Settings -> Pages -> Source: "GitHub Actions").
 on:
   push:
     branches: [main]
@@ -45,3 +47,23 @@ jobs:
             demo_out/DEMO_TRANSCRIPT.md
             demo_out/*.html
           retention-days: 30
+      - name: Build site
+        run: python tools/build_site.py demo_out site
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  pages:
+    needs: demo
+    runs-on: ubuntu-latest
+    # Fails harmlessly until GitHub Pages is enabled (Settings -> Pages -> Source: GitHub Actions).
+    continue-on-error: true
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4
