@@ -79,8 +79,17 @@ def test_mcp_stdio_roundtrip(assistant):
     from mcp.client.session import ClientSession
     from mcp.client.stdio import StdioServerParameters, stdio_client
 
+    import os
+    from pathlib import Path
+
+    # The MCP stdio client starts the child with a minimal environment (HOME, PATH, ...), so a checkout where
+    # `bridge` is importable only via pytest's `pythonpath` setting (not pip-installed) needs it passed explicitly.
+    root = Path(__file__).resolve().parents[2]
+    pythonpath = os.pathsep.join([str(root / "src"), str(root)] + [p for p in os.environ.get("PYTHONPATH", "").split(os.pathsep) if p])
+
     async def go():
-        params = StdioServerParameters(command=sys.executable, args=["-m", "bridge", "--run-db", assistant.run_db, "mcp"])
+        params = StdioServerParameters(command=sys.executable, args=["-m", "bridge", "--run-db", assistant.run_db, "mcp"],
+                                       env={"PYTHONPATH": pythonpath}, cwd=str(root))
         async with stdio_client(params) as (r, w):
             async with ClientSession(r, w) as s:
                 await s.initialize()
