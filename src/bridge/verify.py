@@ -52,9 +52,17 @@ def readback(store: S.RunStore, client: NimbusClient, run_id: str, per_type: int
     rng = random.Random(seed)
     result, mismatches = {}, []
     for rtype in store.status_counts(run_id):
-        rowids = [r[0] for r in store.db.execute(
-            "SELECT rowid FROM records WHERE run_id=? AND rtype=? AND status='loaded' ORDER BY rowid", (run_id, rtype))]
-        picked = rng.sample(rowids, min(per_type, len(rowids)))
+        # Reservoir sample: O(per_type) memory rather than O(all loaded records).
+        picked = []
+        for seen, row in enumerate(store.db.execute(
+            "SELECT rowid FROM records WHERE run_id=? AND rtype=? AND status='loaded'",
+            (run_id, rtype)), 1):
+            if len(picked) < per_type:
+                picked.append(row[0])
+            else:
+                choice = rng.randrange(seen)
+                if choice < per_type:
+                    picked[choice] = row[0]
         sample = [store._rec(r) for r in store.db.execute(
             f"SELECT * FROM records WHERE rowid IN ({','.join('?' * len(picked))})", picked)] if picked else []
         bad = 0
