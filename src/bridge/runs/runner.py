@@ -36,7 +36,9 @@ class Runner:
         cfg = {"batch_size": batch_size, "as_of": as_of, "types": types or [t for t in LOAD_ORDER if t in MAPPERS]}
         run_id = self.store.create_run(str(source), target_label, cfg)
         self.store.set_status(run_id, "extracting")
+        staging_started = perf_counter()
         stage_all(self.store, run_id, export, self.profile)
+        self.store.event(run_id, "staging_timing", {"seconds": perf_counter() - staging_started})
         if prior_run_db:
             from ..reconcile.rules_io import load_rules
             from .delta import stage_source_deletions
@@ -74,7 +76,9 @@ class Runner:
         outstanding = sum(c.get(S.HELD, 0) + c.get(S.BLOCKED, 0) + c.get(S.REJECTED, 0) for c in counts.values())
         status = "completed" if not outstanding else "completed_with_exceptions"
         from ..verify import verify_run
+        verification_started = perf_counter()
         report = verify_run(self.store, self.client, run_id)
+        self.store.event(run_id, "verification_timing", {"seconds": perf_counter() - verification_started})
         if not report["ok"]:
             self.store.set_status(run_id, "paused", "end-of-run verification failed: see alerts")
             return "paused"
@@ -123,18 +127,30 @@ class Runner:
         map_seconds = perf_counter() - started
         nimbus_batch = None
         bridge_batch_id = None
+        setup_seconds = submit_seconds = close_seconds = persist_seconds = 0.0
         if submit:
+            setup_started = perf_counter()
             bridge_batch_id = self.store.create_batch(run_id, rtype, "")
             nimbus_batch = self.client.create_batch(rtype, bridge_batch_id)
             self.store.db.execute("UPDATE batches SET nimbus_batch_id=? WHERE id=?", (nimbus_batch, bridge_batch_id))
+            setup_seconds = perf_counter() - setup_started
+            submit_started = perf_counter()
             resp = self.client.submit(nimbus_batch, [{"sourceKey": r["source_key"], "resource": p} for r, _, p in submit])
+            submit_seconds = perf_counter() - submit_started
+            close_started = perf_counter()
             self.client.close(nimbus_batch)
+            close_seconds = perf_counter() - close_started
+            persist_started = perf_counter()
             self._persist_results(run_id, rtype, submit, resp, bridge_batch_id, results)
+            persist_seconds = perf_counter() - persist_started
         else:
             bridge_batch_id = self.store.create_batch(run_id, rtype, "")
         load_seconds = perf_counter() - started - map_seconds
         released = sum(1 for r in recs if r["status"] == S.BLOCKED or (r.get("note") or "").startswith("released by"))
-        return self._measure(run_id, rtype, results, bridge_batch_id, nimbus_batch, released, {'map_seconds': map_seconds, 'load_seconds': load_seconds})
+        return self._measure(run_id, rtype, results, bridge_batch_id, nimbus_batch, released,
+                             {'map_seconds': map_seconds, 'load_seconds': load_seconds,
+                              'target_setup_seconds': setup_seconds, 'target_submit_seconds': submit_seconds,
+                              'target_close_seconds': close_seconds, 'persist_seconds': persist_seconds})
 
     def _persist_results(self, run_id, rtype, submit, resp, bridge_batch_id, results) -> None:
         with self.store.tx():

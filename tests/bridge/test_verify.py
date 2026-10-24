@@ -17,6 +17,16 @@ def test_clean_run_verifies(env, export_dir, drive):
     report = verify_run(store, client, rid)
     assert report["ok"], report
     assert report["readback"]["sampled"] > 100
+    import json
+    kinds = {row[0] for row in store.db.execute(
+        "SELECT kind FROM events WHERE run_id=? AND kind IN ('staging_timing', 'verification_timing')", (rid,)
+    )}
+    assert kinds == {"staging_timing", "verification_timing"}
+    measured = [json.loads(row[0]).get("timings", {}) for row in store.db.execute(
+        "SELECT metrics FROM batches WHERE run_id=? AND metrics IS NOT NULL", (rid,)
+    )]
+    assert any("map_seconds" in t and "target_submit_seconds" in t for t in measured)
+
 
 
 def test_sentinel_catches_silently_inactivated_anticoagulants(env, export_dir, monkeypatch):
