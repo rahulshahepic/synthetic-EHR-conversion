@@ -68,7 +68,10 @@ def parse_name(raw: str) -> Name:
 
 
 def normalize_phone(raw: str, default_region: str = "US") -> str | None:
-    """US/Canada NANP numbers to E.164. Extensions discarded, not persisted."""
+    """US/Canada-style ten-digit numbers to E.164; synthetic 555 examples accepted.
+
+    Extensions are discarded. This is formatting, not telephone assignment validation.
+    """
     if default_region.upper() not in {"US", "CA"}:
         return None
     core = re.split(r"(?i)(?:ext\.?|extension|x|#)\s*\d+\s*$", raw.strip(), maxsplit=1)[0]
@@ -77,7 +80,7 @@ def normalize_phone(raw: str, default_region: str = "US") -> str | None:
     digits = re.sub(r"\D", "", core)
     if len(digits) == 11 and digits[0] == "1":
         digits = digits[1:]
-    if len(digits) != 10 or digits[0] in "01" or digits[3] in "01":
+    if len(digits) != 10 or digits[0] == "0" or digits[3] == "0":
         return None
     return "+1" + digits
 
