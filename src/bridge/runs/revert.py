@@ -60,7 +60,9 @@ def revert(store: S.RunStore, client: NimbusClient, run_id: str, scope: str, tar
 
 
 def _mark_reverted(store: S.RunStore, run_id: str, batch_id: str) -> None:
+    from ..reconcile.merge import undo_merge_bookkeeping
     store.set_batch_status(batch_id, "reverted")
+    undo_merge_bookkeeping(store, run_id, batch_id)
     store.db.execute(
         "UPDATE records SET status='pending', target_id=NULL, batch_id=NULL, updated_at=? "
         "WHERE run_id=? AND batch_id=? AND status IN ('loaded','rejected')", (S.now(), run_id, batch_id))

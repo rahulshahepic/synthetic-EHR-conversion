@@ -81,6 +81,12 @@ def build_server(run_db: str) -> MCPServer:
     def start_run(source: str, target: str | None = None, batch_size: int = 200, rules_from: str | None = None) -> dict[str, Any]:
         return b.start_run(source, target, batch_size, rules_from)
 
+    @mcp.tool(description="Merge two already-loaded Nimbus patients found to be the same person (Bridge patient keys, "
+                          "e.g. H-P000123). Moves all clinical data to the survivor; revertible via revert(scope='batch'). "
+                          "Requires the user's explicit confirmation: confirmed_by='user:<name>'.")
+    def merge_patients(survivor: str, duplicate: str, confirmed_by: str, run_id: str | None = None) -> dict[str, Any]:
+        return b.merge_patients(survivor, duplicate, confirmed_by, run_id)
+
     @mcp.tool(description="Compare this run with an earlier rehearsal (other_run_db): questions, pauses, counts, fidelity.")
     def compare_runs(other_run_db: str, run_id: str | None = None) -> dict[str, Any]:
         return b.compare_runs(other_run_db, run_id)

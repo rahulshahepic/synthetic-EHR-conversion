@@ -19,7 +19,7 @@ For `ready` helper tasks, Claude may have committed a small **v0** implementatio
 | M6 | Verification: read-back sampling, clinical sentinels, end-of-run reconciliation | done |
 | M7 | Rehearsals: rule carry-over, run-vs-run comparison | done |
 | M8 | Cutover delta load + source deletions | claude |
-| M9 | Late identity merges via Nimbus $merge | claude |
+| M9 | Late identity merges via Nimbus $merge | done |
 | M10 | Scripted end-to-end demo | claude |
 
 ## Helper tasks

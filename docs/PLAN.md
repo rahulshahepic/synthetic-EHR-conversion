@@ -37,4 +37,5 @@ See `TASKS.md` for live task-level status. Milestone status is updated in this t
 - M5: done (MCP server over stdio with 20 tools + docs resources; server-side guards for clinical answers and revert)
 - M6: done (verification: count reconciliation, read-back sampling, clinical sentinels)
 - M7: done (rules carry over via `run --rules-from <run.db|rules.json>`; `rules-export`; `compare --other-run-db`; MCP `compare_runs`)
-- M8: in progress
+- M9: done (late merges of already-loaded patients via Nimbus $merge; CLI/MCP `merge_patients`; revertible)
+- M8: next (bridge side; T-111 mutator for test data)
