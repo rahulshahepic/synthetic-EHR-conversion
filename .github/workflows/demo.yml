@@ -1,0 +1,47 @@
+name: Conversion demo
+
+# Runs the end-to-end demo (rehearsal 1, verification, readiness, rehearsal 2, cutover) and publishes the
+# narrated transcript as this run's Summary page, plus the HTML run report as a downloadable artifact.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      patients:
+        description: "Synthetic patients to generate"
+        default: "300"
+      seed:
+        description: "Random seed"
+        default: "42"
+
+permissions:
+  contents: read
+
+jobs:
+  demo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install
+        run: python -m pip install -e ".[dev]"
+      - name: Run demo
+        run: |
+          python -m testbed.demo --out demo_out \
+            --patients "${{ github.event.inputs.patients || '300' }}" \
+            --seed "${{ github.event.inputs.seed || '42' }}"
+      - name: Lakeside (second source system) run summary
+        run: python tools/lakeside_summary.py demo_out/lakeside >> demo_out/DEMO_TRANSCRIPT.md
+      - name: Publish summary
+        run: cat demo_out/DEMO_TRANSCRIPT.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: conversion-demo-${{ github.run_number }}
+          path: |
+            demo_out/DEMO_TRANSCRIPT.md
+            demo_out/*.html
+          retention-days: 30
