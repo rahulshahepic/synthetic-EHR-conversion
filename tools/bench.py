@@ -21,6 +21,8 @@ from bridge.load.client import connect
 from bridge.runs.runner import Runner
 from bridge.runs.store import RunStore
 from testbed.halcyon.generator import generate
+from testbed.simulated_user import SimulatedAnalyst
+from bridge.reconcile.answers import answer
 
 
 def benchmark(patients: int = 5000, seed: int = 42, profile_out: str | None = None, *, without_index: bool = False) -> dict:
@@ -44,6 +46,24 @@ def benchmark(patients: int = 5000, seed: int = 42, profile_out: str | None = No
             profiler.enable()
         try:
             run_id = runner.start(str(export), target)
+            analyst = SimulatedAnalyst(export)
+            for _ in range(100):
+                state = store.run(run_id)["status"]
+                blocking = [q for q in store.questions(run_id) if q["blocking"]]
+                if state not in ("paused", "completed_with_exceptions") and not blocking:
+                    break
+                if not blocking and state != "paused":
+                    break
+                for question in blocking:
+                    detail = store.question(question["id"])
+                    linked = detail["affected"]
+                    rec = store.record(run_id, linked[0]["rtype"], linked[0]["source_key"]) if linked else None
+                    source = rec["source"] if rec else None
+                    option, value, why = analyst.choose(detail, source)
+                    answer(store, question["id"], option, value, analyst.name, why)
+                runner.resume(run_id, "synthetic analyst benchmark", analyst.name)
+            else:
+                raise RuntimeError("benchmark did not resolve pauses within 100 rounds")
         finally:
             if profiler:
                 profiler.disable()
@@ -52,12 +72,15 @@ def benchmark(patients: int = 5000, seed: int = 42, profile_out: str | None = No
             profiler.dump_stats(profile_out)
             pstats.Stats(profiler).strip_dirs().sort_stats("cumulative").print_stats(30)
         counts = store.status_counts(run_id)
+        status = store.run(run_id)["status"]
+        if status not in ("completed", "completed_with_exceptions"):
+            raise RuntimeError(f"benchmark did not finish: {status}")
         return {
             "seed": seed, "patients": patients, "without_index": without_index,
             "generation_seconds": round(generation_seconds, 3),
             "conversion_seconds": round(conversion_seconds, 3),
             "records_by_status": counts,
-            "run_status": store.run(run_id)["status"],
+            "run_status": status,
             "profile_file": profile_out,
         }
 
