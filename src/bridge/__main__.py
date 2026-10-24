@@ -42,6 +42,9 @@ def main(argv: list[str] | None = None) -> int:
     r.add_argument("--source", required=True)
     r.add_argument("--target", default=None, help="default: embedded Nimbus next to the run DB")
     r.add_argument("--batch-size", type=int, default=DEFAULT_BATCH_SIZE)
+    r.add_argument("--rules-from", help="prior run DB or exported rules JSON whose answers should be reused")
+    sub.add_parser("rules-export").add_argument("--out", required=True)
+    sub.add_parser("compare").add_argument("--other-run-db", required=True, help="the earlier rehearsal's run DB")
     for name in ("status", "alerts", "rules", "events"):
         sub.add_parser(name)
     q = sub.add_parser("questions")
@@ -87,7 +90,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "run":
         target = args.target or f"embedded:{Path(args.run_db).with_name(Path(args.run_db).stem + '_nimbus.db')}"
         runner = Runner(store, connect(target))
-        rid = runner.start(args.source, target, args.batch_size)
+        rules = None
+        if args.rules_from:
+            from .reconcile.rules_io import load_rules
+            rules = load_rules(args.rules_from)
+        rid = runner.start(args.source, target, args.batch_size, rules=rules)
         out(st.run_summary(store, rid))
     elif args.cmd == "status":
         out(st.run_summary(store, args.run_id))
@@ -131,6 +138,14 @@ def main(argv: list[str] | None = None) -> int:
         out(store.events(store.run(args.run_id)["id"]))
     elif args.cmd == "explain":
         out(st.explain(store, store.run(args.run_id)["id"], args.source_key, args.type))
+    elif args.cmd == "rules-export":
+        from .reconcile.rules_io import export_rules
+        data = export_rules(store, store.run(args.run_id)["id"])
+        Path(args.out).write_text(json.dumps(data, indent=1))
+        out({"exported": len(data["rules"]), "file": args.out})
+    elif args.cmd == "compare":
+        from .compare import compare, run_profile
+        out(compare(run_profile(RunStore(args.other_run_db)), run_profile(store, args.run_id)))
     elif args.cmd == "verify":
         from .verify import verify_run
         runner, rid = _runner(store, args.run_id)

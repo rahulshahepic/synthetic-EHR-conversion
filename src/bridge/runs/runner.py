@@ -28,13 +28,17 @@ class Runner:
 
     # ---------------------------------------------------------------- lifecycle
     def start(self, source: str, target_label: str = "nimbus", batch_size: int = DEFAULT_BATCH_SIZE,
-              types: list[str] | None = None, auto_execute: bool = True) -> str:
+              types: list[str] | None = None, auto_execute: bool = True,
+              rules: list[dict[str, Any]] | None = None) -> str:
         export = HalcyonExport(source)
         as_of = export.manifest.get("asOf") or date.today().isoformat()
         cfg = {"batch_size": batch_size, "as_of": as_of, "types": types or [t for t in LOAD_ORDER if t in MAPPERS]}
         run_id = self.store.create_run(str(source), target_label, cfg)
         self.store.set_status(run_id, "extracting")
         stage_all(self.store, run_id, export, self.profile)
+        if rules:
+            from ..reconcile.rules_io import import_rules
+            import_rules(self.store, run_id, rules)
         self.store.set_status(run_id, "staged")
         if auto_execute:
             self.execute(run_id)

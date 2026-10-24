@@ -76,9 +76,14 @@ def build_server(run_db: str) -> MCPServer:
     def acknowledge_alert(alert_id: str, note: str, by: str, new_threshold: float | None = None) -> dict[str, Any]:
         return b.acknowledge_alert(alert_id, note, by, new_threshold)
 
-    @mcp.tool(description="Start a conversion of a Halcyon export directory. Runs until the first pause or completion.")
-    def start_run(source: str, target: str | None = None, batch_size: int = 200) -> dict[str, Any]:
-        return b.start_run(source, target, batch_size)
+    @mcp.tool(description="Start a conversion of a Halcyon export directory. Runs until the first pause or completion. "
+                          "rules_from: a prior rehearsal's run DB (or exported rules JSON) whose answers are reused.")
+    def start_run(source: str, target: str | None = None, batch_size: int = 200, rules_from: str | None = None) -> dict[str, Any]:
+        return b.start_run(source, target, batch_size, rules_from)
+
+    @mcp.tool(description="Compare this run with an earlier rehearsal (other_run_db): questions, pauses, counts, fidelity.")
+    def compare_runs(other_run_db: str, run_id: str | None = None) -> dict[str, Any]:
+        return b.compare_runs(other_run_db, run_id)
 
     @mcp.tool(description="Resume a paused run (acknowledges open alerts with `note`). Get the user's go-ahead first.")
     def resume_run(note: str, by: str, run_id: str | None = None) -> dict[str, Any]:

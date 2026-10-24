@@ -180,6 +180,9 @@ def map_patient(ctx: MapContext) -> dict[str, Any] | None:
             blocking=True, context={"charts": rv["pair"], "candidate_patient": rv["other"], "this_patient": ctx.key})
         if d is None:
             return None
+        if d["option"] == "same":  # rule applied before the merge hook ran (e.g. imported); never load a known duplicate
+            ctx.superseded_by = rv["other"]
+            return None
     members = s["members"]
     p = next(m for m in members if m["PAT_ID"] == s["primary"])
 

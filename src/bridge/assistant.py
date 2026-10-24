@@ -116,11 +116,13 @@ class BridgeAssistant:
             self.store.set_override(al["run_id"], al["rule"], al["rtype"], new_threshold)
         return self.store.alert(alert_id)
 
-    def start_run(self, source: str, target: str | None = None, batch_size: int = 200) -> dict[str, Any]:
+    def start_run(self, source: str, target: str | None = None, batch_size: int = 200,
+                  rules_from: str | None = None) -> dict[str, Any]:
+        from .reconcile.rules_io import load_rules
         target = target or f"embedded:{Path(self.run_db).with_name(Path(self.run_db).stem + '_nimbus.db')}"
         runner = Runner(self.store, connect(target))
         self._runner = runner
-        rid = runner.start(source, target, batch_size)
+        rid = runner.start(source, target, batch_size, rules=load_rules(rules_from) if rules_from else None)
         return st.run_summary(self.store, rid)
 
     def resume_run(self, note: str, by: str, run_id: str | None = None) -> dict[str, Any]:
@@ -148,6 +150,10 @@ class BridgeAssistant:
             return revert(self.store, self.runner(rid).client, rid, scope, target, cascade, confirmed_by)
         except RevertBlocked as e:
             return {"error": str(e), "blocking_batches": e.blocking}
+
+    def compare_runs(self, other_run_db: str, run_id: str | None = None) -> dict[str, Any]:
+        from .compare import compare, run_profile
+        return compare(run_profile(RunStore(other_run_db)), run_profile(self.store, run_id))
 
     def verify_run(self, run_id: str | None = None) -> dict[str, Any]:
         from .verify import verify_run

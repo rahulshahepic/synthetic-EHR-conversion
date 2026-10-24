@@ -17,6 +17,10 @@ For `ready` helper tasks, Claude may have committed a small **v0** implementatio
 | M4 | Remaining domains + HL7 ORU/SIU + CSV channels | done |
 | M5 | MCP server + reconciliation loop | done |
 | M6 | Verification: read-back sampling, clinical sentinels, end-of-run reconciliation | done |
+| M7 | Rehearsals: rule carry-over, run-vs-run comparison | done |
+| M8 | Cutover delta load + source deletions | claude |
+| M9 | Late identity merges via Nimbus $merge | claude |
+| M10 | Scripted end-to-end demo | claude |
 
 ## Helper tasks
 
@@ -75,3 +79,7 @@ Given a Halcyon export dir and a Bridge run DB, report for every planted issue t
 ### T-110 · Performance at 50k patients · `ready`
 Files: `tools/bench.py` (new) plus targeted changes in `src/bridge/runs/store.py` and `src/nimbus/service.py` only.
 Today a 500-patient run (~52k Nimbus records) takes ~26s. Profile (`python -m cProfile`) a 5k-patient run and remove the top hotspots (e.g. the `work_queue` blocked-record EXISTS join that concatenates strings, per-record JSON parsing, per-record Nimbus history inserts). Keep behavior identical: the full test suite must pass unchanged. Report before/after timings in the PR.
+
+### T-111 · Export mutator for cutover testing · `ready`
+Files: `testbed/halcyon/mutate.py` (new), CLI `python -m testbed.halcyon mutate --from <exportA> --out <exportB> --seed N`, `tests/testbed/test_mutate.py`
+Produce export B from export A as "the same system some weeks later": keep every existing primary key stable; add new patients (with charts), new visits/labs/notes for existing patients, demographic changes on ~5% of patients (also emitted as ADT A08 in B's feeds), status changes (meds discontinued, appointments completed/cancelled), and delete a small number of rows (e.g. entered-in-error problems, cancelled-and-purged appointments). Copy feeds/extracts and append new messages. Write `answer_key/delta.json` listing every added/changed/deleted key by table. Do not import `bridge` or `nimbus`. Acceptance: deterministic for a seed; tests assert keys in A remain stable in B except listed deletions, and that delta.json is complete (diff A vs B tables equals delta.json).
