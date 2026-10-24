@@ -21,24 +21,38 @@ Question {
 }
 ```
 
-## MCP tools (v1)
+## MCP tools (v1, implemented in `src/bridge/mcp_server.py` over `src/bridge/assistant.py`)
 | Tool | Purpose |
 |---|---|
-| `run_status(run_id?)` | State, progress per type, open alerts, open question counts. |
-| `list_alerts(run_id, status?)` / `acknowledge_alert(id, note)` | Monitor breaches. |
-| `get_metrics(run_id, resource_type?, batch_id?)` | Metric snapshot and trends. |
-| `list_questions(run_id, kind?, blocking?, limit)` | Grouped open questions, highest impact first. |
-| `get_question(id)` | Full context. |
-| `answer_question(id, option_key, scope, rationale, answered_by)` | Records answer → creates mapping rule → marks affected records for reprocessing. |
-| `explain_record(source_key)` | Lineage: raw source rows/segments → mapped payload → fidelity annotations → Nimbus result. |
-| `loss_report(run_id, resource_type?)` | Dropped/degraded fields summary. |
-| `pause_run` / `resume_run` / `reprocess(batch_id or held=true)` | Run control. |
-| `revert(run_id, scope, target)` | Revert batch/type/run. **Destructive**: requires `confirm=true`; tool description tells the assistant to get explicit user consent first. |
-| `list_rules` / `retire_rule(id)` | Mapping-rule management. |
+| `guide()` | The workflow below plus the list of docs. |
+| `list_runs()` / `start_run(source, target?, batch_size?)` | Runs in this run DB; start converting an export (runs until first pause). |
+| `run_status(run_id?)` | State, pause reason, per-type counts and fidelity, open alerts, open question counts. |
+| `list_alerts(run_id?, status?)` / `acknowledge_alert(id, note, by, new_threshold?)` | Monitor breaches; acknowledging can raise a rule's threshold for that type. |
+| `get_metrics(run_id?, resource_type?, batch_id?)` | Per-batch metric trend, or full detail for one batch. |
+| `list_questions(run_id?, kind?, blocking_only?, status?, limit?)` | Grouped questions, blocking and highest impact first; flags `clinical`. |
+| `get_question(id)` | Prompt, options, context and example source records. |
+| `answer_question(id, option, answered_by, value?, rationale?)` | Answer → mapping rule → held records released / defaulted records requeued. |
+| `explain_record(source_key, resource_type?)` | Lineage: source → mapped payload → fidelity annotations → Nimbus result. |
+| `loss_report(run_id?, resource_type?)` | Dropped/degraded/inferred/defaulted fields summary. |
+| `list_rules()` / `retire_rule(id, by)` | Mapping-rule management. |
+| `recent_events()` | Batches, pauses, answers, reverts. |
+| `pause_run` / `resume_run(note, by)` / `reprocess(statuses?, resource_type?)` | Run control. Resume acknowledges open alerts with the note. |
+| `revert(scope, confirm, confirmed_by, target?, cascade?)` | **Destructive**; refused unless `confirm=true` and `confirmed_by="user:<name>"`. |
+
+## Connecting an assistant (local checkout)
+Claude Code:
+```
+claude mcp add bridge -- python -m bridge --run-db "$PWD/runs/demo.db" mcp
+```
+Any MCP client (Claude Desktop, ChatGPT desktop with MCP, etc.) — stdio server config:
+```json
+{"mcpServers": {"bridge": {"command": "python", "args": ["-m", "bridge", "--run-db", "/abs/path/runs/demo.db", "mcp"]}}}
+```
+Then e.g. *"Start a conversion of exports/seed42 and walk me through anything that needs my decision."*
 
 MCP resources: `bridge://runs/{id}/summary`, `bridge://docs/{name}` (these docs, so the assistant can learn the domain).
 
 ## Safety rules for the assistant (embedded in tool descriptions)
-- The assistant may *propose* answers but must not answer clinically significant questions (`blocking=true`, kinds: allergy, medication, identity merge) without the user explicitly choosing.
+- The assistant may *propose* answers but must not answer blocking or clinical questions (identity, problem codes, medications, labs, DOB, allergies) without the user explicitly choosing. This is enforced server-side: `answered_by="assistant"` is rejected for those.
 - Every answer stores `answered_by` (`user:<name>` vs `assistant`) and rationale; assistant-authored answers are allowed only for non-blocking kinds and are flagged for review.
 - No PHI leaves the machine — everything here is synthetic anyway, but the design assumes it would be real.

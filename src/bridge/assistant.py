@@ -1,0 +1,158 @@
+"""Operations exposed to AI assistants (via MCP) and usable directly from Python.
+
+Every method returns JSON-serializable data. Destructive or clinically significant actions carry
+explicit guards: the assistant must relay a named user's decision rather than decide itself.
+"""
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
+from . import status as st
+from .load.client import connect
+from .reconcile.answers import CLINICAL_KINDS, AnswerError, answer
+from .runs.revert import RevertBlocked, revert
+from .runs.runner import Runner
+from .runs.store import RunStore
+
+DOCS = Path(__file__).resolve().parents[2] / "docs"
+
+WORKFLOW = """Bridge converts a legacy EHR export (Halcyon) into Nimbus in batches. After every batch it measures
+quality and may PAUSE. Typical loop:
+1. run_status -> if paused, read pause_reason and list_alerts.
+2. list_questions -> grouped questions, blocking first, most records affected first.
+3. For each question: get_question, explain the choice to the user in plain language (include counts and an
+   example from context), let the USER choose, then answer_question(answered_by="user:<their name>").
+   You may answer non-blocking, non-clinical questions yourself with answered_by="assistant" (flagged for review).
+4. resume_run(note=..., by="user:<name>") once the user agrees (this acknowledges open alerts).
+5. Use explain_record and loss_report to answer "what happened to X?" and "what did we lose?".
+6. revert is destructive: only with explicit user confirmation, and pass confirm=true and confirmed_by.
+"""
+
+
+class BridgeAssistant:
+    def __init__(self, run_db: str):
+        self.store = RunStore(run_db)
+        self.run_db = run_db
+        self._runner: Runner | None = None
+
+    def _rid(self, run_id: str | None) -> str:
+        return self.store.run(run_id)["id"]
+
+    def runner(self, run_id: str | None = None) -> Runner:
+        if self._runner is None:
+            self._runner = Runner(self.store, connect(self.store.run(run_id)["target"]))
+        return self._runner
+
+    # ------------------------------------------------------------------ read
+    def guide(self) -> dict[str, Any]:
+        return {"workflow": WORKFLOW, "docs": sorted(p.stem for p in DOCS.glob("*.md")) if DOCS.exists() else []}
+
+    def run_status(self, run_id: str | None = None) -> dict[str, Any]:
+        return st.run_summary(self.store, run_id)
+
+    def list_runs(self) -> list[dict[str, Any]]:
+        return [dict(r) for r in self.store.db.execute(
+            "SELECT id, source, status, created_at, updated_at FROM runs ORDER BY created_at DESC")]
+
+    def list_alerts(self, run_id: str | None = None, status: str | None = "open") -> list[dict[str, Any]]:
+        return self.store.alerts(self._rid(run_id), status)
+
+    def get_metrics(self, run_id: str | None = None, resource_type: str | None = None, batch_id: str | None = None) -> list[dict[str, Any]]:
+        return st.metrics_view(self.store, self._rid(run_id), resource_type, batch_id)
+
+    def list_questions(self, run_id: str | None = None, kind: str | None = None, blocking_only: bool = False,
+                       status: str = "open", limit: int = 25) -> dict[str, Any]:
+        qs = self.store.questions(self._rid(run_id), status or None, kind)
+        if blocking_only:
+            qs = [q for q in qs if q["blocking"]]
+        return {
+            "total": len(qs),
+            "questions": [{
+                "id": q["id"], "kind": q["kind"], "blocking": q["blocking"], "clinical": q["kind"] in CLINICAL_KINDS,
+                "records_affected": q["affected_count"], "prompt": q["prompt"],
+                "options": q["options"], "default_option": q["default_option"], "status": q["status"],
+            } for q in qs[:limit]],
+        }
+
+    def get_question(self, question_id: str, max_examples: int = 5) -> dict[str, Any]:
+        q = self.store.question(question_id)
+        examples = []
+        for a in q["affected"][:max_examples]:
+            rec = self.store.record(q["run_id"], a["rtype"], a["source_key"])
+            if rec:
+                examples.append({"rtype": a["rtype"], "source_key": a["source_key"], "status": rec["status"],
+                                 "source": rec["source"]})
+        return {**{k: q[k] for k in ("id", "run_id", "kind", "match_key", "status", "blocking", "prompt", "options",
+                                     "default_option", "context", "answer")},
+                "clinical": q["kind"] in CLINICAL_KINDS, "records_affected": len(q["affected"]), "examples": examples}
+
+    def explain_record(self, source_key: str, resource_type: str | None = None, run_id: str | None = None) -> list[dict[str, Any]]:
+        return st.explain(self.store, self._rid(run_id), source_key, resource_type)
+
+    def loss_report(self, run_id: str | None = None, resource_type: str | None = None, limit: int = 50) -> list[dict[str, Any]]:
+        return self.store.loss_summary(self._rid(run_id), resource_type)[:limit]
+
+    def list_rules(self, run_id: str | None = None) -> list[dict[str, Any]]:
+        return self.store.rules(self._rid(run_id))
+
+    def recent_events(self, run_id: str | None = None, limit: int = 20) -> list[dict[str, Any]]:
+        return self.store.events(self._rid(run_id), limit)
+
+    # ------------------------------------------------------------------ write
+    def answer_question(self, question_id: str, option: str, answered_by: str, value: str | None = None,
+                        rationale: str = "") -> dict[str, Any]:
+        if not answered_by or not (answered_by.startswith("user:") or answered_by == "assistant"):
+            return {"error": "answered_by must be 'user:<name>' (relaying the user's choice) or 'assistant'"}
+        try:
+            return answer(self.store, question_id, option, value, answered_by, rationale)
+        except (AnswerError, KeyError) as e:
+            return {"error": str(e)}
+
+    def acknowledge_alert(self, alert_id: str, note: str, by: str, new_threshold: float | None = None) -> dict[str, Any]:
+        al = self.store.alert(alert_id)
+        self.store.ack_alert(alert_id, note, by)
+        if new_threshold is not None:
+            self.store.set_override(al["run_id"], al["rule"], al["rtype"], new_threshold)
+        return self.store.alert(alert_id)
+
+    def start_run(self, source: str, target: str | None = None, batch_size: int = 200) -> dict[str, Any]:
+        target = target or f"embedded:{Path(self.run_db).with_name(Path(self.run_db).stem + '_nimbus.db')}"
+        runner = Runner(self.store, connect(target))
+        self._runner = runner
+        rid = runner.start(source, target, batch_size)
+        return st.run_summary(self.store, rid)
+
+    def resume_run(self, note: str, by: str, run_id: str | None = None) -> dict[str, Any]:
+        rid = self._rid(run_id)
+        self.runner(rid).resume(rid, note, by)
+        return st.run_summary(self.store, rid)
+
+    def pause_run(self, reason: str, by: str, run_id: str | None = None) -> dict[str, Any]:
+        rid = self._rid(run_id)
+        self.runner(rid).pause(rid, reason, by)
+        return st.run_summary(self.store, rid)
+
+    def reprocess(self, run_id: str | None = None, statuses: list[str] | None = None, resource_type: str | None = None) -> dict[str, Any]:
+        rid = self._rid(run_id)
+        return {"requeued": self.runner(rid).reprocess(rid, tuple(statuses or ["rejected"]), resource_type),
+                "next": "call resume_run to process the requeued records"}
+
+    def revert(self, scope: str, confirm: bool, confirmed_by: str, target: str | None = None, cascade: bool = False,
+               run_id: str | None = None) -> dict[str, Any]:
+        if not confirm or not confirmed_by.startswith("user:"):
+            return {"error": "revert deletes data from Nimbus: get explicit user consent, then pass confirm=true and "
+                             "confirmed_by='user:<name>'"}
+        rid = self._rid(run_id)
+        try:
+            return revert(self.store, self.runner(rid).client, rid, scope, target, cascade, confirmed_by)
+        except RevertBlocked as e:
+            return {"error": str(e), "blocking_batches": e.blocking}
+
+    def retire_rule(self, rule_id: str, by: str) -> dict[str, Any]:
+        row = self.store.db.execute("SELECT run_id, kind, match_key FROM rules WHERE id=?", (rule_id,)).fetchone()
+        if row is None:
+            return {"error": f"rule {rule_id} not found"}
+        self.store.retire_rule(rule_id)
+        self.store.event(row["run_id"], "rule_retired", {"rule": rule_id, "by": by})
+        return {"retired": rule_id, "note": "records already converted keep their values; reprocess to re-ask"}

@@ -35,6 +35,7 @@ python -m bridge --run-db runs/r1.db answer <qid> <option> --by user:you
 python -m bridge --run-db runs/r1.db resume --note "why" --by user:you
 python -m bridge --run-db runs/r1.db revert --scope run --cascade      # or --scope batch|type --target-id X
 python -m bridge --run-db runs/r1.db mcp                               # MCP server (stdio) for AI assistants
+# connect from Claude Code: claude mcp add bridge -- python -m bridge --run-db "$PWD/runs/r1.db" mcp
 ```
 
 ## Working here as an AI agent (ChatGPT, Muse, Claude, ...)
