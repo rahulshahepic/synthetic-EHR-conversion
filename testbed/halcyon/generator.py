@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from . import vocab as V
+from .profiles import FacilityProfile, get_profile
 
 GENERATOR_VERSION = "1.0"
 ICD10_CUTOVER = date(2015, 10, 1)
@@ -26,6 +27,9 @@ class Config:
     seed: int = 42
     patients: int = 500
     as_of: date = date(2026, 9, 30)
+    # Source profile (see testbed/halcyon/profiles/): the conventions of the
+    # system this export pretends to come from. "default" is Riverbend.
+    profile: str = "default"
     # injection rates for planted problems
     rates: dict[str, float] = field(default_factory=lambda: {
         "second_facility": 0.25, "duplicate_person": 0.04, "dup_has_a40": 0.5,
@@ -39,6 +43,13 @@ class Config:
         "registry_only": 0.10, "siu_cancel": 0.10, "cob_duplicate": 0.02, "a08_update": 0.05,
         "npi_missing": 0.08, "npi_bad": 0.03,
     })
+
+    def __post_init__(self) -> None:
+        # A profile may restyle a few rates (e.g. Lakeside's uncoded visits);
+        # they merge over the defaults above. Unknown profile names fail here.
+        overrides = get_profile(self.profile).rates
+        if overrides:
+            self.rates = {**self.rates, **overrides}
 
 
 def d8(d: date) -> str:
@@ -69,6 +80,7 @@ def npi_check_digit(first9: str) -> str:
 class Generator:
     def __init__(self, cfg: Config):
         self.cfg = cfg
+        self.profile: FacilityProfile = get_profile(cfg.profile)
         self.r = random.Random(cfg.seed)
         self.rows: dict[str, list[dict[str, str]]] = defaultdict(list)
         self.issues: list[dict[str, Any]] = []
@@ -82,6 +94,10 @@ class Generator:
     # ------------------------------------------------------------- utilities
     def chance(self, key: str) -> bool:
         return self.r.random() < self.cfg.rates[key]
+
+    def visit_class(self, vt: str) -> str | None:
+        """Truth class of a local visit code under the active profile."""
+        return self.profile.visit_types.get(vt, (None, 0))[0]
 
     def nid(self, prefix: str, width: int = 6) -> str:
         self._seq[prefix] += 1
@@ -120,9 +136,9 @@ class Generator:
 
     # ------------------------------------------------------------- reference data
     def gen_reference(self) -> None:
-        for fid, name, tz, wt, temp, ht in V.FACILITIES:
+        for fid, name, tz, wt, temp, ht in self.profile.facilities:
             self.rows["FACILITY"].append({"FAC_ID": fid, "FAC_NAME": name, "TZ_NOTE": f"local time ({tz.split('/')[-1]})"})
-        for did, fac, name, kind in V.DEPTS:
+        for did, fac, name, kind in self.profile.depts:
             self.rows["DEPT"].append({"DEPT_ID": did, "FAC_ID": fac or "", "DEPT_NAME": name, "DEPT_KIND": kind})
             if fac is None:
                 self.plant("shared_department", "DEPT", did)
@@ -195,9 +211,10 @@ class Generator:
              "race": race, "deceased": self.rand_date(date(2019, 1, 1), cfg.as_of) if age > 80 and r.random() < 0.1 else None}
         self.truth["person"][person_id] = {"first": first, "last": last, "dob": dob.isoformat(), "sex": sex}
 
-        facs = [r.choice(["FAC1", "FAC1", "FAC2", "FAC3"])]
+        home_pool = [fid for fid, w in self.profile.facility_weights for _ in range(w)]
+        facs = [r.choice(home_pool)]
         if self.chance("second_facility"):
-            facs.append(r.choice([f for f in ("FAC1", "FAC2", "FAC3") if f != facs[0]]))
+            facs.append(r.choice([f[0] for f in self.profile.facilities if f[0] != facs[0]]))
         pat_ids = []
         conditions = self.pick_conditions(age)
         allergies = self.pick_allergies()
@@ -318,7 +335,7 @@ class Generator:
             if v["STATUS"] != "C":
                 continue
             vt = v["VISIT_TYPE"]
-            if vt in ("OV", "OVN", "ER", "IP", "OBS"):
+            if self.visit_class(vt) in ("ambulatory", "emergency", "inpatient", "observation"):
                 self.gen_vitals(pat_id, v, fac)
                 if r.random() < 0.5:
                     self.gen_labs(pat_id, v)
@@ -331,13 +348,14 @@ class Generator:
 
     def gen_visit(self, pat_id: str, fac: str, start: date, end: date) -> dict[str, str]:
         r = self.r
-        vtypes = list(V.VISIT_TYPES)
-        vt = r.choices(vtypes, weights=[V.VISIT_TYPES[k][1] for k in vtypes])[0]
+        vtypes = list(self.profile.visit_types)
+        vt = r.choices(vtypes, weights=[self.profile.visit_types[k][1] for k in vtypes])[0]
         vid = self.nid("V", 7)
-        if vt == "XX" or self.chance("visit_xx"):
-            vt = "XX"
+        if vt == self.profile.unknown_visit_code or self.chance("visit_xx"):
+            vt = self.profile.unknown_visit_code
             self.plant("unknown_visit_type", "VISIT", vid)
-        admit = self.rand_dt(start, end, (0, 23) if vt in ("ER", "IP") else (7, 18))
+        vclass = self.visit_class(vt)
+        admit = self.rand_dt(start, end, (0, 23) if vclass in ("emergency", "inpatient") else (7, 18))
         lo, hi = max(start.year, 2009), min(end.year, self.cfg.as_of.year) - 1
         if self.chance("dst_ambiguous") and lo <= hi:
             d = first_sunday_nov(r.randint(lo, hi))
@@ -345,13 +363,13 @@ class Generator:
             self.plant("dst_ambiguous_time", "VISIT", vid)
         disch = ""
         status = "X" if r.random() < 0.04 else "C"
-        if vt in ("IP", "OBS") and status == "C":
+        if vclass in ("inpatient", "observation") and status == "C":
             disch = dt12(admit + timedelta(hours=r.randint(20, 24 * 7)))
-            if vt == "IP" and self.chance("missing_discharge"):
+            if vclass == "inpatient" and self.chance("missing_discharge"):
                 disch = ""
                 self.plant("missing_discharge", "VISIT", vid)
-        clinics = [d[0] for d in V.DEPTS if d[1] == fac and d[3] == "clinic"] or ["D200"]
-        dept = {"ER": "D100", "IP": "D110", "OBS": "D110", "TEL": "D910"}.get(vt, r.choice(clinics))
+        clinics = [d[0] for d in self.profile.depts if d[1] == fac and d[3] == "clinic"] or ["D200"]
+        dept = self.profile.class_depts.get(vclass, r.choice(clinics))
         prov = r.choice(self.providers)["PROV_ID"]
         if self.chance("orphan_provider"):
             prov = "PR999"
@@ -394,6 +412,7 @@ class Generator:
         codes += [r.choices(acute, weights=[30, 15, 30, 20, 3, 2])[0] for _ in range(r.choice([0, 0, 1, 2]))]
         for code in codes:
             name, rx, doses, sigs, flag = V.FORMULARY[code]
+            sigs = self.profile.sigs(code, sigs)
             v = r.choice(visits)
             start = datetime.strptime(v["ADMIT_DT"][:8], "%Y%m%d").date()
             acute = code in ("HFORM0006", "HFORM0010", "HFORM0013", "HFORM0014", "HFORM0015", "HFORM0099")
@@ -431,7 +450,7 @@ class Generator:
             tests.append("XLAB7")
         obx = []
         for code in tests:
-            desc, loinc, unit, kind, normal, typical = V.LABS[code]
+            desc, loinc, unit, kind, normal, typical = self.profile.lab(code)
             res_id = self.nid("R", 7)
             flag, ref = "", ""
             if kind == "num":
@@ -472,7 +491,7 @@ class Generator:
 
     def gen_vitals(self, pat_id: str, v: dict[str, str], fac: str) -> None:
         r = self.r
-        _, _, _, wt_u, temp_u, ht_u = next(f for f in V.FACILITIES if f[0] == fac)
+        _, _, _, wt_u, temp_u, ht_u = next(f for f in self.profile.facilities if f[0] == fac)
         vid = self.nid("VT", 7)
         kg = r.uniform(12, 130)
         sbp, dbp = r.randint(95, 175), r.randint(55, 105)
@@ -501,7 +520,7 @@ class Generator:
     def gen_note(self, pat_id: str, v: dict[str, str]) -> None:
         r = self.r
         nid = self.nid("N", 7)
-        ntype = {"IP": "DS", "OBS": "HP", "TEL": "TEL"}.get(v["VISIT_TYPE"], "PN")
+        ntype = {"inpatient": "DS", "observation": "HP", "virtual": "TEL"}.get(self.visit_class(v["VISIT_TYPE"]), "PN")
         body = (r"{\rtf1\ansi {\b SUBJECTIVE:}\par " + f"Patient seen for {v['REASON_TEXT'] or 'visit'}. "
                 + r"Reports feeling {\i somewhat} better.\par {\b ASSESSMENT/PLAN:}\par Continue current meds.\par}")
         if self.chance("note_truncated"):
@@ -513,11 +532,11 @@ class Generator:
 
     def gen_charges(self, pat_id: str, v: dict[str, str]) -> None:
         r = self.r
-        vt = v["VISIT_TYPE"]
-        if vt == "TEL":
+        vclass = self.visit_class(v["VISIT_TYPE"])
+        if vclass == "virtual":
             return
-        codes = {"ER": ["99284", "93000", "HC1002", "HC1003"], "IP": ["99221", "80053", "85025"],
-                 "OBS": ["99221", "80053"]}.get(vt, ["99212", "99213", "99214", "99203", "G0438", "83036", "36415", "HC1001"])
+        codes = {"emergency": ["99284", "93000", "HC1002", "HC1003"], "inpatient": ["99221", "80053", "85025"],
+                 "observation": ["99221", "80053"]}.get(vclass, ["99212", "99213", "99214", "99203", "G0438", "83036", "36415", "HC1001"])
         post = datetime.strptime(v["ADMIT_DT"][:8], "%Y%m%d").date() + timedelta(days=r.randint(0, 5))
         picks = r.sample(codes, k=min(len(codes), r.randint(1, 3)))
         if r.random() < 0.02:
@@ -568,7 +587,7 @@ class Generator:
                 else self.rand_dt(start, end)
             status = "S" if future else r.choices(["C", "N", "X", "B", "A"], weights=[70, 10, 10, 5, 1])[0]
             prov = r.choice(self.providers)["PROV_ID"]
-            clinics = [d[0] for d in V.DEPTS if d[1] == fac and d[3] == "clinic"] or ["D200"]
+            clinics = [d[0] for d in self.profile.depts if d[1] == fac and d[3] == "clinic"] or ["D200"]
             row = {"APPT_ID": aid, "PAT_ID": pat_id, "PROV_ID": prov, "DEPT_ID": r.choice(clinics),
                    "APPT_DT": dt12(when), "DURATION_MIN": r.choice(["15", "20", "30", "40", "60"]),
                    "STATUS": status, "REASON": r.choice(["F/U", "PHYSICAL", "NEW PT", "MED CHECK", ""])}
@@ -607,7 +626,7 @@ class Generator:
     # ------------------------------------------------------------- HL7 v2
     def _msh(self, mtype: str, when: datetime) -> str:
         self._msg += 1
-        return f"MSH|^~\\&|HALCYON|RIVERBEND|BRIDGE|NIMBUS|{dt12(when)}||{mtype}|MSG{self._msg:07d}|P|2.3"
+        return f"MSH|^~\\&|HALCYON|{self.profile.sender}|BRIDGE|NIMBUS|{dt12(when)}||{mtype}|MSG{self._msg:07d}|P|2.3"
 
     @staticmethod
     def esc(s: str) -> str:
@@ -714,18 +733,18 @@ class Generator:
             issue_counts[i["type"]] += 1
         manifest = {"system": "Halcyon Classic", "generatorVersion": GENERATOR_VERSION, "seed": self.cfg.seed,
                     "patients": self.cfg.patients, "asOf": self.cfg.as_of.isoformat(), "counts": counts,
-                    "notes": {
-                        "timestamps": "Facility local time, no offset. FAC1/FAC2 US Central, FAC3 US Mountain.",
-                        "units": "VITALS have no unit columns; FAC1/FAC2 record lb/degF/in, FAC3 kg/degC/cm.",
-                        "charges": "AMOUNT is dollars (with decimals) before 2012-01-01, integer cents after.",
-                        "feeds": "HL7 v2.3. ADT A08 newer than PAT; A40 = merge (MRG = retired MRN). ORU: last 30 days only in feed.",
-                    }}
+                    "notes": self.profile.manifest_notes}
+        if self.profile.name != "default":
+            # The default manifest predates profiles; keep it byte-identical
+            # and stamp only non-default exports with their source profile.
+            manifest["profile"] = self.profile.name
         (out / "manifest.json").write_text(json.dumps(manifest, indent=1))
         return {"counts": counts, "issues": dict(issue_counts)}
 
 
-def generate(out: Path | str, seed: int = 42, patients: int = 500, as_of: date | None = None) -> dict[str, Any]:
-    cfg = Config(seed=seed, patients=patients)
+def generate(out: Path | str, seed: int = 42, patients: int = 500, as_of: date | None = None,
+             profile: str = "default") -> dict[str, Any]:
+    cfg = Config(seed=seed, patients=patients, profile=profile)
     if as_of:
         cfg.as_of = as_of
     return Generator(cfg).run(Path(out))
