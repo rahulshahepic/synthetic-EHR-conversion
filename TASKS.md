@@ -68,7 +68,7 @@ Read only through `bridge.runs.store.RunStore` and `bridge.status` (`run_summary
 Files: `src/bridge/web/` (new), tests.
 Read-only local web UI over the run DB: runs, batches, metric trends, alerts, questions, record lineage. Use `bridge.assistant.BridgeAssistant` for all data (same operations the MCP server exposes). FastAPI + server-rendered HTML or a single static page; no external CDN assets. CLI: `python -m bridge --run-db ... web --port 8710`.
 
-### T-108 · Second source profile for drift testing · `review`
+### T-108 · Second source profile for drift testing · `done`
 Files: `testbed/halcyon/profiles/`, small hooks in `testbed/halcyon/generator.py` (`Config.rates`, `vocab.FACILITIES`)
 A "Lakeside facility" profile: metric units, different visit codes, different sig style, so the drift monitors have something to catch mid-run.
 
