@@ -66,3 +66,33 @@ def test_cutover_delta(tmp_path, export_dir):
     assert client_b.search("Condition", sourceKey=dx)[0]["verificationStatus"] == "entered-in-error"
     addr = client_b.search("Patient", sourceKey=store_b.xget(rb, "pat", pat))[0]["address"][0]
     assert addr["lines"] == ["1 NEW RD"]
+
+
+def test_cutover_matches_mutator_delta(tmp_path, export_dir):
+    """T-111: Bridge's delta run on export B reproduces exactly the changes the mutator recorded."""
+    import json
+
+    from testbed.halcyon.mutate import mutate
+
+    target = f"embedded:{tmp_path / 'nimbus.db'}"
+    store_a = RunStore(str(tmp_path / "a.db"))
+    runner_a = Runner(store_a, connect(target))
+    ra = runner_a.start(str(export_dir), target)
+    _drive(store_a, runner_a, ra)
+
+    mutate(export_dir, tmp_path / "exportB", seed=9)
+    delta = json.loads((tmp_path / "exportB/answer_key/delta.json").read_text())["tables"]
+    store_b = RunStore(str(tmp_path / "b.db"))
+    runner_b = Runner(store_b, connect(target))
+    rb = runner_b.start(str(tmp_path / "exportB"), target, prior_run_db=str(tmp_path / "a.db"))
+    _drive(store_b, runner_b, rb)
+
+    d = delta_summary(store_b, rb)["by_type"]
+    n = lambda table, kind: len(delta.get(table, {}).get(kind, []))  # noqa: E731
+    assert d["Encounter"].get("created", 0) == n("VISIT", "added")
+    assert d.get("DocumentReference", {}).get("created", 0) == n("NOTE", "added")
+    assert d["MedicationRequest"].get("updated", 0) == n("MED_ORD", "changed")
+    assert d["Condition"].get("source_deleted", 0) == n("DX", "deleted")
+    assert d["Appointment"].get("source_deleted", 0) == n("SCHED", "deleted")
+    assert d["Patient"].get("created", 0) == n("PAT", "added")
+    assert store_b.run(rb)["status"] in ("completed", "completed_with_exceptions")
