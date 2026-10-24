@@ -25,6 +25,8 @@ tests/                pytest suites
 - [Reconciliation & AI (MCP)](docs/reconciliation-and-ai.md)
 
 ## See the runs on GitHub (no local setup)
+**Demo site:** https://rahulshahepic.github.io/synthetic-EHR-conversion/ (rebuilt after every merge to `main`).
+
 Every merge to `main` runs the **Conversion demo** workflow. Open the repo's **Actions** tab → *Conversion demo* → latest run:
 the **Summary** page shows the narrated transcript (pauses, questions answered, per-resource results, fidelity loss,
 verification, go-live readiness, rehearsal comparison, cutover delta, second source system), and the **Artifacts**
