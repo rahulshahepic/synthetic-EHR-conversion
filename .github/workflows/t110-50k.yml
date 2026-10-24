@@ -73,7 +73,7 @@ jobs:
           cache: pip
       - run: python -m pip install -e ".[dev]"
       - name: Regression tests
-        run: python -m pytest -q tests/bridge/test_work_queue_performance.py tests/nimbus/test_reference_index.py tests/test_scalability_indexes.py
+        run: python -m pytest -q
       - name: Scaling measurements
         run: |
           mkdir -p benchmark-output
