@@ -51,5 +51,24 @@ A **run** is a conversion of one Halcyon export. It is split into **batches** (d
 
 State machine: `CREATED → EXTRACTING → RUNNING ⇄ PAUSED → COMPLETED | ABORTED`, plus `REVERTING → REVERTED`.
 
+## Code map (Bridge)
+| Module | Role |
+|---|---|
+| `extract/halcyon.py`, `extract/hl7.py` | Read export, ADT A08/A40 handling, identity clustering, staging |
+| `mapping/base.py` | `MapContext`: fidelity annotations, `decide()` (rule → default → question), reference/blocking, dedupe |
+| `mapping/core.py` (+ more per milestone) | One `@mapper(<ResourceType>)` per Nimbus resource |
+| `mapping/identity.py` | Deterministic + probabilistic patient matching |
+| `runs/store.py` | Run DB (SQLite): records, xref, batches, alerts, questions, rules, loss ledger, events |
+| `runs/runner.py` | Batch loop, pause on monitor breach, resume, reprocess |
+| `runs/revert.py` | Batch/type/run revert through Nimbus rollback |
+| `monitor/metrics.py`, `monitor/rules.py` | Per-batch metrics; threshold, invariant and drift rules |
+| `reconcile/answers.py` | Answer → rule → release held / requeue defaulted records; identity merge |
+| `load/client.py` | The only Nimbus touchpoint (HTTP, or `embedded:<db>` for local dev) |
+| `status.py`, `__main__.py` | Summaries, explain/lineage, CLI |
+
+Record statuses: `pending → loaded | rejected | held (question) | blocked (waiting on a parent record) | dropped (policy) | superseded (duplicate/merged)`.
+
+`embedded:<db>` loads the Nimbus app in-process via `importlib` and still speaks the HTTP API through an in-memory transport, so the API contract is exercised exactly as with a remote server.
+
 ## Tech
 Python 3.12+, FastAPI (Nimbus API), SQLite (all storage), pydantic v2 (contracts), pytest, `mcp` Python SDK v2 (`mcp.server.mcpserver.MCPServer`) for the AI interface. CLI via `argparse` (`python -m bridge ...`). No external network needed; everything runs on a local checkout.

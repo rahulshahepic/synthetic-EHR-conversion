@@ -1,0 +1,19 @@
+icd9,icd10,description
+250.00,E11.9,Type 2 diabetes without complications
+401.9,I10,Essential hypertension
+272.4,E78.5,Hyperlipidemia unspecified
+493.90,J45.909,Asthma unspecified uncomplicated
+493.90,J45.20,Mild intermittent asthma uncomplicated
+493.90,J45.40,Moderate persistent asthma uncomplicated
+715.90,M19.90,Osteoarthritis unspecified site
+715.90,M17.9,Osteoarthritis of knee unspecified
+715.90,M16.9,Osteoarthritis of hip unspecified
+311,F32.A,Depression unspecified
+311,F32.9,Major depressive disorder single episode unspecified
+530.81,K21.9,GERD without esophagitis
+244.9,E03.9,Hypothyroidism unspecified
+724.2,M54.50,Low back pain unspecified
+724.2,M54.59,Other low back pain
+278.00,E66.9,Obesity unspecified
+427.31,I48.91,Atrial fibrillation unspecified
+496,J44.9,COPD unspecified

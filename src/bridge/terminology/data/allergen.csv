@@ -1,0 +1,14 @@
+text,system,code,display
+pcn,RxNorm,7980,Penicillin
+penicillin,RxNorm,7980,Penicillin
+penicillins,RxNorm,7980,Penicillin
+sulfa,SNOMED-CT,387406002,Sulfonamide
+sulfa drugs,SNOMED-CT,387406002,Sulfonamide
+codeine,RxNorm,2670,Codeine
+latex,SNOMED-CT,111088007,Latex
+peanuts,SNOMED-CT,256349002,Peanut
+peanut,SNOMED-CT,256349002,Peanut
+shellfish,SNOMED-CT,227037002,Shellfish
+iv contrast,SNOMED-CT,293637006,Iodinated contrast media
+asa,RxNorm,1191,Aspirin
+aspirin,RxNorm,1191,Aspirin

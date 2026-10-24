@@ -13,7 +13,8 @@ For `ready` helper tasks, Claude may have committed a small **v0** implementatio
 |---|---|---|
 | M1 | Nimbus target EHR + import API | done |
 | M2 | Halcyon synthetic source generator | done |
-| M3 | Bridge core pipeline, metrics, monitors, pause/revert | claude |
+| M3 | Bridge core pipeline, metrics, monitors, pause/revert | done |
+| M4 | Remaining domains + HL7 ORU/SIU + CSV channels | claude |
 | M5 | MCP server + reconciliation loop | claude |
 
 ## Helper tasks
@@ -49,13 +50,14 @@ Files: `src/bridge/normalize/demographics.py`, `tests/bridge/test_demographics.p
 - `parse_legacy_date("19840312" | "031284" | "00000000" | "1984-03-12") -> DateParse(value: date | None, precision: "day"|"month"|"year"|None, inferred: bool)`. 2-digit years pivot: assume not in future relative to a given `as_of`.
 - Acceptance: ≥40 tests.
 
-### T-105 · Synthetic terminology crosswalks · `blocked (M3)`
+### T-105 · Synthetic terminology crosswalks · `ready`
 Files: `src/bridge/terminology/data/*.csv`, `tests/bridge/test_terminology_data.py`
-Extend crosswalks so every local code the Halcyon generator can emit (listed in `testbed/halcyon/vocab.py` after M2) has a row or an explicit `unmappable` marker. Include ICD-9→ICD-10 1:many rows. All codes must be labeled synthetic where invented.
+Today several local codes intentionally have no crosswalk row, so they become reconciliation questions (e.g. `HZ099`, unrecognized specialty/race text, uncodable allergens). Write a script `tools/crosswalk_gaps.py` that runs a conversion on a generated export and lists every question kind+key that a crosswalk row could have prevented; then extend the CSVs (keep a few deliberate gaps, documented in `data/README.md`) so that every local code in `testbed/halcyon/vocab.py` either maps or is listed as a deliberate gap. Include ICD-9→ICD-10 1:many rows. All codes must be labeled synthetic where invented.
 
-### T-106 · Run report renderer · `blocked (M3)`
+### T-106 · Run report renderer · `ready`
 Files: `src/bridge/report/`, tests
 Render a run's metrics, alerts, loss ledger, and question status to a single self-contained HTML file (no external assets) and Markdown.
+Read only through `bridge.runs.store.RunStore` and `bridge.status` (`run_summary`, `metrics_view`, `loss_summary`). Add a CLI subcommand `report --out <file.html>`. Test against a run produced by the fixtures in `tests/bridge/conftest.py`.
 
 ### T-107 · Web dashboard (stretch) · `blocked (M5)`
 Read-only local web UI over the run DB: runs, batches, metric trends, alerts, questions.
