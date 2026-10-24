@@ -20,3 +20,4 @@ Stretch: web dashboard for runs; second source profile (e.g. a facility with met
 See `TASKS.md` for live task-level status. Milestone status is updated in this table's companion section below on each merge.
 
 - M0: done
+- M1: done (Nimbus service, 19 API tests)
