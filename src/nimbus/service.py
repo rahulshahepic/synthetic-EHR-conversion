@@ -187,7 +187,7 @@ class NimbusService:
                 " VALUES (?,?,?,?,?,?,?,?)",
                 (rt, rid, sk, 1, json.dumps(data), batch["batchId"], now, now),
             )
-        self._index(rt, rid, data)
+        self._index(rt, rid, data, model=model, existing=existing is not None)
         return {**out, "status": "accepted", "operation": "updated" if existing is not None else "created", "targetId": rid}
 
     # ------------------------------------------------------------------ helpers
@@ -273,9 +273,11 @@ class NimbusService:
              prior["batch_id"] if prior else None, prior["source_key"] if prior else None, _now()),
         )
 
-    def _index(self, rt: str, rid: str, data: dict[str, Any]) -> None:
-        self._unindex(rt, rid)
-        model = m.RESOURCE_MODELS[rt].model_validate(data)
+    def _index(self, rt: str, rid: str, data: dict[str, Any], *, model: Any = None, existing: bool = True) -> None:
+        if existing:
+            self._unindex(rt, rid)
+        if model is None:
+            model = m.RESOURCE_MODELS[rt].model_validate(data)
         for field, ref, target in iter_refs(rt, model):
             if ref.id:
                 self._db.execute("INSERT INTO refs VALUES (?,?,?,?,?)", (rt, rid, field, target, ref.id))
