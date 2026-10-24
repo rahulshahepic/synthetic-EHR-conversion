@@ -103,16 +103,25 @@ def _nimbus_all(client: NimbusClient, rtype: str) -> Iterator[dict[str, Any]]:
 def _sentinel(name: str, description: str, source: Iterable[dict[str, Any]], keep: Callable[[dict[str, Any]], bool],
               nimbus_count: int, unit: Callable[[dict[str, Any]], str] = lambda r: r["source_key"]) -> dict[str, Any]:
     """Source items matching `keep`; every one must be in Nimbus or explained by a record status."""
-    items = [r for r in source if keep(r)]
-    by_status = Counter(r["status"] for r in items)
-    units_loaded = {unit(r) for r in items if r["status"] == S.LOADED}
-    explained = {s: n for s, n in by_status.items() if s != S.LOADED}
-    expected = len(units_loaded)
+    by_status = Counter()
+    all_units, loaded_units, examples = set(), set(), []
+    for record in source:
+        if not keep(record):
+            continue
+        by_status[record["status"]] += 1
+        key = unit(record)
+        all_units.add(key)
+        if record["status"] == S.LOADED:
+            loaded_units.add(key)
+        elif len(examples) < 10:
+            examples.append(record["source_key"])
+    expected = len(loaded_units)
     unexplained = nimbus_count - expected
-    return {"name": name, "description": description, "source": len({unit(r) for r in items}),
-            "expected_in_nimbus": expected, "nimbus": nimbus_count, "not_loaded_by_status": explained,
+    return {"name": name, "description": description, "source": len(all_units),
+            "expected_in_nimbus": expected, "nimbus": nimbus_count,
+            "not_loaded_by_status": {status: n for status, n in by_status.items() if status != S.LOADED},
             "unexplained_delta": unexplained, "ok": unexplained == 0,
-            "not_loaded_examples": [r["source_key"] for r in items if r["status"] != S.LOADED][:10]}
+            "not_loaded_examples": examples}
 
 
 def sentinels(store: S.RunStore, client: NimbusClient, run_id: str) -> dict[str, Any]:
