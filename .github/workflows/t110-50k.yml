@@ -41,7 +41,7 @@ jobs:
           mkdir -p benchmark-output
           /usr/bin/time -v python -u tools/bench.py --patients 50000 --seed 42 > benchmark-output/50k.json 2> >(tee benchmark-output/resources-and-progress.log >&2)
           cat benchmark-output/50k.json
-          cat benchmark-output/resources.txt
+          cat benchmark-output/resources-and-progress.log
           python - <<'PY'
           import json
           from pathlib import Path
@@ -49,6 +49,8 @@ jobs:
           assert data["patients"] == 50000
           assert data["first_pass_only"] is False
           assert data["run_status"] == "completed", data["run_status"]
+          assert data["records_total"] >= 50000, data.get("records_total")
+          assert data["loaded_records"] > 0, data.get("loaded_records")
           print("FULL_50K_VERIFIED", data["conversion_seconds"])
           PY
       - name: Upload logs even on failure
