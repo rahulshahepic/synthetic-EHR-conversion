@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "bridge": {
+      "command": "python3",
+      "args": ["-m", "bridge", "--run-db", "${CLAUDE_PROJECT_DIR:-.}/runs/chat-demo.db", "mcp"],
+      "env": {"PYTHONPATH": "${CLAUDE_PROJECT_DIR:-.}/src:${CLAUDE_PROJECT_DIR:-.}"}
+    }
+  }
+}

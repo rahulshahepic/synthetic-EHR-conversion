@@ -30,6 +30,17 @@ quality and may PAUSE. Typical loop:
 """
 
 
+def present(q: dict[str, Any]) -> str:
+    """Plain-language rendering of a question for a human."""
+    lines = [q["prompt"], "", f"Affects {q['records_affected']} record(s)."]
+    for ex in q.get("examples", [])[:2]:
+        src = {k: v for k, v in (ex.get("source") or {}).items() if not k.startswith("_") and v not in ("", None)}
+        lines.append(f"Example {ex['source_key']}: " + ", ".join(f"{k}={v}" for k, v in list(src.items())[:8]))
+    lines += ["", "Options:"] + [f"  - {o['key']}: {o['label']}" for o in q["options"]]
+    return "\n".join(lines)
+
+
+
 class BridgeAssistant:
     def __init__(self, run_db: str):
         self.store = RunStore(run_db)
@@ -47,6 +58,28 @@ class BridgeAssistant:
     # ------------------------------------------------------------------ read
     def guide(self) -> dict[str, Any]:
         return {"workflow": WORKFLOW, "docs": sorted(p.stem for p in DOCS.glob("*.md")) if DOCS.exists() else []}
+
+    def next_step(self, run_id: str | None = None) -> dict[str, Any]:
+        """What a chat assistant should do next, with the next human question rendered in plain language."""
+        st = self.run_status(run_id)
+        blocking = self.list_questions(run_id, blocking_only=True, limit=1)
+        if blocking["questions"]:
+            q = self.get_question(blocking["questions"][0]["id"])
+            return {"action": "ask_user", "status": st["status"], "pause_reason": st["pause_reason"],
+                    "blocking_questions_left": blocking["total"], "question_id": q["id"],
+                    "option_keys": [o["key"] for o in q["options"]],
+                    "needs_value": [o["key"] for o in q["options"] if o.get("needs_value")], "present_to_user": present(q)}
+        waiting = sum(c["counts"].get("pending", 0) for c in st["by_type"].values())
+        if st["status"] == "paused" or waiting:
+            why = (f"The run is paused: {st['pause_reason']}" if st["status"] == "paused"
+                   else f"{waiting} record(s) released by your answers are waiting to load.")
+            return {"action": "resume", "status": st["status"], "pause_reason": st["pause_reason"], "records_waiting": waiting,
+                    "present_to_user": f"{why}\nNo questions are waiting. Resume?"}
+        if st["status"] in ("completed", "completed_with_exceptions"):
+            return {"action": "review", "status": st["status"],
+                    "present_to_user": "The conversion finished. Next: show the results (status, loss report), then "
+                                       "check go-live readiness and ask domain owners to sign off on fidelity loss."}
+        return {"action": "wait", "status": st["status"], "present_to_user": f"Run status: {st['status']}."}
 
     def run_status(self, run_id: str | None = None) -> dict[str, Any]:
         return st.run_summary(self.store, run_id)
