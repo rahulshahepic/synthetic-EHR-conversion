@@ -41,7 +41,7 @@ Files: `src/bridge/normalize/units.py`, `tests/bridge/test_units.py`
 - `convert(value, from_unit, to_unit) -> float` for temp (°F↔°C), weight (lb↔kg), height (in↔cm), glucose (mg/dL↔mmol/L).
 - Acceptance: ≥40 tests.
 
-### T-104 · Demographic normalizers · `ready`
+### T-104 · Demographic normalizers · `in-progress (ChatGPT)`
 Files: `src/bridge/normalize/demographics.py`, `tests/bridge/test_demographics.py`
 - `parse_name("LAST,FIRST MIDDLE") -> Name(family, given: list[str], suffix: list[str])`; handle `"O'NEIL, MARY-JO"`, `"DE LA CRUZ,JOSE A JR"`, provider style `"SMITH, JOHN Q MD"` (credentials → `suffix`). Title-case smartly (`McDonald`, `O'Neil`, `de la Cruz`).
 - `normalize_phone(raw, default_region="US") -> str | None` E.164; handle `(555) 123-4567`, `555.123.4567`, `5551234567x22` (drop ext, flag), `123-4567` (no area code → None).
