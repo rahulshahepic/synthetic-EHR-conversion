@@ -33,7 +33,7 @@ All JSON. Errors use `{code, message, field, severity}` with stable codes (e.g. 
 | `GET /api/v1/meta/schema` | JSON Schemas for each resource (lets importers validate locally). |
 | `GET /api/v1/meta/valuesets/{name}` | Enumerations (specialties, races, ...). |
 | `POST /api/v1/import/batches` | `{resourceType, externalBatchId, mode: "commit" \| "validate-only"}` → `batchId`. |
-| `POST /api/v1/import/batches/{batchId}/records` | Up to 500 records `[{sourceKey, resource}]`. Returns per-record `accepted \| rejected` + `targetId` + issues. Upsert by `sourceKey` (idempotent). |
+| `POST /api/v1/import/batches/{batchId}/records` | Up to 500 records `[{sourceKey, resource}]`. Returns per-record `accepted \| unchanged \| rejected`, `operation` (`created \| updated \| unchanged`), `targetId`, issues. Upsert by `sourceKey` (idempotent). |
 | `POST /api/v1/import/batches/{batchId}/close` | Finalize; returns counts. |
 | `GET /api/v1/import/batches/{batchId}` | Status and counts. |
 | `POST /api/v1/import/batches/{batchId}/rollback` | Deletes/restores every record written by that batch (restores prior version for upserts). Refuses (409) if a later, non-rolled-back batch references those records unless `cascade=true`. |

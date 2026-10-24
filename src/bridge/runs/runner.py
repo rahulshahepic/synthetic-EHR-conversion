@@ -29,13 +29,18 @@ class Runner:
     # ---------------------------------------------------------------- lifecycle
     def start(self, source: str, target_label: str = "nimbus", batch_size: int = DEFAULT_BATCH_SIZE,
               types: list[str] | None = None, auto_execute: bool = True,
-              rules: list[dict[str, Any]] | None = None) -> str:
+              rules: list[dict[str, Any]] | None = None, prior_run_db: str | None = None) -> str:
         export = HalcyonExport(source)
         as_of = export.manifest.get("asOf") or date.today().isoformat()
         cfg = {"batch_size": batch_size, "as_of": as_of, "types": types or [t for t in LOAD_ORDER if t in MAPPERS]}
         run_id = self.store.create_run(str(source), target_label, cfg)
         self.store.set_status(run_id, "extracting")
         stage_all(self.store, run_id, export, self.profile)
+        if prior_run_db:
+            from ..reconcile.rules_io import load_rules
+            from .delta import stage_source_deletions
+            rules = (rules or []) + load_rules(prior_run_db)
+            stage_source_deletions(self.store, run_id, prior_run_db)
         if rules:
             from ..reconcile.rules_io import import_rules
             import_rules(self.store, run_id, rules)
@@ -124,21 +129,25 @@ class Runner:
             self._persist_results(run_id, rtype, submit, resp, bridge_batch_id, results)
         else:
             bridge_batch_id = self.store.create_batch(run_id, rtype, "")
-        return self._measure(run_id, rtype, results, bridge_batch_id, nimbus_batch)
+        released = sum(1 for r in recs if r["status"] == S.BLOCKED or (r.get("note") or "").startswith("released by"))
+        return self._measure(run_id, rtype, results, bridge_batch_id, nimbus_batch, released)
 
     def _persist_results(self, run_id, rtype, submit, resp, bridge_batch_id, results) -> None:
         with self.store.tx():
             for (rec, ctx, payload), res in zip(submit, resp):
                 if res["status"] in ("accepted", "unchanged"):
                     results.append(self._finish(run_id, rtype, rec, ctx, S.LOADED, payload=payload, target_id=res.get("targetId"),
-                                                batch_id=bridge_batch_id, issues=res.get("issues"), unchanged=res["status"] == "unchanged"))
+                                                batch_id=bridge_batch_id, issues=res.get("issues"), unchanged=res["status"] == "unchanged",
+                                                operation=res.get("operation")))
                 else:
                     results.append(self._finish(run_id, rtype, rec, ctx, S.REJECTED, payload=payload, issues=res.get("issues"),
                                                 batch_id=bridge_batch_id))
 
     def _measure(self, run_id: str, rtype: str, results: list[dict[str, Any]], bridge_batch_id: str,
-                 nimbus_batch: str | None) -> bool:
+                 nimbus_batch: str | None, released: int = 0) -> bool:
         m = batch_metrics(results)
+        # records released by answers (or by a parent loading) are not a fair sample for drift baselines
+        m["released_share"] = round(released / len(results), 4) if results else 0.0
         samples = {
             "target_reject_rate": [{"source_key": r["source_key"], "issue": (r["issues"] or [{}])[0]} for r in results if r["status"] == S.REJECTED],
             "ref_unresolved": [{"source_key": r["source_key"], "issue": i} for r in results for i in (r["issues"] or []) if i.get("code") == "E_REF_UNRESOLVED"],
@@ -148,7 +157,8 @@ class Runner:
         }
         fired = monitor_rules.evaluate(self.store, run_id, bridge_batch_id, rtype, m, samples)
         self.store.finish_batch(bridge_batch_id, "loaded" if nimbus_batch else "no_writes",
-                                {k: m[k] for k in ("attempted", "loaded", "rejected", "held", "blocked", "dropped", "superseded")}, m)
+                                {k: m[k] for k in ("attempted", "loaded", "rejected", "held", "blocked", "dropped", "superseded",
+                                                   "created", "updated", "unchanged")}, m)
         self.store.event(run_id, "batch", {"batch": bridge_batch_id, "rtype": rtype, "metrics": {k: m[k] for k in (
             "attempted", "loaded", "rejected", "held", "blocked", "fidelity_mean")}, "alerts": [f["rule"] for f in fired]})
         pauses = [f for f in fired if f["severity"] == monitor_rules.PAUSE]
@@ -159,7 +169,8 @@ class Runner:
 
     def _finish(self, run_id: str, rtype: str, rec: dict[str, Any], ctx: MapContext, status: str, *,
                 payload: dict[str, Any] | None = None, target_id: str | None = None, batch_id: str | None = None,
-                issues: list[dict[str, Any]] | None = None, note: str | None = None, unchanged: bool = False) -> dict[str, Any]:
+                issues: list[dict[str, Any]] | None = None, note: str | None = None, unchanged: bool = False,
+                operation: str | None = None) -> dict[str, Any]:
         ann = [a.__dict__ for a in ctx.annotations]
         fields: dict[str, Any] = {"status": status, "annotations": ann, "fidelity": ctx.fidelity(), "issues": issues,
                                   "held_by": ctx.held_by if status == S.HELD else None,
@@ -176,4 +187,4 @@ class Runner:
         if status in (S.LOADED, S.DROPPED, S.SUPERSEDED):
             self.store.record_loss(run_id, rtype, rec["source_key"], ctx.losses())
         return {"source_key": rec["source_key"], "status": status, "fidelity": ctx.fidelity(), "issues": issues,
-                "annotations": ann, "held_by": ctx.held_by, "unchanged": unchanged}
+                "annotations": ann, "held_by": ctx.held_by, "unchanged": unchanged, "operation": operation}

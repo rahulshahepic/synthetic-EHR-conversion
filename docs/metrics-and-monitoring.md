@@ -42,3 +42,8 @@ Runs automatically when a pass finishes (and on demand: CLI `verify`, MCP `verif
 - **Count reconciliation**: for every type, Nimbus `$count` == Bridge `loaded`, and staged == loaded + dropped + superseded + held + blocked + rejected + pending.
 - **Read-back sampling**: 25 random loaded records per type are fetched from Nimbus and compared field by field with what Bridge sent (references compared by `sourceKey`; fields Nimbus adds are ignored).
 - **Clinical sentinels**: active anticoagulant orders, active insulin orders, distinct patients with ≥1 real allergy, abnormal-flagged labs. Each source item must be in Nimbus with the same clinical meaning, or be explained by a record status (held, dropped, ...). An unexplained delta is a patient-safety finding — the test suite plants a mapping bug that silently marks warfarin/apixaban orders completed, and verification catches it although Nimbus accepted every record.
+
+## Rehearsals and cutover (M7, M8)
+- `run --rules-from <prior run.db | rules.json>`: reuse every answered question (identity merges applied up front).
+- `compare --other-run-db <prior>`: pauses, questions, alerts, per-type counts and fidelity, rehearsal vs rehearsal.
+- `run --prior-run <prior run.db>`: cutover delta against the prior run's Nimbus. Unchanged records are no-op upserts; the batch metrics count `created / updated / unchanged`. Records loaded before but absent from the new source are staged as `_retire` records and raise one `source_deleted` question per type (default *keep*; *retire* marks Conditions entered-in-error, meds stopped, encounters/appointments/observations cancelled). Bridge never deletes silently. Canonical-duplicate choices (`dedupe`, COB order) are inherited from the prior run so the delta never flips them.

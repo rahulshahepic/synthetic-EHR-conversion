@@ -43,6 +43,8 @@ def main(argv: list[str] | None = None) -> int:
     r.add_argument("--target", default=None, help="default: embedded Nimbus next to the run DB")
     r.add_argument("--batch-size", type=int, default=DEFAULT_BATCH_SIZE)
     r.add_argument("--rules-from", help="prior run DB or exported rules JSON whose answers should be reused")
+    r.add_argument("--prior-run", help="delta/cutover run: prior run DB (reuses its answers and target, detects source deletions)")
+    sub.add_parser("delta")
     sub.add_parser("rules-export").add_argument("--out", required=True)
     sub.add_parser("compare").add_argument("--other-run-db", required=True, help="the earlier rehearsal's run DB")
     for name in ("status", "alerts", "rules", "events"):
@@ -88,13 +90,14 @@ def main(argv: list[str] | None = None) -> int:
     Path(args.run_db).parent.mkdir(parents=True, exist_ok=True)
     store = RunStore(args.run_db)
     if args.cmd == "run":
-        target = args.target or f"embedded:{Path(args.run_db).with_name(Path(args.run_db).stem + '_nimbus.db')}"
+        target = args.target or (RunStore(args.prior_run).run()["target"] if args.prior_run else
+                                 f"embedded:{Path(args.run_db).with_name(Path(args.run_db).stem + '_nimbus.db')}")
         runner = Runner(store, connect(target))
         rules = None
         if args.rules_from:
             from .reconcile.rules_io import load_rules
             rules = load_rules(args.rules_from)
-        rid = runner.start(args.source, target, args.batch_size, rules=rules)
+        rid = runner.start(args.source, target, args.batch_size, rules=rules, prior_run_db=args.prior_run)
         out(st.run_summary(store, rid))
     elif args.cmd == "status":
         out(st.run_summary(store, args.run_id))
@@ -138,6 +141,9 @@ def main(argv: list[str] | None = None) -> int:
         out(store.events(store.run(args.run_id)["id"]))
     elif args.cmd == "explain":
         out(st.explain(store, store.run(args.run_id)["id"], args.source_key, args.type))
+    elif args.cmd == "delta":
+        from .runs.delta import delta_summary
+        out(delta_summary(store, args.run_id))
     elif args.cmd == "rules-export":
         from .reconcile.rules_io import export_rules
         data = export_rules(store, store.run(args.run_id)["id"])

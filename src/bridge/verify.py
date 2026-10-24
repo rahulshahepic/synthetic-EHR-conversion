@@ -52,8 +52,11 @@ def readback(store: S.RunStore, client: NimbusClient, run_id: str, per_type: int
     rng = random.Random(seed)
     result, mismatches = {}, []
     for rtype in store.status_counts(run_id):
-        recs = store.records_by_status(run_id, S.LOADED, rtype, limit=1_000_000)
-        sample = rng.sample(recs, min(per_type, len(recs)))
+        rowids = [r[0] for r in store.db.execute(
+            "SELECT rowid FROM records WHERE run_id=? AND rtype=? AND status='loaded' ORDER BY rowid", (run_id, rtype))]
+        picked = rng.sample(rowids, min(per_type, len(rowids)))
+        sample = [store._rec(r) for r in store.db.execute(
+            f"SELECT * FROM records WHERE rowid IN ({','.join('?' * len(picked))})", picked)] if picked else []
         bad = 0
         for r in sample:
             got = client.get(rtype, r["target_id"])
@@ -71,8 +74,10 @@ def readback(store: S.RunStore, client: NimbusClient, run_id: str, per_type: int
 
 
 # ----------------------------------------------------------------------------- sentinels
-def _source_records(store: S.RunStore, run_id: str, rtype: str) -> list[dict[str, Any]]:
-    return [store._rec(r) for r in store.db.execute("SELECT * FROM records WHERE run_id=? AND rtype=?", (run_id, rtype))]
+def _source_records(store: S.RunStore, run_id: str, rtype: str, where: str = "") -> list[dict[str, Any]]:
+    return [{"source_key": r["source_key"], "status": r["status"], "source": __import__("json").loads(r["source"])}
+            for r in store.db.execute(f"SELECT source_key, status, source FROM records WHERE run_id=? AND rtype=? {where}",
+                                      (run_id, rtype))]
 
 
 def _nimbus_all(client: NimbusClient, rtype: str) -> list[dict[str, Any]]:
@@ -114,7 +119,8 @@ def sentinels(store: S.RunStore, client: NimbusClient, run_id: str) -> dict[str,
 
     allergies = _source_records(store, run_id, "AllergyIntolerance")
     n_alg = _nimbus_all(client, "AllergyIntolerance")
-    labs = _source_records(store, run_id, "Observation")
+    labs = _source_records(store, run_id, "Observation", "AND json_extract(source, '$.kind')='lab' "
+                           "AND trim(json_extract(source, '$.ABN_FLAG')) IN ('H','L','A')")
     n_obs = _nimbus_all(client, "Observation")
     checks = [
         _sentinel("active_anticoagulants", "Active warfarin/apixaban orders", meds, active_with(ANTICOAG_RXNORM),

@@ -38,4 +38,5 @@ See `TASKS.md` for live task-level status. Milestone status is updated in this t
 - M6: done (verification: count reconciliation, read-back sampling, clinical sentinels)
 - M7: done (rules carry over via `run --rules-from <run.db|rules.json>`; `rules-export`; `compare --other-run-db`; MCP `compare_runs`)
 - M9: done (late merges of already-loaded patients via Nimbus $merge; CLI/MCP `merge_patients`; revertible)
-- M8: next (bridge side; T-111 mutator for test data)
+- M8: done (`run --prior-run <run.db>`: same target, carried answers and duplicate ownership, created/updated/unchanged per type, source deletions → `source_deleted` question with keep/retire; `delta` CLI, MCP `delta_summary`)
+- M10: done (`python -m testbed.demo`: simulated analyst answers from the answer key; 200/200 identities correct; rehearsal 2 has 0 blocking questions; exact cutover delta)

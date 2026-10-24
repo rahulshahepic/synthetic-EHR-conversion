@@ -117,12 +117,14 @@ class BridgeAssistant:
         return self.store.alert(alert_id)
 
     def start_run(self, source: str, target: str | None = None, batch_size: int = 200,
-                  rules_from: str | None = None) -> dict[str, Any]:
+                  rules_from: str | None = None, prior_run_db: str | None = None) -> dict[str, Any]:
         from .reconcile.rules_io import load_rules
-        target = target or f"embedded:{Path(self.run_db).with_name(Path(self.run_db).stem + '_nimbus.db')}"
+        target = target or (RunStore(prior_run_db).run()["target"] if prior_run_db else
+                            f"embedded:{Path(self.run_db).with_name(Path(self.run_db).stem + '_nimbus.db')}")
         runner = Runner(self.store, connect(target))
         self._runner = runner
-        rid = runner.start(source, target, batch_size, rules=load_rules(rules_from) if rules_from else None)
+        rid = runner.start(source, target, batch_size, rules=load_rules(rules_from) if rules_from else None,
+                           prior_run_db=prior_run_db)
         return st.run_summary(self.store, rid)
 
     def resume_run(self, note: str, by: str, run_id: str | None = None) -> dict[str, Any]:
@@ -160,6 +162,10 @@ class BridgeAssistant:
             return merge_loaded_patients(self.store, self.runner(rid).client, rid, survivor, duplicate, confirmed_by)
         except MergeError as e:
             return {"error": str(e)}
+
+    def delta_summary(self, run_id: str | None = None) -> dict[str, Any]:
+        from .runs.delta import delta_summary
+        return delta_summary(self.store, run_id)
 
     def compare_runs(self, other_run_db: str, run_id: str | None = None) -> dict[str, Any]:
         from .compare import compare, run_profile

@@ -53,6 +53,8 @@ def _baseline(store: RunStore, run_id: str, rtype: str, metric: str, exclude: st
     for b in store.batches(run_id, rtype):
         if b["id"] == exclude or b["status"] != "loaded" or not b["metrics"]:
             continue
+        if b["metrics"].get("released_share", 0) > 0.5:
+            continue
         v = b["metrics"].get(metric)
         if v is not None and b["metrics"].get("attempted", 0) >= 10:
             vals.append(float(v))
@@ -75,6 +77,8 @@ def evaluate(store: RunStore, run_id: str, batch_id: str, rtype: str, m: dict[st
             breached = value < threshold
         elif rule.op == "!=":
             breached = float(value) != threshold
+        elif m.get("released_share", 0) > 0.5:
+            continue
         else:
             hist = _baseline(store, run_id, rtype, rule.metric, batch_id)
             if len(hist) >= DRIFT_MIN_HISTORY:
