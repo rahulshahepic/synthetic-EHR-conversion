@@ -123,7 +123,26 @@ def benchmark(patients: int = 5000, seed: int = 42, profile_out: str | None = No
         status = store.run(run_id)["status"]
         if not first_pass_only and status not in ("completed", "completed_with_exceptions"):
             raise RuntimeError(f"benchmark did not finish: {status}")
+        total_records = sum(sum(by_status.values()) for by_status in counts.values())
+        loaded_records = sum(by_status.get("loaded", 0) for by_status in counts.values())
+        terminal_records = sum(
+            sum(by_status.get(k, 0) for k in ("loaded", "dropped", "superseded"))
+            for by_status in counts.values()
+        )
+        fidelity_mean = store.db.execute(
+            "SELECT AVG(fidelity) FROM records WHERE run_id=? AND status='loaded'", (run_id,)
+        ).fetchone()[0]
+        verification = next(
+            (e["detail"] for e in store.events(run_id, limit=50) if e["kind"] == "verification"),
+            None,
+        )
         return {
+            "records_total": total_records,
+            "loaded_records": loaded_records,
+            "terminal_records": terminal_records,
+            "fidelity_mean_loaded": round(fidelity_mean, 4) if fidelity_mean is not None else None,
+            "verification": verification,
+            "peak_rss_mb": round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024, 1),
             "seed": seed, "patients": patients, "without_index": without_index, "first_pass_only": first_pass_only,
             "generation_seconds": round(generation_seconds, 3),
             "conversion_seconds": round(conversion_seconds, 3),
