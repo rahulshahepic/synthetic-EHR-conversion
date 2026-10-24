@@ -1,0 +1,55 @@
+name: Compare embedded transport overhead
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/compare-embedded-transport.yml'
+      - 'src/bridge/load/client.py'
+      - 'tests/bridge/test_embedded_transport.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: python -m pip install -e ".[dev]"
+      - name: Compare old and new clients on identical Nimbus apps
+        run: |
+          python - <<'PY'
+          import statistics
+          import time
+          from fastapi.testclient import TestClient
+          from nimbus.api import create_app
+          from nimbus.service import NimbusService
+          from bridge.load.client import NimbusClient, connect
+
+          old = NimbusClient(TestClient(create_app(NimbusService(":memory:"))))
+          new = connect("embedded::memory:")
+          clients = {"old": old, "new": new}
+          measurements = {"old": [], "new": []}
+          for client in clients.values():
+              for _ in range(20):
+                  assert client.count("Patient")["total"] == 0
+          for round_idx in range(4):
+              for name in (("old", "new") if round_idx % 2 == 0 else ("new", "old")):
+                  client = clients[name]
+                  started = time.perf_counter()
+                  for _ in range(300):
+                      assert client.count("Patient")["total"] == 0
+                  elapsed = time.perf_counter() - started
+                  measurements[name].append(elapsed)
+                  print(f"round {round_idx} {name}: {elapsed:.3f}s", flush=True)
+          for name, samples in measurements.items():
+              print(f"{name} median per 300 requests: {statistics.median(samples):.3f}s", flush=True)
+          ratio = statistics.median(measurements["old"]) / statistics.median(measurements["new"])
+          print(f"old/new speedup: {ratio:.2f}x", flush=True)
+          PY
