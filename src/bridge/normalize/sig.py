@@ -122,6 +122,7 @@ _TOKEN_ROUTES: dict[str, Route] = {
 # multi-word route phrases, matched on the normalized text before tokenizing
 _PHRASE_ROUTES: list[tuple[re.Pattern[str], Route]] = [
     (re.compile(r"\bby mouth\b"), "oral"),
+    (re.compile(r"\bunder the skin\b"), "subcut"),
     (re.compile(r"\bunder (?:the )?tongue\b"), "sublingual"),
     (re.compile(r"\bin (?:each|both|the (?:left|right)) (?:eye|eyes)\b"), "ophthalmic"),
     (re.compile(r"\bin (?:each|both|the (?:left|right)) (?:ear|ears)\b"), "otic"),
@@ -149,7 +150,7 @@ _TIMING_PHRASES = [
 
 # filler / administration verbs: understood, carry no structured field
 _FILLER_TOKENS = {
-    "take", "use", "apply", "give", "inhale", "swish", "spit", "swallow",
+    "take", "use", "apply", "give", "inject", "inhale", "swish", "spit", "swallow",
     "instill", "insert", "place", "the", "a", "an", "and", "as", "per",
     "mouth", "by", "into", "in", "on", "to", "of", "for", "with", "x",
     "tablet", "tablets", "capsule", "capsules",  # only when unit-less leftovers
@@ -268,6 +269,9 @@ def parse_sig(text: str) -> SigResult:
         (re.compile(r"\btwice (?:a|per) day\b"), (2, 1.0, "d")),
         (re.compile(r"\btwice daily\b"), (2, 1.0, "d")),
         (re.compile(r"\bthree times (?:a|per) day\b"), (3, 1.0, "d")),
+        (re.compile(r"\btwo times daily\b"), (2, 1.0, "d")),
+        (re.compile(r"\bthree times daily\b"), (3, 1.0, "d")),
+        (re.compile(r"\bfour times daily\b"), (4, 1.0, "d")),
         (re.compile(r"\bfour times (?:a|per) day\b"), (4, 1.0, "d")),
         (re.compile(r"\bat bedtime\b"), (1, 1.0, "d")),
         (re.compile(r"\bat night\b"), (1, 1.0, "d")),
@@ -285,6 +289,11 @@ def parse_sig(text: str) -> SigResult:
             _set_freq(value)  # type: ignore[arg-type]
             work = _blank(work, m.span())
 
+    m = re.search(r"\bevery (\d+(?:\.\d+)?)\s+to\s+(\d+(?:\.\d+)?) hours?\b", work)
+    if m:
+        _set_freq((1, float(m.group(2)), "h"))
+        range_notes.append(m.group(0))
+        work = _blank(work, m.span())
     m = re.search(r"\bevery (\d+(?:\.\d+)?) hours?\b", work)
     if m:
         _set_freq((1, float(m.group(1)), "h"))
