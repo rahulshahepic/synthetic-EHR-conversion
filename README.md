@@ -24,6 +24,12 @@ tests/                pytest suites
 - [Metrics, monitoring, pause & revert](docs/metrics-and-monitoring.md)
 - [Reconciliation & AI (MCP)](docs/reconciliation-and-ai.md)
 
+## See the runs on GitHub (no local setup)
+Every merge to `main` runs the **Conversion demo** workflow. Open the repo's **Actions** tab → *Conversion demo* → latest run:
+the **Summary** page shows the narrated transcript (pauses, questions answered, per-resource results, fidelity loss,
+verification, go-live readiness, rehearsal comparison, cutover delta, second source system), and the **Artifacts**
+section has the full HTML run report. To run it yourself: *Run workflow* (choose patient count / seed).
+
 ## See it in one command
 ```
 pip install -e ".[dev]"
