@@ -28,6 +28,8 @@ CREATE TABLE IF NOT EXISTS refs (
 );
 CREATE INDEX IF NOT EXISTS ix_refs_target ON refs(target_rtype, target_id);
 CREATE INDEX IF NOT EXISTS ix_refs_owner ON refs(owner_rtype, owner_id);
+-- Used by repeated per-patient noKnownAllergies and coverage conflict lookups.
+CREATE INDEX IF NOT EXISTS ix_refs_owner_target ON refs(owner_rtype, target_id, field);
 CREATE TABLE IF NOT EXISTS identifiers (
   system TEXT NOT NULL, value TEXT NOT NULL, patient_id TEXT NOT NULL
 );
