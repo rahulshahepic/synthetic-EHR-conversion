@@ -14,6 +14,16 @@ Each milestone ends with a merge of its branch into `main` with passing tests (`
 | M5 | **MCP server** + question/answer → rule → reprocess loop | `claude/m5-mcp` | Claude | MCP tool tests; answering a grouped question releases held records |
 | M6 | Verification & reporting: read-back sampling, clinical sentinels, loss report, run report (HTML/Markdown), detection-recall test vs answer key | `claude/m6-*`, `task/*` | Claude + helpers | Report generated; recall thresholds asserted in tests |
 
+### Phase 2 — rehearsals, cutover, operations
+Real conversions run several *rehearsal* conversions, then a final *cutover* with a delta load. Phase 2 makes Bridge do that.
+
+| # | Milestone | Branch | Owner | Exit criteria |
+|---|---|---|---|---|
+| M7 | **Rehearsals**: carry answered rules from a prior run (`run --rules-from <run.db>` / `rules export|import` JSON); run-vs-run comparison report (metrics, question counts, fidelity per type) | `claude/m7-*` | Claude | Second rehearsal on the same export asks zero already-answered questions; comparison shows the delta |
+| M8 | **Cutover delta**: export mutator (T-111) produces "export B" = A + new/changed/deleted records; Bridge delta run against the same Nimbus: created / updated / unchanged per type; records present in the prior run but gone from the source become `source_deleted` questions (never silent deletes) | `claude/m8-*`, `task/T-111` | Claude + helper | Delta run on B touches only changed records; deletions surface as questions |
+| M9 | **Late identity merges**: an identity question answered "same" after both patients loaded uses Nimbus `$merge`, relinks Bridge xrefs, and is revertible | `claude/m9-*` | Claude | Test: load both, answer same, Nimbus has one active patient with all clinical data |
+| M10 | **Demo scenario**: `python -m testbed.demo` runs a scripted end-to-end conversion with a simulated user answering questions, producing a narrated transcript and the run report (T-106) | `claude/m10-*` | Claude | One command shows the whole story |
+
 Stretch: web dashboard for runs; second source profile (e.g. a facility with metric units and different conventions) to exercise drift monitors; performance at 50k patients.
 
 ## Status
@@ -22,6 +32,8 @@ See `TASKS.md` for live task-level status. Milestone status is updated in this t
 - M0: done
 - M1: done (Nimbus service, 19 API tests)
 - M2: done (Halcyon generator; 500 patients ≈ 30k rows + feeds in <1s; ~40 planted issue types)
-- M5: done (MCP server over stdio with 19 tools + docs resources; server-side guards for clinical answers and revert)
+- M3: done (Bridge core: identity, metrics/monitors, pause/answer/resume, revert, CLI)
 - M4: done (all 17 Nimbus resource types; ORU/SIU/registry channels; 500 patients ≈ 26s)
-- M3: done (Bridge core: 10 resource types, identity, metrics/monitors, pause/answer/resume, revert, CLI; 500-patient run ≈ 8s)
+- M5: done (MCP server over stdio with 20 tools + docs resources; server-side guards for clinical answers and revert)
+- M6: in review (verification: count reconciliation, read-back sampling, clinical sentinels)
+- M7: in progress
