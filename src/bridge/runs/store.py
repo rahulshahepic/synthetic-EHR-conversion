@@ -89,6 +89,8 @@ class RunStore:
             # Fewer, larger checkpoints: the default (1000 pages) checkpoints on almost every batch commit.
             self.db.execute("PRAGMA wal_autocheckpoint=10000")
         self.db.executescript(SCHEMA)
+        # Bumped whenever this connection rewrites an existing batch's status (see monitor baselines).
+        self.batch_epoch = 0
 
     def tx(self):
         return _Tx(self.db)
@@ -168,7 +170,10 @@ class RunStore:
                       blocked_by=NULL, updated_at=?
                WHERE run_id=? AND status='blocked'
                  AND EXISTS (SELECT 1 FROM records b WHERE b.run_id=records.run_id
-                   AND b.rtype || '/' || b.source_key=records.blocked_by
+                   -- blocked_by is '<rtype>/<source_key>' and rtypes never contain '/': splitting at the
+                   -- first '/' lets SQLite use the primary key instead of scanning the run per blocked row.
+                   AND b.rtype=substr(records.blocked_by, 1, instr(records.blocked_by, '/') - 1)
+                   AND b.source_key=substr(records.blocked_by, instr(records.blocked_by, '/') + 1)
                    AND b.status IN ('loaded','superseded'))""", (now(), run_id))
         return cursor.rowcount
 
@@ -251,10 +256,14 @@ class RunStore:
         return bid
 
     def finish_batch(self, batch_id: str, status: str, counts: dict[str, Any], metrics: dict[str, Any]) -> None:
+        prior = self.db.execute("SELECT status FROM batches WHERE id=?", (batch_id,)).fetchone()
         self.db.execute("UPDATE batches SET status=?, counts=?, metrics=? WHERE id=?", (status, _j(counts), _j(metrics), batch_id))
+        if prior is not None and prior[0] != "open":
+            self.batch_epoch += 1
 
     def set_batch_status(self, batch_id: str, status: str) -> None:
         self.db.execute("UPDATE batches SET status=? WHERE id=?", (status, batch_id))
+        self.batch_epoch += 1
 
     def batches(self, run_id: str, rtype: str | None = None, status: str | None = None) -> list[dict[str, Any]]:
         sql, args = "SELECT * FROM batches WHERE run_id=?", [run_id]

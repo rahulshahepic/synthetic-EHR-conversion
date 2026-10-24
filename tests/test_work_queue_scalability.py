@@ -59,3 +59,25 @@ def test_default_batch_size_matches_nimbus_import_limit():
     from bridge.load.client import MAX_PER_CALL
     from nimbus.service import MAX_RECORDS_PER_CALL
     assert DEFAULT_BATCH_SIZE == MAX_PER_CALL == MAX_RECORDS_PER_CALL == 500
+
+
+def test_release_ready_blocked_uses_primary_key_and_keeps_semantics(tmp_path):
+    store = RunStore(str(tmp_path / "release.db"))
+    run = store.create_run("test", "nimbus", {"types": ["Patient", "Encounter"]})
+    store.stage(run, "Patient", [("p0", {}, {}), ("p/1", {}, {}), ("p2", {}, {})])
+    store.stage(run, "Encounter", [(f"e{i}", {}, {}) for i in range(5)])
+    for key, parent in (("e0", "Patient/p0"), ("e1", "Patient/p/1"), ("e2", "Patient/p2"), ("e3", "Patient/?H-9"),
+                        ("e4", "Patientp0")):
+        store.update_record(run, "Encounter", key, status=BLOCKED, blocked_by=parent)
+    # Parents finished without the wakeup (as in a database from before wakeups existed).
+    store.db.execute("UPDATE records SET status='loaded' WHERE rtype='Patient' AND source_key IN ('p0','p/1')")
+    store.db.execute("UPDATE records SET status='superseded' WHERE rtype='Patient' AND source_key='p2'")
+    assert store.release_ready_blocked(run) == 3
+    assert [r["source_key"] for r in store.work_queue(run, "Encounter")] == ["e0", "e1", "e2"]
+    assert store.status_of(run, "Encounter", "e3") == store.status_of(run, "Encounter", "e4") == BLOCKED
+    plan = " ".join(row[3] for row in store.db.execute(
+        "EXPLAIN QUERY PLAN SELECT 1 FROM records WHERE run_id=? AND status='blocked' AND EXISTS (SELECT 1 FROM records b"
+        " WHERE b.run_id=records.run_id AND b.rtype=substr(records.blocked_by, 1, instr(records.blocked_by, '/') - 1)"
+        " AND b.source_key=substr(records.blocked_by, instr(records.blocked_by, '/') + 1)"
+        " AND b.status IN ('loaded','superseded'))", (run,)))
+    assert "rtype=? AND source_key=?" in plan, plan
