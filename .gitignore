@@ -3,7 +3,7 @@ __pycache__/
 *.egg-info/
 .pytest_cache/
 .venv/
-exports/
-runs/
+/exports/
+/runs/
 *.db
 !testbed/**/*.sql
