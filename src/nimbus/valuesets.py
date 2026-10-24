@@ -1,0 +1,43 @@
+"""Nimbus enumerations, exposed via GET /api/v1/meta/valuesets/{name}."""
+
+VALUESETS: dict[str, list[str]] = {
+    "organization-type": ["system", "site", "department"],
+    "specialty": [
+        "family-medicine", "internal-medicine", "pediatrics", "obstetrics-gynecology",
+        "cardiology", "endocrinology", "gastroenterology", "pulmonology", "nephrology",
+        "neurology", "psychiatry", "dermatology", "orthopedics", "general-surgery",
+        "emergency-medicine", "radiology", "anesthesiology", "oncology", "urology",
+        "ophthalmology", "otolaryngology", "infectious-disease", "rheumatology",
+        "hospital-medicine", "physical-therapy", "nurse-practitioner", "physician-assistant",
+        "pharmacy", "nursing", "other",
+    ],
+    "sex-at-birth": ["female", "male", "unknown"],
+    "gender-identity": ["female", "male", "non-binary", "other", "asked-declined"],
+    "race": [
+        "american-indian-alaska-native", "asian", "black-african-american",
+        "native-hawaiian-pacific-islander", "white", "other", "asked-declined", "unknown",
+    ],
+    "ethnicity": ["hispanic-latino", "not-hispanic-latino", "asked-declined", "unknown"],
+    "subscriber-relationship": ["self", "spouse", "child", "other"],
+    "encounter-class": ["ambulatory", "emergency", "inpatient", "observation", "virtual"],
+    "encounter-status": ["planned", "in-progress", "finished", "cancelled"],
+    "condition-clinical-status": ["active", "inactive", "resolved"],
+    "condition-verification-status": ["confirmed", "unconfirmed", "entered-in-error"],
+    "allergy-criticality": ["low", "high", "unable-to-assess"],
+    "allergy-coding-status": ["coded", "uncoded"],
+    "medication-status": ["active", "completed", "stopped", "on-hold", "unknown"],
+    "route": [
+        "oral", "iv", "im", "subcut", "topical", "inhaled", "rectal", "ophthalmic",
+        "otic", "nasal", "transdermal", "sublingual",
+    ],
+    "period-unit": ["h", "d", "wk"],
+    "observation-category": ["laboratory", "vital-signs"],
+    "observation-status": ["final", "preliminary", "corrected", "cancelled"],
+    "comparator": ["<", "<=", ">", ">="],
+    "interpretation": ["normal", "low", "high", "critical-low", "critical-high", "abnormal"],
+    "coded-result": ["positive", "negative", "detected", "not-detected", "trace", "indeterminate"],
+    "appointment-status": ["proposed", "booked", "arrived", "fulfilled", "cancelled", "noshow"],
+    "telecom-system": ["phone", "email"],
+    "telecom-use": ["home", "work", "mobile"],
+    "code-system": ["ICD-10-CM", "SNOMED-CT", "LOINC", "RxNorm", "CVX", "CPT", "HCPCS", "NPI"],
+}

@@ -8,7 +8,7 @@ Several AI agents work in this repo concurrently without talking to each other. 
 3. **Claim it** by creating and pushing a branch named exactly `task/<ID>-<short-slug>` (e.g. `task/T-102-sig-parser`) from the latest `main`. Before claiming, check the remote branches (`git fetch origin && git branch -r | grep task/<ID>`): **if a branch for that ID already exists, the task is taken — pick another.**
 4. In your branch, first commit: change the task's status in `TASKS.md` to `in-progress (<agent name>)`.
 5. Do the work. Stay inside the files listed for the task; if you must touch other files, keep it minimal and explain why in the PR.
-6. Run `pytest` — all tests must pass. Add tests for what you build (the task's acceptance criteria are the minimum).
+6. Run `python -m pytest` — all tests must pass. Add tests for what you build (the task's acceptance criteria are the minimum).
 7. Open a PR into `main` titled `<ID>: <title>`. Set the task status to `review` in `TASKS.md`. Describe what you did, what you didn't, and any open questions.
 8. Never push directly to `main`. Never force-push someone else's branch. Never rewrite `main` history.
 
@@ -25,5 +25,5 @@ Branch prefixes: `claude/*` (Claude's milestone branches), `task/*` (claimed tas
 ## Setup
 ```
 pip install -e ".[dev]"
-pytest
+python -m pytest
 ```

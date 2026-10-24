@@ -11,7 +11,7 @@ For `ready` helper tasks, Claude may have committed a small **v0** implementatio
 ## Milestones (reserved)
 | ID | Title | Status |
 |---|---|---|
-| M1 | Nimbus target EHR + import API | claude |
+| M1 | Nimbus target EHR + import API | done |
 | M2 | Halcyon synthetic source generator | claude |
 | M3 | Bridge core pipeline, metrics, monitors, pause/revert | claude |
 | M5 | MCP server + reconciliation loop | claude |

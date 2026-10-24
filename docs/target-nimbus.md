@@ -2,7 +2,7 @@
 
 Nimbus is a fictional modern, API-first EHR. Its model is FHIR-*inspired* but deliberately **not** FHIR, and not a superset of Halcyon: some Halcyon concepts have no home (fidelity loss), and some Nimbus fields are required but absent in Halcyon (must be derived, defaulted, or asked about).
 
-Code: `src/nimbus/` — `models.py` (pydantic contracts), `validation.py`, `store.py` (SQLite), `api.py` (FastAPI). Run: `python -m nimbus serve --db nimbus.db --port 8700`.
+Code: `src/nimbus/` — `models.py` (pydantic contracts), `validation.py` (semantic rules + issue codes), `service.py` (SQLite storage, batches, rollback, merge), `api.py` (FastAPI). Run: `python -m nimbus serve --db nimbus.db --port 8700`.
 
 ## Resource types and notable rules
 Every resource has: `id` (Nimbus UUID), `sourceKey` (unique per resource type; idempotency key from importer), `provenance` (`{importBatchId, importedAt, system}`), `meta.version`.
