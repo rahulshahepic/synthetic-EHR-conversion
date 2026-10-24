@@ -7,6 +7,7 @@ from datetime import date, datetime
 from typing import Any
 
 from ..normalize import demographics as demo
+from ..normalize.legacy import fix_mojibake, parse_crammed_address
 from ..normalize.time import localize, parse_date8, parse_local
 from .base import MapContext, mapper
 
@@ -182,20 +183,20 @@ def map_patient(ctx: MapContext) -> dict[str, Any] | None:
     members = s["members"]
     p = next(m for m in members if m["PAT_ID"] == s["primary"])
 
-    raw_name, fixed = demo.fix_mojibake(p["PAT_NAME"])
+    raw_name, fixed = fix_mojibake(p["PAT_NAME"])
     name = demo.parse_name(raw_name)
     ctx.note("name", "inferred" if fixed else "transformed", 2.0, "repaired mis-encoded characters" if fixed else None,
              p["PAT_NAME"] if fixed else None)
     if not name.family:
         ctx.note("name.family", "defaulted", 2.0, "no family name", p["PAT_NAME"])
-        name.family = "UNKNOWN"
+        name = demo.Name("UNKNOWN", name.given, name.suffix)
 
     dob = demo.parse_legacy_date(p["DOB"], as_of)
     if dob.value is None:
         others = [demo.parse_legacy_date(m["DOB"], as_of).value for m in members if m is not p]
         others = [o for o in others if o]
         if others:
-            dob = demo.DateParse(others[0], "day", inferred=True)
+            dob = demo.DateParse(others[0], "day", True)
             ctx.note("birthDate", "inferred", 3.0, "DOB missing on primary chart; taken from linked chart", p["DOB"])
         else:
             d = ctx.decide(
@@ -211,10 +212,10 @@ def map_patient(ctx: MapContext) -> dict[str, Any] | None:
                 ctx.note("record", "dropped", 1.0, "user chose not to convert (no DOB)")
                 return None
             if d["option"] == "value":
-                dob = demo.DateParse(date.fromisoformat(d["value"]), "day")
+                dob = demo.DateParse(date.fromisoformat(d["value"]), "day", False)
                 ctx.note("birthDate", "exact", 3.0, "DOB supplied by user")
             else:
-                dob = demo.DateParse(date(1900, 1, 1), "day")
+                dob = demo.DateParse(date(1900, 1, 1), "day", False)
                 ctx.note("birthDate", "defaulted", 3.0, "placeholder DOB", p["DOB"])
     else:
         ctx.note("birthDate", "inferred" if dob.inferred else "transformed", 3.0,
@@ -256,15 +257,23 @@ def map_patient(ctx: MapContext) -> dict[str, Any] | None:
     a08 = s.get("a08", {}).get(p["PAT_ID"])
     addr_raw = a08["addr"] if a08 and a08.get("addr", "").strip("^") else p["ADDR"]
     address = []
-    ad = demo.parse_address(addr_raw)
-    if ad:
-        if ad.crammed:
-            ctx.note("address", "inferred" if ad.city else "degraded", 1.0, "address fields parsed from a single line", addr_raw)
+    if addr_raw and addr_raw.strip("^ "):
+        crammed = "^" not in addr_raw
+        if crammed:
+            ad = parse_crammed_address(addr_raw, set(ctx.store.xget(ctx.run_id, "meta", "cities", [])))
+            ctx.note("address", "inferred" if ad else "degraded", 1.0,
+                     "address fields parsed from a single line" if ad else "unparseable single-line address kept as one line", addr_raw)
+            ad = ad or demo.Address([addr_raw.strip()], "", "", "")
         else:
+            ad = demo.parse_address(addr_raw)
             ctx.note("address", "exact" if a08 else "transformed", 1.0, "newer address from ADT A08" if a08 else None)
         a = {"lines": ad.lines}
         if ad.city:
-            a.update(city=ad.city, state=ad.state, postalCode=ad.postal_code)
+            a["city"] = ad.city
+        if ad.state:
+            a["state"] = ad.state
+        if ad.postal_code:
+            a["postalCode"] = ad.postal_code
         address.append(a)
 
     telecom = []
@@ -272,7 +281,7 @@ def map_patient(ctx: MapContext) -> dict[str, Any] | None:
     for use, raw in phones:
         if not raw:
             continue
-        e164, ext = demo.normalize_phone(raw)
+        e164, ext = demo.normalize_phone(raw), bool(re.search(r"(?i)(x|ext\.?)\s*\d+\s*$", raw))
         if e164:
             telecom.append({"system": "phone", "value": e164, "use": use})
             ctx.note(f"telecom.{use}", "degraded" if ext else "transformed", 0.5, "extension dropped" if ext else None, raw if ext else None)
@@ -302,7 +311,7 @@ def map_patient(ctx: MapContext) -> dict[str, Any] | None:
 
     other_names = []
     for al in s.get("aliases", []):
-        n = demo.parse_name(demo.fix_mojibake(al["ALIAS_NAME"])[0])
+        n = demo.parse_name(fix_mojibake(al["ALIAS_NAME"])[0])
         other_names.append({"family": n.family, "given": n.given, "use": al["ALIAS_TYPE"].lower() or "old"})
     out: dict[str, Any] = {
         "identifiers": identifiers, "name": {"family": name.family, "given": name.given, "suffix": name.suffix},

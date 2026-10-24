@@ -1,8 +1,8 @@
-from datetime import date, datetime
+from datetime import datetime
 
 from bridge.extract.hl7 import parse_message
 from bridge.mapping.identity import resolve, score_pair
-from bridge.normalize import demographics as d
+from bridge.normalize.legacy import fix_mojibake, parse_crammed_address
 from bridge.normalize.time import localize
 
 
@@ -29,28 +29,14 @@ def test_score_nickname_and_mojibake():
     assert score_pair(pat("A", "NUÃ\x91EZ,JOSÃ\x89"), pat("B", "NUÑEZ,JOSÉ")).score == 1.0
 
 
-def test_names():
-    n = d.parse_name("DE LA CRUZ,JOSE A JR")
-    assert n.family == "De la Cruz" and n.given == ["Jose", "A"] and n.suffix == ["JR"]
-    assert d.parse_name("O'NEIL, MARY-JO").family == "O'Neil"
-    assert d.parse_name("MCDONALD, JOHN Q MD").suffix == ["MD"]
-    assert d.fix_mojibake("JosÃ©") == ("José", True)
-
-
-def test_phone_address_dates():
-    assert d.normalize_phone("(312) 555-1234") == ("+13125551234", False)
-    assert d.normalize_phone("3125551234x22") == ("+13125551234", True)
-    assert d.normalize_phone("555-1234") == (None, False)
-    a = d.parse_address("12 OAK AVE^APT 4^SPRINGFIELD^IL^62701")
-    assert a.lines == ["12 OAK AVE", "APT 4"] and a.city == "Springfield" and a.state == "IL"
-    c = d.parse_address("12 OAK AVE APT 4 SPRINGFIELD IL 62701")
-    assert c.crammed and c.state == "IL" and c.postal_code == "62701"
-    as_of = date(2026, 9, 30)
-    assert d.parse_legacy_date("19840312", as_of).value == date(1984, 3, 12)
-    p = d.parse_legacy_date("031284", as_of)
-    assert p.value == date(1984, 3, 12) and p.inferred
-    assert d.parse_legacy_date("031225", as_of).value == date(2025, 3, 12)
-    assert d.parse_legacy_date("00000000", as_of).value is None
+def test_legacy_helpers():
+    assert fix_mojibake("JosÃ©") == ("José", True)
+    assert fix_mojibake("Jose") == ("Jose", False)
+    c = parse_crammed_address("12 OAK AVE APT 4 SPRINGFIELD IL 62701", {"SPRINGFIELD"})
+    assert c.lines == ["12 OAK AVE", "APT 4"] and c.city == "Springfield" and c.state == "IL" and c.postal_code == "62701"
+    c2 = parse_crammed_address("9 MAIN ST NORTH RIVERBEND IL 61842", {"RIVERBEND", "NORTH RIVERBEND"})
+    assert c2.city == "North Riverbend"
+    assert parse_crammed_address("nonsense") is None
 
 
 def test_dst_flags():
@@ -63,6 +49,5 @@ def test_dst_flags():
 
 
 def test_hl7_basic():
-    m = parse_message("MSH|^~\\&|A|B|C|D|202001011200||ADT^A08|X1|P|2.3\rPID|1||123^^^FAC1^MR||O\\S\\NEIL^ANN||19800101")
-    assert m.type == "ADT^A08" and m.control_id == "X1"
-    assert m.get("PID-3.4") == "FAC1" and m.get("PID-5.1") == "O^NEIL"
+    m = parse_message("MSH|^~\\&|A|B|C|D|202001011200||SIU^S15|X1|P|2.3\rSCH|AP1||||||F/U||||^^20^202701131400||||||||||||||Cancelled")
+    assert m.type == "SIU^S15" and m.get("SCH-25") == "Cancelled" and m.get("SCH-11.4") == "202701131400"

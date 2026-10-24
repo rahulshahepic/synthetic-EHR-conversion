@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from itertools import combinations
 from typing import Any
 
-from ..normalize.demographics import fix_mojibake
+from ..normalize.legacy import fix_mojibake
 
 AUTO_THRESHOLD = 0.95
 REVIEW_THRESHOLD = 0.6

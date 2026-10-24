@@ -80,17 +80,18 @@ def stage_all(store: RunStore, run_id: str, export: HalcyonExport, profile: Any)
     # --- ADT feed: A40 merges, A08 demographic updates
     merges, a08 = [], {}
     for msg in export.messages("adt"):
-        ev = msg.type.split("^")[-1]
-        pid = mrn_to_pat.get((msg.get("PID-3.4"), msg.get("PID-3.1")))
+        g = lambda path: msg.get(path) or ""  # noqa: E731
+        ev = (msg.type or "").split("^")[-1]
+        pid = mrn_to_pat.get((g("PID-3.4"), g("PID-3.1")))
         if ev == "A40":
-            retired = mrn_to_pat.get((msg.get("MRG-1.4"), msg.get("MRG-1.1")))
+            retired = mrn_to_pat.get((g("MRG-1.4"), g("MRG-1.1")))
             if pid and retired:
                 merges.append((pid, retired))
         elif ev == "A08" and pid:
-            when = msg.get("MSH-7")
+            when = g("MSH-7")
             if when[:8] > pat_by_id[pid]["LAST_UPD"] and when > a08.get(pid, {}).get("at", ""):
                 a08[pid] = {"at": when, "control_id": msg.control_id,
-                            "addr": "^".join(msg.get(f"PID-11.{i}") for i in range(1, 6)), "phone": msg.get("PID-13")}
+                            "addr": "^".join(g(f"PID-11.{i}") for i in range(1, 6)), "phone": g("PID-13")}
 
     # --- identity
     clusters, review, reasons = identity.resolve(pats, merges)
@@ -106,6 +107,8 @@ def stage_all(store: RunStore, run_id: str, export: HalcyonExport, profile: Any)
         later, earlier = max(ra, rb), min(ra, rb)
         review_by_root[later].append({"other": f"H-{earlier}", "score": m.score, "reasons": m.reasons,
                                       "pair": [identity.summarize(pat_by_id[m.a]), identity.summarize(pat_by_id[m.b])]})
+    store.xset(run_id, "meta", "cities", sorted({p["ADDR"].split("^")[2].upper() for p in pats
+                                                 if p["ADDR"].count("^") >= 4 and p["ADDR"].split("^")[2]}))
     patients = []
     for root, members in sorted(clusters.items()):
         key = f"H-{root}"
