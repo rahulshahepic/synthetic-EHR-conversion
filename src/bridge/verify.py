@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import random
 from collections import Counter
-from typing import Any, Callable
+from typing import Any, Callable, Iterable, Iterator
 
 from .load.client import NimbusClient
 from .runs import store as S
@@ -74,23 +74,25 @@ def readback(store: S.RunStore, client: NimbusClient, run_id: str, per_type: int
 
 
 # ----------------------------------------------------------------------------- sentinels
-def _source_records(store: S.RunStore, run_id: str, rtype: str, where: str = "") -> list[dict[str, Any]]:
-    return [{"source_key": r["source_key"], "status": r["status"], "source": __import__("json").loads(r["source"])}
-            for r in store.db.execute(f"SELECT source_key, status, source FROM records WHERE run_id=? AND rtype=? {where}",
-                                      (run_id, rtype))]
+def _source_records(store: S.RunStore, run_id: str, rtype: str, where: str = "") -> Iterator[dict[str, Any]]:
+    # Stream rather than materializing millions of clinical source rows at 50k patients.
+    for r in store.db.execute(f"SELECT source_key, status, source FROM records WHERE run_id=? AND rtype=? {where}",
+                              (run_id, rtype)):
+        yield {"source_key": r["source_key"], "status": r["status"], "source": __import__("json").loads(r["source"])}
 
 
-def _nimbus_all(client: NimbusClient, rtype: str) -> list[dict[str, Any]]:
-    out, offset = [], 0
+def _nimbus_all(client: NimbusClient, rtype: str) -> Iterator[dict[str, Any]]:
+    # Keep at most one API page in memory; avoid collecting every target record.
+    offset = 0
     while True:
         page = client.search(rtype, limit=1000, offset=offset)
-        out += page
+        yield from page
         if len(page) < 1000:
-            return out
+            return
         offset += 1000
 
 
-def _sentinel(name: str, description: str, source: list[dict[str, Any]], keep: Callable[[dict[str, Any]], bool],
+def _sentinel(name: str, description: str, source: Iterable[dict[str, Any]], keep: Callable[[dict[str, Any]], bool],
               nimbus_count: int, unit: Callable[[dict[str, Any]], str] = lambda r: r["source_key"]) -> dict[str, Any]:
     """Source items matching `keep`; every one must be in Nimbus or explained by a record status."""
     items = [r for r in source if keep(r)]
@@ -107,32 +109,39 @@ def _sentinel(name: str, description: str, source: list[dict[str, Any]], keep: C
 
 def sentinels(store: S.RunStore, client: NimbusClient, run_id: str) -> dict[str, Any]:
     pat_of = store.xall(run_id, "pat")
-    meds = _source_records(store, run_id, "MedicationRequest")
-    n_meds = _nimbus_all(client, "MedicationRequest")
-
     def active_with(codes: set[str]) -> Callable[[dict[str, Any]], bool]:
         return lambda r: r["source"]["STATUS"] == "A" and TERMS.formulary.get(r["source"]["FORM_CODE"], ("",))[0] in codes
 
-    def nimbus_active(codes: set[str]) -> int:
-        return sum(1 for m in n_meds if m["status"] == "active"
-                   and any(c["code"] in codes for c in m["medication"].get("coding", [])))
-
-    allergies = _source_records(store, run_id, "AllergyIntolerance")
-    n_alg = _nimbus_all(client, "AllergyIntolerance")
+    # Each target collection is traversed once, aggregating only the counts/IDs
+    # required by clinical sentinels instead of retaining millions of payloads.
+    active_anticoagulants = active_insulin = 0
+    for med in _nimbus_all(client, "MedicationRequest"):
+        if med["status"] != "active":
+            continue
+        codes = {c["code"] for c in med["medication"].get("coding", [])}
+        active_anticoagulants += bool(codes & ANTICOAG_RXNORM)
+        active_insulin += bool(codes & INSULIN_RXNORM)
+    allergy_patient_ids = {a["patient"]["id"] for a in _nimbus_all(client, "AllergyIntolerance")}
+    abnormal_observations = sum(
+        1 for o in _nimbus_all(client, "Observation")
+        if o.get("category") == "laboratory" and o.get("interpretation") in ("high", "low", "abnormal")
+    )
     labs = _source_records(store, run_id, "Observation", "AND json_extract(source, '$.kind')='lab' "
                            "AND trim(json_extract(source, '$.ABN_FLAG')) IN ('H','L','A')")
-    n_obs = _nimbus_all(client, "Observation")
     checks = [
-        _sentinel("active_anticoagulants", "Active warfarin/apixaban orders", meds, active_with(ANTICOAG_RXNORM),
-                  nimbus_active(ANTICOAG_RXNORM)),
-        _sentinel("active_insulin", "Active insulin orders", meds, active_with(INSULIN_RXNORM), nimbus_active(INSULIN_RXNORM)),
+        _sentinel("active_anticoagulants", "Active warfarin/apixaban orders",
+                  _source_records(store, run_id, "MedicationRequest"), active_with(ANTICOAG_RXNORM),
+                  active_anticoagulants),
+        _sentinel("active_insulin", "Active insulin orders",
+                  _source_records(store, run_id, "MedicationRequest"), active_with(INSULIN_RXNORM), active_insulin),
         _sentinel("patients_with_allergies", "Distinct patients with at least one real allergy",
-                  allergies, lambda r: r["source"]["ALLERGEN"].strip().upper() not in ("NKA", "NKDA"),
-                  len({a["patient"]["id"] for a in n_alg}),
+                  _source_records(store, run_id, "AllergyIntolerance"),
+                  lambda r: r["source"]["ALLERGEN"].strip().upper() not in ("NKA", "NKDA"),
+                  len(allergy_patient_ids),
                   unit=lambda r: _resolve_patient(store, run_id, pat_of.get(r["source"]["PAT_ID"]))),
         _sentinel("abnormal_labs", "Lab results flagged abnormal (H/L/A)", labs,
                   lambda r: r["source"].get("kind") == "lab" and r["source"].get("ABN_FLAG", "").strip() in ("H", "L", "A"),
-                  sum(1 for o in n_obs if o.get("category") == "laboratory" and o.get("interpretation") in ("high", "low", "abnormal"))),
+                  abnormal_observations),
     ]
     return {"ok": all(c["ok"] for c in checks), "checks": checks}
 
