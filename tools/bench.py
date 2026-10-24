@@ -25,7 +25,7 @@ from testbed.simulated_user import SimulatedAnalyst
 from bridge.reconcile.answers import answer
 
 
-def benchmark(patients: int = 5000, seed: int = 42, profile_out: str | None = None, *, without_index: bool = False) -> dict:
+def benchmark(patients: int = 5000, seed: int = 42, profile_out: str | None = None, *, without_index: bool = False, first_pass_only: bool = False) -> dict:
     if patients < 1:
         raise ValueError("patients must be positive")
     with tempfile.TemporaryDirectory(prefix="bridge-bench-") as scratch:
@@ -47,23 +47,27 @@ def benchmark(patients: int = 5000, seed: int = 42, profile_out: str | None = No
         try:
             run_id = runner.start(str(export), target)
             analyst = SimulatedAnalyst(export)
-            for _ in range(100):
-                state = store.run(run_id)["status"]
-                blocking = [q for q in store.questions(run_id) if q["blocking"]]
-                if state not in ("paused", "completed_with_exceptions") and not blocking:
-                    break
-                if not blocking and state != "paused":
-                    break
-                for question in blocking:
-                    detail = store.question(question["id"])
-                    linked = detail["affected"]
-                    rec = store.record(run_id, linked[0]["rtype"], linked[0]["source_key"]) if linked else None
-                    source = rec["source"] if rec else None
-                    option, value, why = analyst.choose(detail, source)
-                    answer(store, question["id"], option, value, analyst.name, why)
-                runner.resume(run_id, "synthetic analyst benchmark", analyst.name)
+            if first_pass_only:
+                # Profile the 5k-patient initial pass without measuring a paused run as a full conversion.
+                pass
             else:
-                raise RuntimeError("benchmark did not resolve pauses within 100 rounds")
+                for _ in range(100):
+                    state = store.run(run_id)["status"]
+                    blocking = [q for q in store.questions(run_id) if q["blocking"]]
+                    if state not in ("paused", "completed_with_exceptions") and not blocking:
+                        break
+                    if not blocking and state != "paused":
+                        break
+                    for question in blocking:
+                        detail = store.question(question["id"])
+                        linked = detail["affected"]
+                        rec = store.record(run_id, linked[0]["rtype"], linked[0]["source_key"]) if linked else None
+                        source = rec["source"] if rec else None
+                        option, value, why = analyst.choose(detail, source)
+                        answer(store, question["id"], option, value, analyst.name, why)
+                    runner.resume(run_id, "synthetic analyst benchmark", analyst.name)
+                else:
+                    raise RuntimeError("benchmark did not resolve pauses within 100 rounds")
         finally:
             if profiler:
                 profiler.disable()
@@ -73,10 +77,10 @@ def benchmark(patients: int = 5000, seed: int = 42, profile_out: str | None = No
             pstats.Stats(profiler).strip_dirs().sort_stats("cumulative").print_stats(30)
         counts = store.status_counts(run_id)
         status = store.run(run_id)["status"]
-        if status not in ("completed", "completed_with_exceptions"):
+        if not first_pass_only and status not in ("completed", "completed_with_exceptions"):
             raise RuntimeError(f"benchmark did not finish: {status}")
         return {
-            "seed": seed, "patients": patients, "without_index": without_index,
+            "seed": seed, "patients": patients, "without_index": without_index, "first_pass_only": first_pass_only,
             "generation_seconds": round(generation_seconds, 3),
             "conversion_seconds": round(conversion_seconds, 3),
             "records_by_status": counts,
@@ -91,8 +95,9 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--profile-out", default=None)
     parser.add_argument("--without-index", action="store_true", help="drop blocker index for same-revision control")
+    parser.add_argument("--first-pass-only", action="store_true", help="profile initial 5k processing only; not a completed conversion")
     args = parser.parse_args()
-    print(json.dumps(benchmark(args.patients, args.seed, args.profile_out, without_index=args.without_index), indent=2))
+    print(json.dumps(benchmark(args.patients, args.seed, args.profile_out, without_index=args.without_index, first_pass_only=args.first_pass_only), indent=2))
 
 
 if __name__ == "__main__":
