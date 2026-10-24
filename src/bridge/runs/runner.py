@@ -20,7 +20,8 @@ LOAD_ORDER = [
     "Condition", "AllergyIntolerance", "MedicationRequest", "Observation", "Immunization",
     "DocumentReference", "Appointment", "ChargeItem", "UserAccount",
 ]
-DEFAULT_BATCH_SIZE = 200
+# Match Nimbus' per-request import limit to amortize batch setup and close overhead.
+DEFAULT_BATCH_SIZE = 500
 
 
 class Runner:

@@ -52,3 +52,10 @@ def test_legacy_blocked_rows_are_released_on_resume(tmp_path):
     assert store.work_queue(run, "Patient") == []
     assert store.release_ready_blocked(run) == 1
     assert [r["source_key"] for r in store.work_queue(run, "Patient")] == ["p1"]
+
+
+def test_default_batch_size_matches_nimbus_import_limit():
+    from bridge.runs.runner import DEFAULT_BATCH_SIZE
+    from bridge.load.client import MAX_PER_CALL
+    from nimbus.service import MAX_RECORDS_PER_CALL
+    assert DEFAULT_BATCH_SIZE == MAX_PER_CALL == MAX_RECORDS_PER_CALL == 500
