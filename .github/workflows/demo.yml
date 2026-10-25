@@ -2,7 +2,7 @@ name: Conversion demo
 
 # Runs the end-to-end demo (rehearsal 1, verification, readiness, rehearsal 2, cutover) and publishes:
 #  - the narrated transcript as this run's Summary page, plus the HTML run report as a downloadable artifact;
-#  - a styled site on GitHub Pages: https://rahulshahepic.github.io/synthetic-EHR-conversion/
+#  - a history of styled reports on GitHub Pages: https://rahulshahepic.github.io/synthetic-EHR-conversion/
 #    (one-time repo setting: Settings -> Pages -> Source: "GitHub Actions").
 on:
   push:
@@ -49,21 +49,66 @@ jobs:
           retention-days: 30
       - name: Build site
         run: python tools/build_site.py demo_out site
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-artifact@v5
         with:
+          name: demo-site-${{ github.run_id }}-${{ github.run_attempt }}
           path: site
+          retention-days: 7
 
-  pages:
+  archive:
     needs: demo
     runs-on: ubuntu-latest
-    # Fails harmlessly until GitHub Pages is enabled (Settings -> Pages -> Source: GitHub Actions).
-    continue-on-error: true
     permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v5
+        with:
+          name: demo-site-${{ github.run_id }}-${{ github.run_attempt }}
+          path: site
+      - name: Archive report and prune old runs
+        run: bash tools/archive_pages.sh
+      - name: Link to this run
+        run: |
+          python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json
+          import os
+          from pathlib import Path
+          runs = json.loads((Path(os.environ['RUNNER_TEMP']) / 'pages-archive' / 'runs.json').read_text())
+          run = next(r for r in runs if r['run_id'] == int(os.environ['GITHUB_RUN_ID'])
+                     and r['attempt'] == int(os.environ['GITHUB_RUN_ATTEMPT']))
+          print(f"[View this demo on GitHub Pages](https://rahulshahepic.github.io/synthetic-EHR-conversion/{run['path']})")
+          PY
+
+  pages:
+    needs: archive
+    runs-on: ubuntu-latest
+    concurrency:
+      group: conversion-demo-pages-deploy
+      cancel-in-progress: false
+    permissions:
+      contents: read
       pages: write
       id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: gh-pages
+          path: archive
+      - name: Prepare site without Git metadata
+        run: |
+          mkdir site
+          rsync -a --exclude=.git archive/ site/
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
       - id: deploy
         uses: actions/deploy-pages@v4
