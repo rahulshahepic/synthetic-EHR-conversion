@@ -11,13 +11,22 @@
    "subject": "field:APPT.TXT.STATUS"
   },
   {
+   "claimed_values": [
+    "numeric value with optional flag suffix; non-numeric values are bench errors and are excluded",
+    "mixed numeric and non-numeric values: 10.8% of values are non-numeric text (samples: <, ABNORMAL C, FAXED TO M, NEG, PENDING RE); non-numeric values are present in the data and carried as text"
+   ],
+   "disposition": "runtime_question",
+   "predicate": "convention",
+   "subject": "field:LAB.TXT.RESULT"
+  },
+  {
    "disposition": "runtime_question",
    "note": "Every proposed identity merge is decided by a human in reconciliation; the spec contains no auto-merge rule.",
    "predicate": "merge_decisions",
    "subject": "identity"
   }
  ],
- "ledger_events": 78,
+ "ledger_events": 80,
  "policy_overrides": [
   {
    "claimed_values": [
@@ -31,7 +40,14 @@
  "reader_binding": {
   "files": {
    "APPT": {
-    "key_field": "ACCT",
+    "discriminator": {
+     "field": "RT",
+     "start": 0,
+     "width": 2
+    },
+    "key_fields": {
+     "S": "APPT"
+    },
     "layouts": {
      "S": [
       {
@@ -93,7 +109,14 @@
     "path": "APPT.TXT"
    },
    "BILL": {
-    "key_field": "ACCT",
+    "discriminator": {
+     "field": "RT",
+     "start": 0,
+     "width": 2
+    },
+    "key_fields": {
+     "B": "CHG"
+    },
     "layouts": {
      "B": [
       {
@@ -149,7 +172,14 @@
     "path": "BILL.TXT"
    },
    "CHGDICT": {
-    "key_field": "ACCT",
+    "discriminator": {
+     "field": "RT",
+     "start": 0,
+     "width": 2
+    },
+    "key_fields": {
+     "C": "CODE"
+    },
     "layouts": {
      "C": [
       {
@@ -181,7 +211,14 @@
     "path": "CHGDICT.TXT"
    },
    "DX": {
-    "key_field": "ACCT",
+    "discriminator": {
+     "field": "RT",
+     "start": 0,
+     "width": 2
+    },
+    "key_fields": {
+     "P": "DXID"
+    },
     "layouts": {
      "P": [
       {
@@ -243,7 +280,14 @@
     "path": "DX.TXT"
    },
    "DXDICT": {
-    "key_field": "ACCT",
+    "discriminator": {
+     "field": "RT",
+     "start": 0,
+     "width": 2
+    },
+    "key_fields": {
+     "D": "CODE"
+    },
     "layouts": {
      "D": [
       {
@@ -269,7 +313,14 @@
     "path": "DXDICT.TXT"
    },
    "ENC": {
-    "key_field": "ACCT",
+    "discriminator": {
+     "field": "RT",
+     "start": 0,
+     "width": 2
+    },
+    "key_fields": {
+     "V": "VISIT"
+    },
     "layouts": {
      "V": [
       {
@@ -349,7 +400,14 @@
     "path": "ENC.TXT"
    },
    "JOURNAL": {
-    "key_field": "ACCT",
+    "discriminator": {
+     "field": "RT",
+     "start": 0,
+     "width": 2
+    },
+    "key_fields": {
+     "J": "SEQ"
+    },
     "layouts": {
      "J": [
       {
@@ -411,7 +469,18 @@
     "path": "JOURNAL.TXT"
    },
    "LAB": {
-    "key_field": "ACCT",
+    "discriminator": {
+     "field": "RT",
+     "start": 0,
+     "width": 2
+    },
+    "key_fields": {
+     "A": "ACCT",
+     "R": [
+      "ACC",
+      "TEST"
+     ]
+    },
     "layouts": {
      "A": [
       {
@@ -511,7 +580,14 @@
     "path": "LAB.TXT"
    },
    "LABDICT": {
-    "key_field": "ACCT",
+    "discriminator": {
+     "field": "RT",
+     "start": 0,
+     "width": 2
+    },
+    "key_fields": {
+     "T": "TEST"
+    },
     "layouts": {
      "T": [
       {
@@ -555,7 +631,18 @@
     "path": "LABDICT.TXT"
    },
    "NOTE": {
-    "key_field": "ACCT",
+    "discriminator": {
+     "field": "RT",
+     "start": 0,
+     "width": 2
+    },
+    "key_fields": {
+     "C": [
+      "NOTE",
+      "SEQ"
+     ],
+     "N": "NOTE"
+    },
     "layouts": {
      "C": [
       {
@@ -643,7 +730,15 @@
     "path": "NOTE.TXT"
    },
    "PHA": {
-    "key_field": "ACCT",
+    "discriminator": {
+     "field": "RT",
+     "start": 0,
+     "width": 2
+    },
+    "key_fields": {
+     "A": "ACCT",
+     "M": "ORD"
+    },
     "layouts": {
      "A": [
       {
@@ -761,7 +856,14 @@
     "path": "PHA.TXT"
    },
    "PROV": {
-    "key_field": "ACCT",
+    "discriminator": {
+     "field": "RT",
+     "start": 0,
+     "width": 2
+    },
+    "key_fields": {
+     "D": "CODE"
+    },
     "layouts": {
      "D": [
       {
@@ -811,7 +913,18 @@
     "path": "PROV.TXT"
    },
    "RAD": {
-    "key_field": "ACCT",
+    "discriminator": {
+     "field": "RT",
+     "start": 0,
+     "width": 2
+    },
+    "key_fields": {
+     "A": "ACCT",
+     "X": [
+      "ACCT",
+      "EXAM"
+     ]
+    },
     "layouts": {
      "A": [
       {
@@ -905,7 +1018,14 @@
     "path": "RAD.TXT"
    },
    "REG": {
-    "key_field": "ACCT",
+    "discriminator": {
+     "field": "RT",
+     "start": 0,
+     "width": 2
+    },
+    "key_fields": {
+     "A": "ACCT"
+    },
     "layouts": {
      "A": [
       {
@@ -1044,7 +1164,7 @@
    "value": "include - real orders for real patients; details live in the patient's notes"
   },
   {
-   "data_confirmed": true,
+   "data_confirmed": false,
    "id": "R002",
    "kind": "fact",
    "predicate": "dictionary_status",
@@ -1062,18 +1182,6 @@
    "predicate": "convention",
    "provenance": {
     "kind": "analyst",
-    "ref": "ledger:E000047 (Tom Reyes, laboratory)"
-   },
-   "subject": "field:LAB.TXT.RESULT",
-   "value": "numeric value with optional flag suffix; non-numeric values are bench errors and are excluded"
-  },
-  {
-   "data_confirmed": false,
-   "id": "R004",
-   "kind": "fact",
-   "predicate": "convention",
-   "provenance": {
-    "kind": "analyst",
     "ref": "ledger:E000041 (Tom Reyes, laboratory)"
    },
    "subject": "field:LAB.TXT.YDAY",
@@ -1081,7 +1189,7 @@
   },
   {
    "data_confirmed": false,
-   "id": "R005",
+   "id": "R004",
    "kind": "fact",
    "predicate": "convention",
    "provenance": {
@@ -1093,7 +1201,7 @@
   },
   {
    "data_confirmed": true,
-   "id": "R006",
+   "id": "R005",
    "kind": "fact",
    "predicate": "convention",
    "provenance": {
@@ -1104,8 +1212,8 @@
    "value": "YYMMDD"
   },
   {
-   "data_confirmed": true,
-   "id": "R007",
+   "data_confirmed": false,
+   "id": "R006",
    "kind": "fact",
    "predicate": "convention",
    "provenance": {
@@ -1117,7 +1225,7 @@
   },
   {
    "data_confirmed": false,
-   "id": "R008",
+   "id": "R007",
    "kind": "fact",
    "predicate": "layout_binding",
    "provenance": {
@@ -1126,7 +1234,14 @@
    },
    "subject": "file:APPT",
    "value": {
-    "key_field": "ACCT",
+    "discriminator": {
+     "field": "RT",
+     "start": 0,
+     "width": 2
+    },
+    "key_fields": {
+     "S": "APPT"
+    },
     "layouts": {
      "S": [
       {
@@ -1190,7 +1305,7 @@
   },
   {
    "data_confirmed": false,
-   "id": "R009",
+   "id": "R008",
    "kind": "fact",
    "predicate": "layout_binding",
    "provenance": {
@@ -1199,7 +1314,14 @@
    },
    "subject": "file:BILL",
    "value": {
-    "key_field": "ACCT",
+    "discriminator": {
+     "field": "RT",
+     "start": 0,
+     "width": 2
+    },
+    "key_fields": {
+     "B": "CHG"
+    },
     "layouts": {
      "B": [
       {
@@ -1257,7 +1379,7 @@
   },
   {
    "data_confirmed": false,
-   "id": "R010",
+   "id": "R009",
    "kind": "fact",
    "predicate": "layout_binding",
    "provenance": {
@@ -1266,7 +1388,14 @@
    },
    "subject": "file:CHGDICT",
    "value": {
-    "key_field": "ACCT",
+    "discriminator": {
+     "field": "RT",
+     "start": 0,
+     "width": 2
+    },
+    "key_fields": {
+     "C": "CODE"
+    },
     "layouts": {
      "C": [
       {
@@ -1300,7 +1429,7 @@
   },
   {
    "data_confirmed": false,
-   "id": "R011",
+   "id": "R010",
    "kind": "fact",
    "predicate": "layout_binding",
    "provenance": {
@@ -1309,7 +1438,14 @@
    },
    "subject": "file:DX",
    "value": {
-    "key_field": "ACCT",
+    "discriminator": {
+     "field": "RT",
+     "start": 0,
+     "width": 2
+    },
+    "key_fields": {
+     "P": "DXID"
+    },
     "layouts": {
      "P": [
       {
@@ -1373,7 +1509,7 @@
   },
   {
    "data_confirmed": false,
-   "id": "R012",
+   "id": "R011",
    "kind": "fact",
    "predicate": "layout_binding",
    "provenance": {
@@ -1382,7 +1518,14 @@
    },
    "subject": "file:DXDICT",
    "value": {
-    "key_field": "ACCT",
+    "discriminator": {
+     "field": "RT",
+     "start": 0,
+     "width": 2
+    },
+    "key_fields": {
+     "D": "CODE"
+    },
     "layouts": {
      "D": [
       {
@@ -1410,7 +1553,7 @@
   },
   {
    "data_confirmed": false,
-   "id": "R013",
+   "id": "R012",
    "kind": "fact",
    "predicate": "layout_binding",
    "provenance": {
@@ -1419,7 +1562,14 @@
    },
    "subject": "file:ENC",
    "value": {
-    "key_field": "ACCT",
+    "discriminator": {
+     "field": "RT",
+     "start": 0,
+     "width": 2
+    },
+    "key_fields": {
+     "V": "VISIT"
+    },
     "layouts": {
      "V": [
       {
@@ -1501,7 +1651,7 @@
   },
   {
    "data_confirmed": false,
-   "id": "R014",
+   "id": "R013",
    "kind": "fact",
    "predicate": "layout_binding",
    "provenance": {
@@ -1510,7 +1660,14 @@
    },
    "subject": "file:JOURNAL",
    "value": {
-    "key_field": "ACCT",
+    "discriminator": {
+     "field": "RT",
+     "start": 0,
+     "width": 2
+    },
+    "key_fields": {
+     "J": "SEQ"
+    },
     "layouts": {
      "J": [
       {
@@ -1574,7 +1731,7 @@
   },
   {
    "data_confirmed": false,
-   "id": "R015",
+   "id": "R014",
    "kind": "fact",
    "predicate": "layout_binding",
    "provenance": {
@@ -1583,7 +1740,18 @@
    },
    "subject": "file:LAB",
    "value": {
-    "key_field": "ACCT",
+    "discriminator": {
+     "field": "RT",
+     "start": 0,
+     "width": 2
+    },
+    "key_fields": {
+     "A": "ACCT",
+     "R": [
+      "ACC",
+      "TEST"
+     ]
+    },
     "layouts": {
      "A": [
       {
@@ -1685,7 +1853,7 @@
   },
   {
    "data_confirmed": false,
-   "id": "R016",
+   "id": "R015",
    "kind": "fact",
    "predicate": "layout_binding",
    "provenance": {
@@ -1694,7 +1862,14 @@
    },
    "subject": "file:LABDICT",
    "value": {
-    "key_field": "ACCT",
+    "discriminator": {
+     "field": "RT",
+     "start": 0,
+     "width": 2
+    },
+    "key_fields": {
+     "T": "TEST"
+    },
     "layouts": {
      "T": [
       {
@@ -1740,7 +1915,7 @@
   },
   {
    "data_confirmed": false,
-   "id": "R017",
+   "id": "R016",
    "kind": "fact",
    "predicate": "layout_binding",
    "provenance": {
@@ -1749,7 +1924,18 @@
    },
    "subject": "file:NOTE",
    "value": {
-    "key_field": "ACCT",
+    "discriminator": {
+     "field": "RT",
+     "start": 0,
+     "width": 2
+    },
+    "key_fields": {
+     "C": [
+      "NOTE",
+      "SEQ"
+     ],
+     "N": "NOTE"
+    },
     "layouts": {
      "C": [
       {
@@ -1839,7 +2025,7 @@
   },
   {
    "data_confirmed": false,
-   "id": "R018",
+   "id": "R017",
    "kind": "fact",
    "predicate": "layout_binding",
    "provenance": {
@@ -1848,7 +2034,15 @@
    },
    "subject": "file:PHA",
    "value": {
-    "key_field": "ACCT",
+    "discriminator": {
+     "field": "RT",
+     "start": 0,
+     "width": 2
+    },
+    "key_fields": {
+     "A": "ACCT",
+     "M": "ORD"
+    },
     "layouts": {
      "A": [
       {
@@ -1968,7 +2162,7 @@
   },
   {
    "data_confirmed": false,
-   "id": "R019",
+   "id": "R018",
    "kind": "fact",
    "predicate": "layout_binding",
    "provenance": {
@@ -1977,7 +2171,14 @@
    },
    "subject": "file:PROV",
    "value": {
-    "key_field": "ACCT",
+    "discriminator": {
+     "field": "RT",
+     "start": 0,
+     "width": 2
+    },
+    "key_fields": {
+     "D": "CODE"
+    },
     "layouts": {
      "D": [
       {
@@ -2029,7 +2230,7 @@
   },
   {
    "data_confirmed": false,
-   "id": "R020",
+   "id": "R019",
    "kind": "fact",
    "predicate": "layout_binding",
    "provenance": {
@@ -2038,7 +2239,18 @@
    },
    "subject": "file:RAD",
    "value": {
-    "key_field": "ACCT",
+    "discriminator": {
+     "field": "RT",
+     "start": 0,
+     "width": 2
+    },
+    "key_fields": {
+     "A": "ACCT",
+     "X": [
+      "ACCT",
+      "EXAM"
+     ]
+    },
     "layouts": {
      "A": [
       {
@@ -2134,7 +2346,7 @@
   },
   {
    "data_confirmed": false,
-   "id": "R021",
+   "id": "R020",
    "kind": "fact",
    "predicate": "layout_binding",
    "provenance": {
@@ -2143,7 +2355,14 @@
    },
    "subject": "file:REG",
    "value": {
-    "key_field": "ACCT",
+    "discriminator": {
+     "field": "RT",
+     "start": 0,
+     "width": 2
+    },
+    "key_fields": {
+     "A": "ACCT"
+    },
     "layouts": {
      "A": [
       {
@@ -2267,7 +2486,7 @@
   },
   {
    "data_confirmed": false,
-   "id": "R022",
+   "id": "R021",
    "kind": "fact",
    "predicate": "keying_story",
    "provenance": {
@@ -2279,7 +2498,7 @@
   },
   {
    "data_confirmed": false,
-   "id": "R023",
+   "id": "R022",
    "kind": "fact",
    "predicate": "lab_account_reissue",
    "provenance": {
@@ -2291,7 +2510,7 @@
   },
   {
    "data_confirmed": true,
-   "id": "R024",
+   "id": "R023",
    "kind": "fact",
    "predicate": "pivot_year",
    "provenance": {
@@ -2303,7 +2522,7 @@
   },
   {
    "data_confirmed": true,
-   "id": "R025",
+   "id": "R024",
    "kind": "fact",
    "predicate": "unit",
    "provenance": {

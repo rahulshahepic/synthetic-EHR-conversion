@@ -38,24 +38,24 @@
    "value": "local formulary; mapping requires pharmacy review per code - no shortcut"
   },
   {
-   "data_confirmed": true,
+   "data_confirmed": false,
    "id": "R002",
    "kind": "fact",
    "predicate": "charge_cents_from",
    "provenance": {
-    "kind": "profiler-data",
+    "kind": "analyst",
     "ref": "dispute resolved via OBS-ESTATE-2 + ledger answer (Tom Okafor, interface engineering)"
    },
    "subject": "profile",
    "value": "2012-01-01"
   },
   {
-   "data_confirmed": true,
+   "data_confirmed": false,
    "id": "R003",
    "kind": "fact",
    "predicate": "facility_tz",
    "provenance": {
-    "kind": "profiler-data",
+    "kind": "dictionary",
     "ref": "Halcyon interface notes (estate); dispute resolved via OBS-ESTATE-1 + ledger answer (Tom Okafor, interface engineering)"
    },
    "subject": "profile",
@@ -117,12 +117,12 @@
    }
   },
   {
-   "data_confirmed": true,
+   "data_confirmed": false,
    "id": "R008",
    "kind": "fact",
    "predicate": "vital_units",
    "provenance": {
-    "kind": "profiler-data",
+    "kind": "dictionary",
     "ref": "Halcyon interface notes (estate); dispute resolved via OBS-ESTATE-1 + ledger answer (Tom Okafor, interface engineering)"
    },
    "subject": "profile",

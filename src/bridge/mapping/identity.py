@@ -78,30 +78,44 @@ class UnionFind:
         self.parent[rb] = ra
 
 
-def resolve(pats: list[dict[str, str]], merges: list[tuple[str, str]]) -> tuple[dict[str, list[str]], list[Match], dict[str, str]]:
+def resolve(pats: list[dict[str, str]], merges: list[tuple[str, str]],
+            auto_merge: bool = True) -> tuple[dict[str, list[str]], list[Match], dict[str, str]]:
     """Return (clusters root->members, review candidates, link reason per non-root member).
 
     `merges` are (surviving PAT_ID, retired PAT_ID) pairs from ADT A40.
+
+    With ``auto_merge=False`` (the generated profile's merge policy,
+    ``route_to_reconciliation``), nothing is unioned automatically: every
+    chart stays its own cluster, and every would-be automatic link —
+    deterministic matches and A40 merges alike — is returned as a review
+    candidate so a human decides it in reconciliation.
     """
     ids = [p["PAT_ID"] for p in pats]
     uf = UnionFind(ids)
     reason: dict[str, str] = {}
+    review: dict[tuple[str, str], Match] = {}
+    by_id = {p["PAT_ID"]: p for p in pats}
     for keep, retire in merges:
         if keep in uf.parent and retire in uf.parent:
-            uf.union(keep, retire)
-            reason[retire] = "adt_a40"
+            if auto_merge:
+                uf.union(keep, retire)
+                reason[retire] = "adt_a40"
+            else:
+                m = score_pair(by_id[keep], by_id[retire])
+                review[tuple(sorted((keep, retire)))] = Match(
+                    a=m.a, b=m.b, score=max(m.score, 1.0),
+                    reasons=[*m.reasons, "adt_a40"])
     blocks: dict[str, list[dict[str, str]]] = {}
     for p in pats:
         blocks.setdefault(p["SSN4"] or p["PAT_ID"], []).append(p)
         last, _ = _norm_name(p["PAT_NAME"])
         blocks.setdefault(f"N:{last[:4]}:{p['DOB'][:4]}", []).append(p)
-    review: dict[tuple[str, str], Match] = {}
     for group in blocks.values():
         for p, q in combinations(group, 2):
             if uf.find(p["PAT_ID"]) == uf.find(q["PAT_ID"]):
                 continue
             m = score_pair(p, q)
-            if m.score >= AUTO_THRESHOLD:
+            if auto_merge and m.score >= AUTO_THRESHOLD:
                 uf.union(p["PAT_ID"], q["PAT_ID"])
                 reason.setdefault(max(m.a, m.b), "deterministic")
             elif m.score >= REVIEW_THRESHOLD:
