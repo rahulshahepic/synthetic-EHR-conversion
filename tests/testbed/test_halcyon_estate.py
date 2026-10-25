@@ -6,6 +6,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 ESTATE = ROOT / "testbed/halcyon/estate"
+GRADING = ROOT / "testbed/halcyon/grading"
 ANALYSTS = ROOT / "testbed/halcyon/analysts"
 SECTIONS = ("## Role and tenure", "## What I know", "## What I do not know",
             "## How I answer")
@@ -40,7 +41,10 @@ def test_analysts_disagree():
 
 
 def test_grading_ledger_shape():
-    ledger = json.loads((ESTATE / "estate_discrepancies.json").read_text())
+    # The grading ledger lives outside the estate (testbed/halcyon/grading/)
+    # so no estate root can serve it; see the firewall acceptance tests.
+    assert not (ESTATE / "estate_discrepancies.json").exists()
+    ledger = json.loads((GRADING / "estate_discrepancies.json").read_text())
     ids = [e["id"] for e in ledger]
     assert len(ids) == len(set(ids)) and len(ids) >= 6
     for e in ledger:

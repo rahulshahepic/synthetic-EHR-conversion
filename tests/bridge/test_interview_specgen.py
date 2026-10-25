@@ -22,12 +22,20 @@ def _store() -> claims_mod.ClaimStore:
     ], source="DATADICT.TXT v4.1")
     store.add(claims_mod.Claim("profile", "pivot_year", 30,
                                "ledger:E000010 (Marla Denny, registration)"))
-    store.resolve("profile", "pivot_year", 30, "OBS-0042 (DOB distribution)")
+    store.resolve("profile", "pivot_year", 30, "OBS-0042 (DOB distribution)",
+                  evidence_refs=("OBS-0042",))
     return store
 
 
 def test_spec_is_deterministic_and_declarative_first():
-    events = [ledger_mod.LedgerEvent("E000001", "claim", {})]
+    # The resolution cites OBS-0042: data confirmation requires that the
+    # observation actually be recorded in the ledger events (validated
+    # provenance — a citation string alone confirms nothing).
+    events = [ledger_mod.LedgerEvent("E000001", "claim", {}),
+              ledger_mod.LedgerEvent("E000002", "observation",
+                                     {"obs_id": "OBS-0042", "file": "REG.TXT",
+                                      "field": "DOB",
+                                      "stats": {"shape_rates": {"YYMMDD": 1.0}}})]
     a = specgen.generate_spec(events, _store(), "delphi")
     b = specgen.generate_spec(events, _store(), "delphi")
     assert a.spec_json() == b.spec_json()
@@ -83,12 +91,23 @@ def test_delphi_export_stages_through_generated_spec(tmp_path):
     generate(out, seed=7, patients=12)
     layouts, _v = profiler_mod.parse_layouts_dat((out / "LAYOUTS.DAT").read_text())
 
+    # Per-kind key fields, as the recorded interview's layout claims carry:
+    # ACCT is not a key for files that have none (dictionaries, journal).
+    key_fields = {
+        "APPT": {"S": "APPT"}, "BILL": {"B": "CHG"}, "CHGDICT": {"C": "CODE"},
+        "DX": {"P": "DXID"}, "DXDICT": {"D": "CODE"}, "ENC": {"V": "VISIT"},
+        "JOURNAL": {"J": "SEQ"}, "LAB": {"A": "ACCT", "R": ["ACC", "TEST"]},
+        "LABDICT": {"T": "TEST"}, "NOTE": {"N": "NOTE", "C": ["NOTE", "SEQ"]},
+        "PHA": {"A": "ACCT", "M": "ORD"}, "PROV": {"D": "CODE"},
+        "RAD": {"A": "ACCT", "X": ["ACCT", "EXAM"]}, "REG": {"A": "ACCT"},
+    }
     store = claims_mod.ClaimStore()
     files_binding = {}
     for stem, per_rt in sorted(layouts.items()):
         files_binding[stem] = {
             "path": f"{stem}.TXT",
-            "key_field": "ACCT",
+            "key_fields": key_fields[stem],
+            "discriminator": {"start": 0, "width": 2, "field": "RT"},
             "layouts": {rt: [{"name": f.name, "start": f.start, "width": f.width,
                               "type": f.type} for f in fields]
                         for rt, fields in per_rt.items()},

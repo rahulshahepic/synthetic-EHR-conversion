@@ -28,7 +28,10 @@ EXPECTED = {
     "dict_appt_status_incomplete": "routed-to-runtime-question",
     "dict_registration_account_claim": "caught-by-analyst",
     "belief_lab_account_is_identity": "caught-by-analyst",
-    "belief_lab_nonnumeric_bench_error": "swallowed",
+    # The profiler's value-shape claim (OBS-0060: RESULT carries non-numeric
+    # text) now disputes Tom Reyes's bench-error belief, so it routes to a
+    # runtime question instead of being swallowed (see PR #42 review fixes).
+    "belief_lab_nonnumeric_bench_error": "routed-to-runtime-question",
     "belief_registration_merges_routine": "routed-to-runtime-question",
     "belief_pharmacy_misc_meds_skippable": "caught-by-analyst",
     "belief_systems_dictionary_current": "caught-by-profiling",
@@ -87,7 +90,7 @@ def test_scorecard_verdicts(verdicts):
     assert verdicts == EXPECTED
     summary = scorecard.summarize([{"verdict": v} for v in verdicts.values()])
     assert summary == {"caught-by-profiling": 4, "caught-by-analyst": 8,
-                       "routed-to-runtime-question": 3, "swallowed": 1}
+                       "routed-to-runtime-question": 4}
 
 
 def test_delphi_staging_through_committed_binding(tmp_path):
