@@ -32,6 +32,26 @@ LOSSY = frozenset({"inferred", "degraded", "defaulted", "dropped"})
 SURFACED_STATUSES = frozenset({"held", "dropped", "superseded"})
 _REGISTRY_KEY = re.compile(r"^REG-[^-]+-(.+?)-([^-]+)-(\d{4}-\d{2}-\d{2})$")
 
+# Source fields whose value must reach Nimbus unchanged (as local wall-clock time or calendar date):
+# (rtype, Observation kind or None, source field, dotted path in the mapped payload).
+FAITHFUL_TIMES = [
+    ("Encounter", None, "ADMIT_DT", "period.start"),
+    ("Encounter", None, "DISCH_DT", "period.end"),
+    ("Observation", "lab", "COLLECT_DT", "effective"),
+    ("Observation", "vital", "TAKEN_DT", "effective"),
+    ("Appointment", None, "APPT_DT", "start"),
+    ("DocumentReference", None, "NOTE_DT", "date"),
+]
+FAITHFUL_DATES = [
+    ("Condition", None, "ONSET_DT", "onsetDate"),
+    ("Condition", None, "RESOLVED_DT", "abatementDate"),
+    ("MedicationRequest", None, "START_DT", "authoredOn"),
+    ("Immunization", None, "ADMIN_DT", "occurrenceDate"),
+    ("ChargeItem", None, "POST_DT", "serviceDate"),
+    ("AllergyIntolerance", None, "ENTERED_DT", "recordedDate"),
+    ("Coverage", None, "EFF_DT", "period.start"),
+]
+
 
 def _pairs(n: int) -> int:
     return n * (n - 1) // 2
@@ -124,6 +144,122 @@ def _record_index(db: sqlite3.Connection, run_id: str) -> tuple[
     return index, questions
 
 
+def _path(payload: Any, dotted: str) -> Any:
+    for part in dotted.split("."):
+        if not isinstance(payload, dict):
+            return None
+        payload = payload.get(part)
+    return payload
+
+
+def _expected_local(raw: str, kind: str) -> str | None:
+    """Independent reading of a Halcyon value: YYYYMMDD[HHMM[SS]] -> ISO local prefix, else None."""
+    raw = raw.strip()
+    if not raw.isdigit():
+        return None
+    if kind == "date" and len(raw) == 8:
+        return f"{raw[:4]}-{raw[4:6]}-{raw[6:8]}"
+    if kind == "time" and len(raw) in (12, 14):
+        iso = f"{raw[:4]}-{raw[4:6]}-{raw[6:8]}T{raw[8:10]}:{raw[10:12]}"
+        return iso + (f":{raw[12:14]}" if len(raw) == 14 else "")
+    return None
+
+
+class _Check:
+    def __init__(self) -> None:
+        self.counts: Counter[str] = Counter()
+        self.examples: list[dict[str, Any]] = []
+
+    def record(self, key: str, expected: Any, got: Any, *, skipped: bool = False) -> None:
+        if skipped:
+            self.counts["skipped"] += 1
+        elif got is None:
+            self.counts["missing"] += 1
+        else:
+            self.counts["checked"] += 1
+            if got != expected:
+                self.counts["mismatched"] += 1
+                if len(self.examples) < 5:
+                    self.examples.append({"key": key, "expected": expected, "got": got})
+
+    def report(self) -> dict[str, Any]:
+        return {"checked": self.counts["checked"], "mismatched": self.counts["mismatched"],
+                "missing": self.counts["missing"], "skipped": self.counts["skipped"],
+                "mismatch_examples": self.examples}
+
+
+def _value_checks(db: sqlite3.Connection, run_id: str, truth: dict[str, Any],
+                  persons: dict[str, list[str]]) -> dict[str, Any]:
+    """Check loaded values against the raw source and the answer key.
+
+    Surfacing (above) asks whether Bridge *noticed* a problem; this asks whether what it loaded is
+    *right*: timestamps and dates must keep their source wall-clock value, and fields the generator
+    knows the truth for must match it. Only loaded records are checked; DST-adjusted times are skipped.
+    """
+    checks: dict[str, _Check] = defaultdict(_Check)
+    merged_a08: list[dict[str, Any]] = []
+    person_of = {pat: person for person, pats in persons.items() for pat in pats}
+    rows = db.execute("SELECT rtype, source_key, source, mapped, annotations FROM records "
+                      "WHERE run_id=? AND status='loaded'", (run_id,))
+    for row in rows:
+        rtype, key = row["rtype"], row["source_key"]
+        src = json.loads(row["source"]) if row["source"] else {}
+        mapped = json.loads(row["mapped"]) if row["mapped"] else {}
+        notes = " ".join(str(a.get("note") or "") for a in json.loads(row["annotations"] or "[]") if isinstance(a, dict))
+        dst_adjusted = "DST" in notes
+        for specs, kind in ((FAITHFUL_TIMES, "time"), (FAITHFUL_DATES, "date")):
+            for spec_rtype, obs_kind, field, path in specs:
+                if rtype != spec_rtype or (obs_kind and src.get("kind") != obs_kind) or not src.get(field, "").strip():
+                    continue
+                expected = _expected_local(src[field], kind)
+                got = _path(mapped, path)
+                if isinstance(got, str):
+                    got = got[:len(expected)] if expected else got
+                checks[f"{rtype}.{path} = {field}"].record(
+                    key, expected, got, skipped=expected is None or (kind == "time" and dst_adjusted))
+        if rtype == "Condition" and src.get("DX_ID") in truth.get("dx", {}):
+            codes = [c.get("code") for c in _path(mapped, "code.coding") or [] if c.get("system") == "ICD-10-CM"]
+            checks["Condition ICD-10 code = answer key"].record(key, truth["dx"][src["DX_ID"]], codes[0] if codes else None)
+        elif rtype == "Appointment" and src.get("APPT_ID") in truth.get("appt_status", {}):
+            want = truth["appt_status"][src["APPT_ID"]]  # None: no Nimbus status exists (scored as surfacing)
+            checks["Appointment status = answer key"].record(key, want, mapped.get("status"), skipped=want is None)
+        elif rtype == "AllergyIntolerance" and src.get("ALG_ID") in truth.get("allergy", {}):
+            coding = (_path(mapped, "substance.coding") or [None])[0]
+            want = truth["allergy"][src["ALG_ID"]]  # None: the allergen has no standard code and must stay uncoded
+            checks["Allergy substance code = answer key"].record(
+                key, list(want) if want else "uncoded", [coding.get("system"), coding.get("code")] if coding else "uncoded")
+        elif rtype == "Practitioner" and key in truth.get("provider_specialty", {}):
+            checks["Practitioner specialty = answer key"].record(key, truth["provider_specialty"][key], mapped.get("specialty"))
+        elif rtype == "Patient":
+            members = [m.get("PAT_ID") for m in src.get("members", [])]
+            people = {person_of.get(m) for m in members} - {None}
+            if len(people) == 1:
+                person = truth.get("person", {}).get(people.pop())
+                if person:
+                    checks["Patient birthDate = answer key"].record(key, person["dob"], mapped.get("birthDate"))
+            phones = {t.get("value") for t in mapped.get("telecom", [])}
+            for m in members:
+                if m in truth.get("a08_demographics", {}) and m != src.get("primary"):
+                    # Bridge applies A08 updates from the surviving chart only; which chart's demographics win
+                    # after a merge is policy, so these are listed rather than scored.
+                    want = truth["a08_demographics"][m]["phone"]
+                    if want not in phones:
+                        merged_a08.append({"key": key, "merged_chart": m, "a08_phone": want, "loaded": sorted(phones)})
+                elif m in truth.get("a08_demographics", {}):
+                    want = truth["a08_demographics"][m]["phone"]
+                    # A 7-digit A08 phone has no area code: the full number is unrecoverable from the source.
+                    raw = (src.get("a08", {}).get(m) or {}).get("phone") or ""
+                    digits = re.sub(r"\D", "", re.split(r"(?i)x|ext", raw)[0])
+                    checks["Patient phone = latest ADT A08"].record(
+                        key, want, want if want in phones else sorted(phones) or None, skipped=len(digits) < 10)
+    out = {name: check.report() for name, check in sorted(checks.items())}
+    checked = sum(c["checked"] for c in out.values())
+    mismatched = sum(c["mismatched"] for c in out.values())
+    return {"checks": out, "checked": checked, "mismatched": mismatched,
+            "accuracy": (checked - mismatched) / checked if checked else 1.0,
+            "unapplied_merged_chart_a08": merged_a08}
+
+
 def score(export_dir: Path | str, run_db: Path | str, run_id: str | None = None) -> dict[str, Any]:
     """Return a JSON-serializable scoring report for one Bridge run."""
     export_dir = Path(export_dir)
@@ -131,6 +267,8 @@ def score(export_dir: Path | str, run_db: Path | str, run_id: str | None = None)
     persons_path = export_dir / "answer_key" / "persons.json"
     issues = [json.loads(line) for line in issues_path.read_text(encoding="utf-8").splitlines() if line.strip()]
     persons = json.loads(persons_path.read_text(encoding="utf-8"))
+    truth_path = export_dir / "answer_key" / "truth.json"
+    truth = json.loads(truth_path.read_text(encoding="utf-8")) if truth_path.exists() else {}
 
     # Open read-only so an invalid path never creates an empty run database.
     db_path = Path(run_db).resolve()
@@ -149,6 +287,7 @@ def score(export_dir: Path | str, run_db: Path | str, run_id: str | None = None)
             row["key"]: json.loads(row["value"]) if row["value"] is not None else None
             for row in db.execute("SELECT key, value FROM xref WHERE run_id=? AND kind='pat'", (rid,))
         }
+        values = _value_checks(db, rid, truth, persons)
 
     totals: dict[str, Counter[str]] = defaultdict(Counter)
     missed: dict[str, list[str]] = defaultdict(list)
@@ -206,6 +345,7 @@ def score(export_dir: Path | str, run_db: Path | str, run_id: str | None = None)
             "surfacing_rate": surfaced / total if total else 1.0,
         },
         "identity": _identity(persons, xrefs),
+        "values": values,
     }
 
 
@@ -244,6 +384,24 @@ def render_markdown(report: dict[str, Any]) -> str:
         "or held/dropped/superseded records. Unmatched issues are not surfaced.",
         "",
     ])
+    values = report.get("values")
+    if values:
+        lines.extend([
+            "## Loaded values",
+            f"Overall: {values['checked'] - values['mismatched']}/{values['checked']} correct ({values['accuracy']:.1%})",
+            "",
+            "| Check | Checked | Mismatched | Missing | Skipped | Example mismatch |",
+            "| --- | ---: | ---: | ---: | ---: | --- |",
+        ])
+        for name, c in values["checks"].items():
+            ex = c["mismatch_examples"][0] if c["mismatch_examples"] else None
+            example = f"{ex['key']}: expected {ex['expected']}, got {ex['got']}" if ex else ""
+            lines.append(f"| {cell(name)} | {c['checked']} | {c['mismatched']} | {c['missing']} | {c['skipped']} | {cell(example)} |")
+        lines.append("")
+        if values.get("unapplied_merged_chart_a08"):
+            lines.append(f"Not scored (merge policy): {len(values['unapplied_merged_chart_a08'])} ADT A08 phone update(s) on a "
+                         "merged chart were not applied to the surviving patient.")
+            lines.append("")
     return "\n".join(lines)
 
 
