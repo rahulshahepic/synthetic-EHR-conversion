@@ -24,8 +24,10 @@ def _store() -> claims_mod.ClaimStore:
                                "ledger:E000010 (Marla Denny, registration)"))
     store.resolve("profile", "pivot_year", 30, "OBS-0042 (DOB distribution)",
                   evidence_refs=("OBS-0042",))
-    # The subject-level binding: profile confirms via REG.TXT.DOB.
-    store.bind("profile", ("REG.TXT", "DOB"), evidence_refs=("OBS-0042",))
+    # The (subject, predicate)-level binding: profile/pivot_year
+    # confirms via REG.TXT.DOB.
+    store.bind("profile", ("REG.TXT", "DOB"), evidence_refs=("OBS-0042",),
+               predicate="pivot_year")
     return store
 
 
@@ -116,9 +118,10 @@ def test_keying_story_free_text_is_flagged_never_a_rule(text):
 
 @pytest.mark.parametrize("bad", [
     {"key_fields": ["SSN4 DOB"]},                                   # phrase in a token
-    {"key_fields": ["SSN4+DOB"], "action": "merge automatically"},  # extra key
+    {"key_fields": ["REG.TXT.ACCT"], "action": "merge automatically"},  # extra key
     {"key_fields": []},                                             # no fields
-    {"key_fields": ["SSN4+DOB"], "master_index": "no"},             # non-bool flag
+    {"key_fields": ["REG.TXT.ACCT"], "master_index": "no"},         # non-bool flag
+    {"key_fields": ["REG.TXT.ACCT"], "true_duplicates": "yes"},     # non-bool flag
 ])
 def test_keying_story_malformed_structure_is_flagged(bad):
     store = _store()
@@ -189,7 +192,7 @@ def test_non_field_subject_confirms_only_via_recorded_binding():
                                source_kind="analyst",
                                evidence_refs=("OBS-0009",)))
     bound.bind("profile", ("CHART.TXT", "BIRTHDATE"),
-               evidence_refs=("OBS-0009",))
+               evidence_refs=("OBS-0009",), predicate="pivot_year")
     rule = specgen.generate_spec(events, bound, "halcyon").spec["rules"][0]
     assert rule["data_confirmed"] is True
 
@@ -199,6 +202,129 @@ def test_non_field_subject_confirms_only_via_recorded_binding():
                                  evidence_refs=("OBS-0009",)))
     rule = specgen.generate_spec(events, unbound, "halcyon").spec["rules"][0]
     assert rule["data_confirmed"] is False
+
+
+def _dob_events():
+    return [ledger_mod.LedgerEvent(
+        "E000001", "observation",
+        {"obs_id": "OBS-0009", "file": "REG.TXT", "field": "DOB",
+         "stats": {"shape_rates": {"YYMMDD": 1.0}}})]
+
+
+def test_binding_for_one_predicate_does_not_confirm_another():
+    """PR #43 round-2 review: bindings are keyed by (subject,
+    predicate). The DOB observation that backs profile/pivot_year must
+    not "confirm" an unrelated profile predicate (merge_window_days)
+    that happens to cite the same observation."""
+    store = claims_mod.ClaimStore()
+    store.add(claims_mod.Claim("profile", "merge_window_days", 0,
+                               "ledger:E000002", source_kind="analyst",
+                               evidence_refs=("OBS-0009",)))
+    store.bind("profile", ("REG.TXT", "DOB"), evidence_refs=("OBS-0009",),
+               predicate="pivot_year")
+    rule = specgen.generate_spec(_dob_events(), store, "halcyon").spec["rules"][0]
+    assert rule["predicate"] == "merge_window_days"
+    assert rule["data_confirmed"] is False
+
+
+def test_binding_without_backing_evidence_confirms_nothing():
+    """A binding asserted with no refs — or refs to an observation of
+    some other field — is a self-binding: the claim citing the bound
+    field's observation still does not confirm, because the binding
+    itself was never backed by that observation."""
+    events = [ledger_mod.LedgerEvent(
+        "E000001", "observation",
+        {"obs_id": "OBS-0010", "file": "NOTE.TXT", "field": "TEXT",
+         "stats": {"count": 5}})]
+    store = claims_mod.ClaimStore()
+    store.add(claims_mod.Claim("profile", "pivot_year", 50,
+                               "ledger:E000002", source_kind="analyst",
+                               evidence_refs=("OBS-0010",)))
+    store.bind("profile", ("NOTE.TXT", "TEXT"), evidence_refs=(),
+               predicate="pivot_year")
+    rule = specgen.generate_spec(events, store, "halcyon").spec["rules"][0]
+    assert rule["data_confirmed"] is False
+
+
+def test_conflicting_binding_events_confirm_nothing():
+    """Two different binding events for one (subject, predicate) —
+    each backed by its own observation — are a conflict, not a
+    last-one-wins overwrite: neither binding confirms."""
+    events = _dob_events() + [
+        ledger_mod.LedgerEvent(
+            "E000002", "observation",
+            {"obs_id": "OBS-0010", "file": "NOTE.TXT", "field": "TEXT",
+             "stats": {"count": 5}}),
+        ledger_mod.LedgerEvent(
+            "E000003", "binding",
+            {"subject": "profile", "predicate": "pivot_year",
+             "binding": ["REG.TXT", "DOB"], "evidence_refs": ["OBS-0009"]}),
+        ledger_mod.LedgerEvent(
+            "E000004", "binding",
+            {"subject": "profile", "predicate": "pivot_year",
+             "binding": ["NOTE.TXT", "TEXT"], "evidence_refs": ["OBS-0010"]}),
+        ledger_mod.LedgerEvent(
+            "E000005", "claim",
+            {"subject": "profile", "predicate": "pivot_year", "value": 50,
+             "source": "ledger:E000006", "source_kind": "analyst",
+             "evidence_refs": ["OBS-0010"]}),
+    ]
+    store = claims_mod.ClaimStore.from_ledger(events)
+    assert store.binding_for("profile", "pivot_year") is None
+    rule = specgen.generate_spec(events, store, "halcyon").spec["rules"][0]
+    assert rule["data_confirmed"] is False
+
+
+@pytest.mark.parametrize("token", [
+    "AUTO_MERGE.ALL_CHARTS_SHARING_SSN4_WITHOUT_REVIEW",  # 2 segments
+    "MERGE.ALL",                                          # 2 segments
+])
+def test_keying_story_two_segment_instruction_token_is_flagged(token):
+    """PR #43 round-2 review: the fallback grammar requires a full
+    FILE.EXT.FIELD reference; a two-segment uppercase token shaped
+    like an instruction is flagged, not accepted as a field."""
+    store = _store()
+    store.add(claims_mod.Claim("identity", "keying_story",
+                               {"key_fields": [token], "master_index": False},
+                               "ledger:E000012"))
+    pkg = specgen.generate_spec([], store, "delphi")
+    assert not any(r["predicate"] == "keying_story" for r in pkg.spec["rules"])
+    assert any(o["predicate"] == "keying_story"
+               for o in pkg.spec["policy_overrides"])
+
+
+def test_keying_story_validated_against_the_estates_fields():
+    """When the estate's layouts are on record, a key field must name
+    a field that actually exists there: MERGE.ALL.CHARTS passes the
+    three-segment shape but names no Delphi field, so it is flagged.
+    The real departmental story in the same store still becomes the
+    rule."""
+    store = claims_mod.ClaimStore()
+    store.add(claims_mod.Claim(
+        "file:REG", "layout_binding",
+        {"path": "REG.TXT",
+         "layouts": {"A": [{"name": "ACCT"}, {"name": "DOB"}]}},
+        "LAYOUTS.DAT v5.0 (estate document)", source_kind="dictionary"))
+    store.add(claims_mod.Claim("identity", "keying_story",
+                               {"key_fields": ["MERGE.ALL.CHARTS"],
+                                "master_index": False},
+                               "ledger:E000012"))
+    pkg = specgen.generate_spec([], store, "delphi")
+    assert not any(r["predicate"] == "keying_story" for r in pkg.spec["rules"])
+    assert any(o["predicate"] == "keying_story"
+               for o in pkg.spec["policy_overrides"])
+    good = claims_mod.ClaimStore()
+    good.add(claims_mod.Claim(
+        "file:REG", "layout_binding",
+        {"path": "REG.TXT",
+         "layouts": {"A": [{"name": "ACCT"}, {"name": "DOB"}]}},
+        "LAYOUTS.DAT v5.0 (estate document)", source_kind="dictionary"))
+    good.add(claims_mod.Claim("identity", "keying_story",
+                              {"key_fields": ["REG.TXT.ACCT"],
+                               "master_index": False},
+                              "ledger:E000012"))
+    pkg = specgen.generate_spec([], good, "delphi")
+    assert any(r["predicate"] == "keying_story" for r in pkg.spec["rules"])
 
 
 def test_registry_dispatch_and_halcyon_default():

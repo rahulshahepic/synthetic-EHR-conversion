@@ -70,32 +70,131 @@ def test_claims_dictionary_ingest_and_ledger_replay():
 ])
 def test_malformed_bindings_are_rejected_at_the_boundary(bad):
     """PR #43 review, finding 2: a binding's shape is validated once —
-    exactly two non-empty strings — at the binding boundary, both for
-    direct callers and for ledger binding events. A malformed binding
-    used to sail through tuple() and crash spec generation (IndexError
-    / AttributeError) or silently confirm via an ignored third element.
-    Now it raises a clear ValueError and records nothing, so it can
-    never crash generate_spec and never confirm."""
+    exactly two non-empty strings — at the binding boundary. A malformed
+    binding used to sail through tuple() and crash spec generation
+    (IndexError / AttributeError) or silently confirm via an ignored
+    third element. For a direct bind() caller it raises a clear
+    ValueError and records nothing."""
     store = claims_mod.ClaimStore()
     with pytest.raises(ValueError):
-        store.bind("profile", bad)
-    assert store.binding_for("profile") is None
+        store.bind("profile", bad, predicate="pivot_year")
+    assert store.binding_for("profile", "pivot_year") is None
+
+
+@pytest.mark.parametrize("bad", [
+    ["REG.TXT"],                          # one element
+    ["REG.TXT", "DOB", "UNRELATED"],      # three elements
+    ["REG.TXT", 12],                      # non-string element
+    "REG.TXT.DOB",                        # a bare string, not a pair
+    ["REG.TXT", ""],                      # empty element
+    None,                                 # missing entirely
+])
+def test_malformed_binding_events_are_flagged_not_fatal(bad):
+    """PR #43 round-2 review: one bad binding event must not abort the
+    whole ledger replay. The event is skipped and recorded in
+    flagged_bindings with a reason; the rest of the ledger replays."""
+    events = [
+        ledger_mod.LedgerEvent("E000001", "claim",
+                               {"subject": "a", "predicate": "b", "value": 1,
+                                "source": "dict"}),
+        ledger_mod.LedgerEvent(
+            "E000002", "binding",
+            {"subject": "profile", "predicate": "pivot_year", "binding": bad}),
+    ]
+    store = claims_mod.ClaimStore.from_ledger(events)
+    assert store.resolved_value("a", "b") == 1
+    assert store.binding_for("profile", "pivot_year") is None
+    assert len(store.flagged_bindings) == 1
+    assert store.flagged_bindings[0]["event"] == "E000002"
+
+
+def test_binding_event_without_subject_is_flagged_not_fatal():
     events = [ledger_mod.LedgerEvent(
-        "E000001", "binding", {"subject": "profile", "binding": bad})]
-    with pytest.raises(ValueError):
-        claims_mod.ClaimStore.from_ledger(events)
+        "E000001", "binding",
+        {"predicate": "pivot_year", "binding": ["REG.TXT", "DOB"],
+         "evidence_refs": ["OBS-0007"]})]
+    store = claims_mod.ClaimStore.from_ledger(events)
+    assert len(store.flagged_bindings) == 1
 
 
 def test_binding_event_replays_to_the_store():
-    events = [ledger_mod.LedgerEvent(
-        "E000001", "binding",
-        {"subject": "profile", "binding": ["REG.TXT", "DOB"],
-         "evidence_refs": ["OBS-0007"]})]
+    events = [
+        ledger_mod.LedgerEvent(
+            "E000001", "observation",
+            {"obs_id": "OBS-0007", "file": "REG.TXT", "field": "DOB",
+             "stats": {"shape_rates": {"YYMMDD": 1.0}}}),
+        ledger_mod.LedgerEvent(
+            "E000002", "binding",
+            {"subject": "profile", "predicate": "pivot_year",
+             "binding": ["REG.TXT", "DOB"], "evidence_refs": ["OBS-0007"]}),
+    ]
     store = claims_mod.ClaimStore.from_ledger(events)
-    assert store.binding_for("profile") == ("REG.TXT", "DOB")
+    assert store.binding_for("profile", "pivot_year") == ("REG.TXT", "DOB")
     assert store.to_json()["bindings"] == [
-        {"subject": "profile", "binding": ["REG.TXT", "DOB"],
-         "evidence_refs": ["OBS-0007"]}]
+        {"subject": "profile", "predicate": "pivot_year",
+         "binding": ["REG.TXT", "DOB"], "evidence_refs": ["OBS-0007"]}]
+
+
+def test_binding_event_without_matching_observation_is_flagged():
+    """PR #43 round-2 review: a binding event is trusted only when a
+    cited data observation actually describes the bound (file, field).
+    A binding asserted with no refs — the self-binding route, binding a
+    subject to whatever field a later claim happens to cite — is
+    skipped and flagged, never recorded."""
+    events = [
+        ledger_mod.LedgerEvent(
+            "E000001", "observation",
+            {"obs_id": "OBS-0001", "file": "NOTE.TXT", "field": "TEXT",
+             "stats": {"count": 3}}),
+        ledger_mod.LedgerEvent(
+            "E000002", "binding",
+            {"subject": "profile", "predicate": "pivot_year",
+             "binding": ["NOTE.TXT", "TEXT"], "evidence_refs": []}),
+    ]
+    store = claims_mod.ClaimStore.from_ledger(events)
+    assert store.binding_for("profile", "pivot_year") is None
+    assert len(store.flagged_bindings) == 1
+
+
+def test_binding_requires_a_predicate_and_rejects_field_subjects():
+    """Bindings are keyed by (subject, predicate): no predicate, no
+    binding. A field: subject names its own binding, so a recorded
+    binding for one is refused instead of silently ignored."""
+    store = claims_mod.ClaimStore()
+    with pytest.raises(ValueError):
+        store.bind("profile", ("REG.TXT", "DOB"))
+    with pytest.raises(ValueError):
+        store.bind("field:REG.TXT.DOB", ("LAB.TXT", "RESULT"),
+                   predicate="convention")
+
+
+def test_conflicting_rebind_is_a_conflict_not_an_overwrite():
+    """A later, different binding for the same (subject, predicate)
+    does not silently replace the earlier one: the first stays, the
+    conflict is recorded, and the conflicted key binds nothing."""
+    store = claims_mod.ClaimStore()
+    store.bind("profile", ("REG.TXT", "DOB"), predicate="pivot_year",
+               evidence_refs=("OBS-0001",))
+    store.bind("profile", ("NOTE.TXT", "TEXT"), predicate="pivot_year",
+               evidence_refs=("OBS-0002",))
+    assert store.bindings[("profile", "pivot_year")] == ("REG.TXT", "DOB")
+    assert store.binding_for("profile", "pivot_year") is None
+    assert store.to_json()["binding_conflicts"] == [
+        {"subject": "profile", "predicate": "pivot_year",
+         "kept": ["REG.TXT", "DOB"], "rejected": [["NOTE.TXT", "TEXT"]]}]
+
+
+def test_canon_does_not_reorder_non_keying_key_fields():
+    """PR #43 round-2 review: _canon sorting key_fields is scoped to
+    identity/keying_story. An ordered composite key elsewhere (a layout
+    binding's key_fields list) keeps its order: swapped parts are a
+    different value and open a dispute."""
+    store = claims_mod.ClaimStore()
+    store.add(claims_mod.Claim("file:X", "layout_binding",
+                               {"key_fields": ["ACCT", "DATE"]}, "layouts A"))
+    store.add(claims_mod.Claim("file:X", "layout_binding",
+                               {"key_fields": ["DATE", "ACCT"]}, "layouts B"))
+    assert store.dispute("file:X", "layout_binding") is not None
 
 
 # -- coverage -----------------------------------------------------------------

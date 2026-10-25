@@ -91,37 +91,43 @@ def _caught_by(rule: dict[str, Any]) -> str:
     return "caught-by-profiling" if rule.get("data_confirmed") else "swallowed"
 
 
-# Field names that make a key a cross-person demographic match — the
-# position the graders treat as false, whatever its shape.
-_DEMOGRAPHIC_FIELDS = {"SSN4", "DOB", "NAME"}
+# Field names that make a key a cross-person demographic / person
+# match — the position the graders treat as false, whatever its shape.
+# Matched against every component of every token, composites included.
+_DEMOGRAPHIC_FIELDS = {"SSN", "SSN4", "DOB", "NAME", "PATIENT_NAME", "MRN"}
 
 
 def _keying_position(value: dict[str, Any], check: dict[str, Any]) -> str | None:
     """The position a structured keying story takes, graded against the
     expected structured facts in the check data (``keying_truth``) — not
-    shape alone. The true position: charts keyed by per-department
-    account fields (the departmental ``*.ACCT`` fields, at least
-    ``min_departments`` distinct departments) and no master index. The
-    false family: a master index, a single key treated as identity, or
-    demographic match keys (SSN4/DOB/NAME). ``master_index`` absent
-    grades the same as False — the spec validator treats the flag as
-    optional, so a departmental story without it is the true position,
-    not neither. Anything else — unrelated fields, one department's
-    keys alone — takes neither position."""
+    shape alone. The true position: EVERY component of every key field
+    is a per-department account reference (``<dept>.*.ACCT``), spanning
+    at least ``min_departments`` distinct departments, with no master
+    index. A composite token is split and checked part by part: it
+    takes its field name from every part, not only the last, and its
+    department from every part, not only the first — so
+    ``LAB.TXT.MRN+REG.TXT.ACCT`` is not a lab account key. The false
+    family: a master index, a single key treated as identity, or any
+    demographic/person component (SSN, SSN4, DOB, NAME, PATIENT_NAME,
+    MRN) anywhere in the story. ``master_index`` absent grades the
+    same as False — the spec validator treats the flag as optional, so
+    a departmental story without it is the true position, not neither.
+    Anything else — unrelated fields, one department's keys alone, a
+    mix of account and non-account fields — takes neither position."""
     fields = value.get("key_fields") or []
     expected = check.get("keying_truth") or {}
     account_field = expected.get("account_field", "ACCT")
     min_departments = expected.get("min_departments", 2)
     if value.get("master_index") is True or len(fields) == 1:
         return "false"
-    leaf_fields = [str(token).rsplit(".", 1)[-1]
-                   for token in fields for token in str(token).split("+")]
+    parts = [part for token in fields for part in str(token).split("+")]
+    leaf_fields = [part.rsplit(".", 1)[-1] for part in parts]
     if any(leaf in _DEMOGRAPHIC_FIELDS for leaf in leaf_fields):
         return "false"
-    departments = {str(token).split(".")[0] for token in fields
-                   if str(token).rsplit(".", 1)[-1] == account_field}
-    if len(departments) >= min_departments:
-        return "truth"
+    if parts and all(leaf == account_field for leaf in leaf_fields):
+        departments = {part.split(".")[0] for part in parts}
+        if len(departments) >= min_departments:
+            return "truth"
     return None
 
 
@@ -145,14 +151,23 @@ def grade_entry(entry: dict[str, Any], spec: dict[str, Any]) -> dict[str, Any]:
                       None)
         if keying is not None and policy is not None:
             value = keying.get("value")
-            if isinstance(value, dict) and value.get("true_duplicates") is True:
+            # Routing requires BOTH the recorded resolved fact AND a
+            # keying story that takes the true position: true_duplicates
+            # recorded on top of a false keying story (a demographic
+            # match key, a master index) resolves nothing — the story
+            # itself is the false position wearing the fact as a badge.
+            truth_check = {"keying_truth": {"account_field": "ACCT",
+                                            "min_departments": 2}}
+            if isinstance(value, dict) and value.get("true_duplicates") is True \
+                    and _keying_position(value, truth_check) == "truth":
                 return {"id": entry["id"], "verdict": "routed-to-runtime-question",
                         "detail": "the disagreement resolves into per-person matching "
                                   "(keying story, true duplicate charts recorded) "
                                   "with every merge decided by a human"}
             return {"id": entry["id"], "verdict": "swallowed",
                     "detail": "the spec's keying story does not record the resolved "
-                              "fact (registration creates true duplicate charts), "
+                              "fact (registration creates true duplicate charts) "
+                              "on a true-position keying story, "
                               "so the resolution is not fully recorded"}
         return {"id": entry["id"], "verdict": "swallowed",
                 "detail": "no keying story / merge policy in the spec"}

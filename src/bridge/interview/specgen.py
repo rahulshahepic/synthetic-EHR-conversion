@@ -15,9 +15,11 @@ when a cited observation id resolves to an actual profiler observation
 recorded in the ledger — an ``OBS-<digits>`` event with non-empty stats —
 *and* that observation is about this rule's subject: a ``field:`` subject
 names its file and field in the subject itself, and any other subject
-confirms only through the binding recorded for the subject itself — a
-ledger ``binding`` event, recorded once per subject with its own
-evidence. A binding is never carried on a claim or a resolution, so no
+confirms only through the binding recorded for the (subject, predicate)
+itself — a ledger ``binding`` event, recorded once per
+(subject, predicate) with its own evidence, and itself backed by a
+cited observation describing the bound field (a binding event with no
+such evidence, or a conflicting rebind, confirms nothing). A binding is never carried on a claim or a resolution, so no
 claim can bind itself to whatever observation it cites. The generator
 carries no per-source binding table, so a subject from a new source can
 be confirmed as soon as its interview records the binding. An
@@ -55,7 +57,7 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
-from .claims import Claim, ClaimStore, Dispute, _canon
+from .claims import Claim, ClaimStore, Dispute, values_match
 from .coverage import Inventory, build_checklist, uncovered
 from .ledger import LedgerEvent
 
@@ -85,23 +87,74 @@ MERGE_POLICY_RULE = {
 
 _OBS_DATA_ID = re.compile(r"^OBS-\d+$")
 
-# A key field in a structured keying story: a field reference in a strict
-# grammar — an uppercase FILE.FIELD(.SEGMENT) reference such as
-# ``REG.TXT.ACCT``, optionally a ``+`` composite of such references
-# (``SSN4+DOB``). Lowercase, hyphens and free words fail the grammar, so
-# an instruction ("auto-merge-any-two-charts-...") cannot hide inside a
-# single token the way it could when only whitespace was banned.
-_KEY_FIELD_TOKEN = re.compile(
-    r"^[A-Z0-9_]+(\.[A-Z0-9_]+){1,2}(\+[A-Z0-9_]+(\.[A-Z0-9_]+)*)*$")
+# A key field in a structured keying story: a field reference, or a
+# ``+`` composite of field references (``REG.TXT.SSN4+REG.TXT.DOB``).
+# A bare grammar cannot keep an instruction out on its own — an
+# uppercase token like ``AUTO_MERGE.ALL_CHARTS`` is shaped exactly like
+# a field reference — so when the estate's fields are on record (the
+# layout bindings in the claim store, the coverage inventory, the
+# ledger's observations) every reference must name a field that
+# actually exists in the estate. When no estate fields are on record at
+# all, the fallback is the strict three-segment grammar
+# (``FILE.EXT.FIELD``): a two-segment token (``MERGE.ALL``,
+# ``AUTO_MERGE.ALL_CHARTS_SHARING_SSN4_WITHOUT_REVIEW``) or a bare word
+# (``SSN4+DOB``) is not a field reference either way. Lowercase,
+# hyphens and free words fail both routes, so an instruction
+# ("auto-merge-any-two-charts-...") cannot hide inside a single token
+# the way it could when only whitespace was banned.
+_KEY_FIELD_PART = re.compile(r"^[A-Z0-9_]+\.[A-Z0-9_]+\.[A-Z0-9_]+$")
 
 
-def _valid_keying_story(value: Any) -> dict[str, Any] | None:
+def _known_fields(store: ClaimStore, observations: dict[str, dict[str, Any]],
+                  inventory: Inventory | None) -> set[str]:
+    """The estate's real ``FILE.EXT.FIELD`` references, from every
+    record available at generation time: layout-binding claims (the
+    layouts' field lists and the file's path), the coverage inventory,
+    and the profiler observations recorded in the ledger."""
+    known: set[str] = set()
+    for claim in store.claims:
+        if claim.predicate != "layout_binding" or not isinstance(claim.value, dict):
+            continue
+        path = claim.value.get("path")
+        if not isinstance(path, str) or not path:
+            continue
+        for fields in (claim.value.get("layouts") or {}).values():
+            if not isinstance(fields, list):
+                continue
+            for f in fields:
+                if isinstance(f, dict) and isinstance(f.get("name"), str):
+                    known.add(f"{path}.{f['name']}")
+    if inventory is not None:
+        for fname, field_names in inventory.files.items():
+            for name in field_names:
+                known.add(f"{fname}.{name}")
+    for payload in observations.values():
+        file, field = payload.get("file"), payload.get("field")
+        if isinstance(file, str) and file and isinstance(field, str) and field:
+            known.add(f"{file}.{field}")
+    return known
+
+
+def _valid_key_field(token: Any, known_fields: set[str]) -> bool:
+    if not isinstance(token, str) or not token:
+        return False
+    for part in token.split("+"):
+        if known_fields:
+            if part not in known_fields:
+                return False
+        elif not _KEY_FIELD_PART.match(part):
+            return False
+    return True
+
+
+def _valid_keying_story(value: Any,
+                        known_fields: set[str] | None = None) -> dict[str, Any] | None:
     """The keying story as a structured value, or None if it is not one.
 
     A keying story states which fields key a chart, whether a master
     index exists, and whether registration creates true duplicate charts
     — a dict whose only keys are ``key_fields`` (a non-empty list of
-    field-reference tokens in the strict grammar above) and the optional
+    field-reference tokens validated as above) and the optional
     booleans ``master_index`` and ``true_duplicates``. Field order is not
     meaningful: the returned story carries the fields de-duplicated and
     sorted, so the same fields in a different order are the same story.
@@ -114,8 +167,7 @@ def _valid_keying_story(value: Any) -> dict[str, Any] | None:
     fields = value.get("key_fields")
     if not isinstance(fields, list) or not fields:
         return None
-    if any(not isinstance(f, str) or not _KEY_FIELD_TOKEN.match(f)
-           for f in fields):
+    if any(not _valid_key_field(f, known_fields or set()) for f in fields):
         return None
     for flag in ("master_index", "true_duplicates"):
         if flag in value and not isinstance(value[flag], bool):
@@ -151,9 +203,11 @@ def _is_data_observation(ref: str, observations: dict[str, dict[str, Any]]) -> b
 def _field_subject_binding(subject: str) -> tuple[str, str] | None:
     """The (file, field) a ``field:`` subject names, parsed from the
     subject itself. Non-field subjects have no intrinsic binding: theirs
-    is the subject-level binding recorded on the store
+    is the (subject, predicate)-level binding recorded on the store
     (``ClaimStore.bindings``), from a ledger ``binding`` event. No
-    binding, no confirmation."""
+    binding, no confirmation. (A recorded binding for a ``field:``
+    subject is refused at the store boundary, so this parse can never
+    be shadowed by one.)"""
     if subject.startswith("field:"):
         rest = subject[len("field:"):]
         if "." in rest:
@@ -234,15 +288,26 @@ def _rule_provenance(store: ClaimStore, subject: str, predicate: str, value: Any
     """
     dispute = store.dispute(subject, predicate)
     winners = [c for c in store.get(subject, predicate)
-               if _canon(c.value) == _canon(value)]
+               if values_match(subject, predicate, c.value, value)]
     kind: str | None = None
     confirmed = False
     winning_src = ""
     # The binding an observation must match to confirm this rule: parsed
-    # from a ``field:`` subject, else the subject-level binding recorded
-    # on the store. Claims and resolutions carry no binding of their own.
-    subject_binding = _field_subject_binding(subject) \
-        or store.binding_for(subject)
+    # from a ``field:`` subject, else the (subject, predicate)-level
+    # binding recorded on the store. Claims and resolutions carry no
+    # binding of their own. A recorded binding counts only when it is
+    # itself backed by evidence: at least one of its recorded refs must
+    # be a real observation of the bound (file, field) — a binding
+    # asserted with empty or unrelated refs (the self-binding route
+    # through a bare binding event) confirms nothing. A conflicted
+    # binding already reads as None from the store.
+    subject_binding = _field_subject_binding(subject)
+    if subject_binding is None:
+        recorded = store.binding_for(subject, predicate)
+        if recorded is not None and _evidence_confirmed(
+                store.binding_refs.get((subject, predicate), ()),
+                recorded, observations):
+            subject_binding = recorded
     if winners:
         kind = _claim_kind(winners[0], observations)
         winning_src = winners[0].source or ""
@@ -288,6 +353,8 @@ def _with_extra_claims(store: ClaimStore, extra: list[Claim]) -> ClaimStore:
     new.claims = list(store.claims)
     new.bindings = dict(store.bindings)
     new.binding_refs = dict(store.binding_refs)
+    new.binding_conflicts = {k: list(v) for k, v in store.binding_conflicts.items()}
+    new.flagged_bindings = list(store.flagged_bindings)
     new.disputes = {
         key: Dispute(subject=d.subject, predicate=d.predicate, claims=list(d.claims),
                      resolved_value=d.resolved_value,
@@ -339,6 +406,7 @@ def generate_spec(events: list[LedgerEvent], store: ClaimStore, source: str,
         if extra:
             store = _with_extra_claims(store, extra)
     observations = _observation_payloads(events)
+    known_fields = _known_fields(store, observations, inventory)
     rules: list[dict[str, Any]] = []
     overrides: list[dict[str, Any]] = []
     invalid_keying: Any = None
@@ -358,7 +426,7 @@ def generate_spec(events: list[LedgerEvent], store: ClaimStore, source: str,
         if value is None:
             continue  # unresolved / null-resolved dispute -> known unknown
         if subject == "identity" and predicate == "keying_story":
-            structured = _valid_keying_story(value)
+            structured = _valid_keying_story(value, known_fields)
             if structured is None:
                 # Not a structured keying fact — free text, or a malformed
                 # structure — so it could carry an instruction no screen

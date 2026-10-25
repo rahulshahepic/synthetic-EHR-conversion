@@ -15,17 +15,54 @@ the single undisputed value, or a dispute's recorded resolution.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
 
-def _canon(value: Any) -> str:
-    if isinstance(value, dict) and isinstance(value.get("key_fields"), list) \
+def _canon(value: Any, *, keying_story: bool = False) -> str:
+    if keying_story and isinstance(value, dict) \
+            and isinstance(value.get("key_fields"), list) \
             and all(isinstance(f, str) for f in value["key_fields"]):
         # A keying story's field order is not meaningful: the same fields
-        # in a different order are the same story, not a dispute.
+        # in a different order are the same story, not a dispute. This is
+        # scoped to the keying story ONLY: other values that happen to
+        # carry a ``key_fields`` list (a layout binding's ordered
+        # composite key, say) are ordered on purpose, and reordering
+        # them in the generic canonicalizer would erase real disputes.
         value = {**value, "key_fields": sorted(set(value["key_fields"]))}
     return json.dumps(value, sort_keys=True, ensure_ascii=False, default=str)
+
+
+def _canon_for(subject: str, predicate: str, value: Any) -> str:
+    return _canon(value, keying_story=(subject, predicate) == ("identity", "keying_story"))
+
+
+def _keying_core(value: Any) -> tuple[tuple[str, ...], Any] | None:
+    """The identity-bearing core of a keying story: its key fields
+    (order-insensitive) and its master-index flag. A resolution may add
+    further recorded facts on top of the winning claim's story (the
+    Delphi resolution adds ``true_duplicates``); the claim that stated
+    the core is still the story's provenance."""
+    if not isinstance(value, dict):
+        return None
+    fields = value.get("key_fields")
+    if not isinstance(fields, list) or not all(isinstance(f, str) for f in fields):
+        return None
+    return (tuple(sorted(set(fields))), value.get("master_index"))
+
+
+def values_match(subject: str, predicate: str, a: Any, b: Any) -> bool:
+    """Whether two values on (subject, predicate) are the same value.
+    For the keying story, a value also matches a claim that stated its
+    core (same key fields, same master-index flag) even when a
+    resolution added further facts (e.g. ``true_duplicates``) on top."""
+    if _canon_for(subject, predicate, a) == _canon_for(subject, predicate, b):
+        return True
+    if (subject, predicate) == ("identity", "keying_story"):
+        core_a, core_b = _keying_core(a), _keying_core(b)
+        return core_a is not None and core_a == core_b
+    return False
 
 
 def validate_binding(value: Any) -> tuple[str, str]:
@@ -34,9 +71,10 @@ def validate_binding(value: Any) -> tuple[str, str]:
     sequence, a non-string element — is rejected with a clear error.
 
     This is the one place bindings are validated. A binding is recorded
-    once per subject (a ledger ``binding`` event, or ``ClaimStore.bind``),
-    never carried on an individual claim or resolution, so no claim can
-    bind itself to whatever observation it happens to cite."""
+    once per (subject, predicate) (a ledger ``binding`` event, or
+    ``ClaimStore.bind``), never carried on an individual claim or
+    resolution, so no claim can bind itself to whatever observation it
+    happens to cite."""
     if isinstance(value, (str, bytes)) or not isinstance(value, (list, tuple)):
         raise ValueError(
             f"binding must be a (file, field) pair, got {value!r}")
@@ -98,7 +136,8 @@ class Dispute:
     def values(self) -> list[Any]:
         seen: list[Any] = []
         for c in self.claims:
-            if _canon(c.value) not in {_canon(v) for v in seen}:
+            if _canon_for(self.subject, self.predicate, c.value) not in \
+                    {_canon_for(self.subject, self.predicate, v) for v in seen}:
                 seen.append(c.value)
         return seen
 
@@ -107,12 +146,24 @@ class ClaimStore:
     def __init__(self) -> None:
         self.claims: list[Claim] = []
         self.disputes: dict[tuple[str, str], Dispute] = {}
-        # Subject-to-field bindings, keyed by subject: the (file, field)
-        # a profiler observation must describe to data-confirm a claim on
-        # that subject. Recorded once per subject — in a ledger, as a
-        # ``binding`` event with its own evidence refs — never per claim.
-        self.bindings: dict[str, tuple[str, str]] = {}
-        self.binding_refs: dict[str, tuple[str, ...]] = {}
+        # Subject-to-field bindings, keyed by (subject, predicate): the
+        # (file, field) a profiler observation must describe to
+        # data-confirm a claim on that one (subject, predicate). Keying
+        # by subject alone would let one predicate's observation
+        # "confirm" every other predicate on the subject. Recorded once
+        # per (subject, predicate) — in a ledger, as a ``binding`` event
+        # with its own evidence refs — never per claim.
+        self.bindings: dict[tuple[str, str], tuple[str, str]] = {}
+        self.binding_refs: dict[tuple[str, str], tuple[str, ...]] = {}
+        # A second, different binding for an already-bound
+        # (subject, predicate) is a conflict, not an overwrite: the
+        # first binding stays, the conflicting one is recorded here,
+        # and a conflicted key earns no data confirmation.
+        self.binding_conflicts: dict[tuple[str, str], list[tuple[str, str]]] = {}
+        # Binding events skipped during ledger replay (malformed shape,
+        # no predicate, a ``field:`` subject, or no cited observation
+        # describing the bound field), with the reason for each.
+        self.flagged_bindings: list[dict[str, Any]] = []
 
     def add(self, claim: Claim) -> Dispute | None:
         """Add a claim; returns the Dispute it created or joined, else None.
@@ -126,8 +177,9 @@ class ClaimStore:
         key = claim.key()
         d = self.disputes.get(key)
         if d is not None and d.resolved:
-            known = {_canon(c.value) for c in d.claims} | {_canon(d.resolved_value)}
-            if _canon(claim.value) not in known:
+            known = {_canon_for(key[0], key[1], c.value) for c in d.claims} \
+                | {_canon_for(key[0], key[1], d.resolved_value)}
+            if _canon_for(key[0], key[1], claim.value) not in known:
                 d.resolved_value = None
                 d.resolution_source = None
                 d.resolution_claimed_by = ""
@@ -135,7 +187,7 @@ class ClaimStore:
                 d.resolution_evidence_refs = ()
         self.claims.append(claim)
         existing = [c for c in self.claims if c.key() == key]
-        distinct = {_canon(c.value) for c in existing}
+        distinct = {_canon_for(key[0], key[1], c.value) for c in existing}
         if len(distinct) > 1:
             if d is None:
                 d = Dispute(subject=key[0], predicate=key[1])
@@ -177,18 +229,51 @@ class ClaimStore:
 
     # -- subject bindings ----------------------------------------------------
     def bind(self, subject: str, binding: Any,
-             evidence_refs: tuple[str, ...] = ()) -> None:
-        """Record the subject-to-field binding for a subject: the (file,
+             evidence_refs: tuple[str, ...] = (), predicate: str = "") -> None:
+        """Record the (subject, predicate)-to-field binding: the (file,
         field) a profiler observation must describe to data-confirm a
-        claim on this subject. The binding is validated here, at the one
-        boundary (``validate_binding``); a malformed binding raises and
-        records nothing. A later binding for the same subject replaces
-        the earlier one — ledger order is the record."""
-        self.bindings[subject] = validate_binding(binding)
-        self.binding_refs[subject] = tuple(evidence_refs)
+        claim on this (subject, predicate). The binding's shape is
+        validated here, at the one boundary (``validate_binding``); a
+        malformed binding raises and records nothing.
 
-    def binding_for(self, subject: str) -> tuple[str, str] | None:
-        return self.bindings.get(subject)
+        A binding needs a predicate: keyed by subject alone, one
+        predicate's observation would confirm every predicate on the
+        subject. A ``field:`` subject names its own (file, field) in the
+        subject itself, so recording a binding for one is rejected —
+        it could only ever agree silently or be silently ignored.
+
+        A second binding for the same (subject, predicate) with the
+        SAME value merges its evidence refs. A DIFFERENT value is a
+        conflict, not an overwrite: the first binding stays, the
+        conflicting one is recorded in ``binding_conflicts``, and the
+        conflicted key earns no data confirmation (``binding_for``
+        returns None for it)."""
+        if not isinstance(predicate, str) or not predicate:
+            raise ValueError(
+                "a binding must name the predicate it binds: bindings "
+                "are keyed by (subject, predicate), never by subject alone")
+        if subject.startswith("field:"):
+            raise ValueError(
+                f"a field: subject names its own binding in the subject "
+                f"itself; refusing a recorded binding for {subject!r}")
+        parsed = validate_binding(binding)
+        key = (subject, predicate)
+        existing = self.bindings.get(key)
+        if existing is not None and existing != parsed:
+            self.binding_conflicts.setdefault(key, []).append(parsed)
+            return
+        self.bindings[key] = parsed
+        merged = list(self.binding_refs.get(key, ()))
+        for ref in evidence_refs:
+            if ref not in merged:
+                merged.append(ref)
+        self.binding_refs[key] = tuple(merged)
+
+    def binding_for(self, subject: str, predicate: str = "") -> tuple[str, str] | None:
+        key = (subject, predicate)
+        if key in self.binding_conflicts:
+            return None
+        return self.bindings.get(key)
 
     def resolved_value(self, subject: str, predicate: str, default: Any = None) -> Any:
         """The value spec generation may use: a dispute's resolution, else the
@@ -206,7 +291,7 @@ class ClaimStore:
         d = self.disputes.get((subject, predicate))
         if d is not None and d.resolved:
             for c in d.claims:
-                if _canon(c.value) == _canon(d.resolved_value):
+                if values_match(subject, predicate, c.value, d.resolved_value):
                     return f"{c.source}; dispute resolved via {d.resolution_source}"
             return f"dispute resolved via {d.resolution_source}"
         vals = self.get(subject, predicate)
@@ -242,8 +327,42 @@ class ClaimStore:
     def from_ledger(cls, events: list) -> "ClaimStore":
         """Rebuild a store from a ledger: ``claim`` events assert claims,
         ``resolve`` events resolve disputes, ``binding`` events record
-        subject-to-field bindings. Deterministic in event order."""
+        (subject, predicate)-to-field bindings. Deterministic in event
+        order.
+
+        A binding event is evidence, not an instruction: it is recorded
+        only when at least one of its cited refs is a real profiler data
+        observation (an ``OBS-<digits>`` event with stats) describing
+        exactly the bound (file, field). A bad binding event — malformed
+        shape, missing subject or predicate, a ``field:`` subject, or
+        no such observation behind it — never aborts the replay and
+        never binds anything: it is skipped and recorded in
+        ``flagged_bindings`` with the reason, so one bad event cannot
+        take down spec generation, the scorecard, and the diff for the
+        whole source. (Direct ``bind()`` callers still get the raise:
+        they are code, not recorded evidence.)"""
         store = cls()
+        observations: dict[str, dict[str, Any]] = {}
+        for e in events:
+            if e.type == "observation":
+                oid = e.payload.get("obs_id")
+                if oid:
+                    observations[oid] = e.payload
+
+        def binding_evidence_ok(refs: tuple[str, ...],
+                                parsed: tuple[str, str]) -> bool:
+            for ref in refs:
+                if not isinstance(ref, str) or not re.match(r"^OBS-\d+$", ref):
+                    continue
+                payload = observations.get(ref, {})
+                if not payload.get("stats"):
+                    continue
+                actual = (str(payload.get("file", "")), str(payload.get("field", "")))
+                if (actual[0].lower(), actual[1].lower()) == \
+                        (parsed[0].lower(), parsed[1].lower()):
+                    return True
+            return False
+
         for e in events:
             p = e.payload
             if e.type == "claim":
@@ -258,13 +377,41 @@ class ClaimStore:
                               source_kind=p.get("source_kind", ""),
                               evidence_refs=tuple(p.get("evidence_refs", ())))
             elif e.type == "binding":
-                # A binding event records the subject's (file, field)
-                # once, with its own evidence refs. The shape is
-                # validated in bind(): a malformed binding event fails
-                # the replay with a clear error, before any spec is
-                # generated from it.
-                store.bind(p["subject"], p.get("binding"),
-                           evidence_refs=tuple(p.get("evidence_refs", ())))
+                # A binding event records the (subject, predicate)'s
+                # (file, field) once, with its own evidence refs. The
+                # event is checked here (shape, subject, predicate,
+                # evidence) and SKIPPED + flagged when bad — see the
+                # docstring. bind() itself still raises for direct
+                # callers.
+                subject = p.get("subject")
+                predicate = p.get("predicate")
+                refs_raw = p.get("evidence_refs", ())
+                refs = tuple(refs_raw) if isinstance(refs_raw, (list, tuple)) else ()
+                reason: str | None = None
+                parsed: tuple[str, str] | None = None
+                try:
+                    parsed = validate_binding(p.get("binding"))
+                except ValueError as exc:
+                    reason = str(exc)
+                if reason is None:
+                    if not isinstance(subject, str) or not subject:
+                        reason = "binding event has no subject"
+                    elif not isinstance(predicate, str) or not predicate:
+                        reason = "binding event has no predicate"
+                    elif subject.startswith("field:"):
+                        reason = ("a field: subject names its own binding "
+                                  "in the subject itself")
+                    elif parsed is None or not binding_evidence_ok(refs, parsed):
+                        reason = ("no cited observation describes the bound "
+                                  "(file, field)")
+                if reason is not None:
+                    store.flagged_bindings.append({
+                        "event": e.id, "subject": subject,
+                        "predicate": predicate, "binding": p.get("binding"),
+                        "evidence_refs": list(refs), "reason": reason})
+                    continue
+                store.bind(subject, parsed, evidence_refs=refs,
+                           predicate=predicate)
         return store
 
     def to_json(self) -> dict[str, Any]:
@@ -295,7 +442,13 @@ class ClaimStore:
             "claims": [claim_json(c) for c in self.claims],
             "disputes": [dispute_json(d) for d in sorted(
                 self.disputes.values(), key=lambda d: (d.subject, d.predicate))],
-            "bindings": [{"subject": s, "binding": list(b),
-                          "evidence_refs": list(self.binding_refs.get(s, ()))}
-                         for s, b in sorted(self.bindings.items())],
+            "bindings": [{"subject": s, "predicate": pred, "binding": list(b),
+                          "evidence_refs": list(self.binding_refs.get((s, pred), ()))}
+                         for (s, pred), b in sorted(self.bindings.items())],
+            "binding_conflicts": [
+                {"subject": s, "predicate": pred,
+                 "kept": list(self.bindings[(s, pred)]),
+                 "rejected": [list(b) for b in rejected]}
+                for (s, pred), rejected in sorted(self.binding_conflicts.items())],
+            "flagged_bindings": list(self.flagged_bindings),
         }

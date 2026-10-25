@@ -99,7 +99,8 @@ def test_recorded_observation_confirms_the_claim_it_backs():
                     source_kind="analyst", evidence_refs=("E000001",)))
     store.resolve("profile", "pivot_year", 30, "OBS-0007 (DOB distribution)",
                   evidence_refs=("OBS-0007",))
-    store.bind("profile", ("REG.TXT", "DOB"), evidence_refs=("OBS-0007",))
+    store.bind("profile", ("REG.TXT", "DOB"), evidence_refs=("OBS-0007",),
+               predicate="pivot_year")
     events = [ledger_mod.LedgerEvent(
         "E000100", "observation",
         {"obs_id": "OBS-0007", "file": "REG.TXT", "field": "DOB",
@@ -494,7 +495,8 @@ def test_binding_recorded_in_the_ledger_confirms_a_non_field_subject():
              "stats": {"shape_rates": {"YY": 1.0}}}),
         ledger_mod.LedgerEvent(
             "E000002", "binding",
-            {"subject": "profile", "binding": ["DEMOG.TXT", "DOBYR"],
+            {"subject": "profile", "predicate": "pivot_year",
+             "binding": ["DEMOG.TXT", "DOBYR"],
              "evidence_refs": ["OBS-0003"]}),
         ledger_mod.LedgerEvent(
             "E000003", "claim",
@@ -534,13 +536,19 @@ def test_claim_cannot_bind_itself_to_the_observation_it_cites():
     rule = next(r for r in pkg.spec["rules"] if r["predicate"] == "pivot_year")
     assert rule["data_confirmed"] is False
 
-    # With the subject's binding properly recorded (profile = REG.TXT
-    # DOB), the same NOTE.TXT.TEXT observation still confirms nothing:
-    # it is about a different field than the subject's binding.
+    # With the (subject, predicate)'s binding properly recorded
+    # (profile/pivot_year = REG.TXT DOB, backed by its own DOB
+    # observation), the same NOTE.TXT.TEXT observation still confirms
+    # nothing: it is about a different field than the binding.
     events.append(ledger_mod.LedgerEvent(
-        "E000003", "binding",
-        {"subject": "profile", "binding": ["REG.TXT", "DOB"],
-         "evidence_refs": ["OBS-0001"]}))
+        "E000003", "observation",
+        {"obs_id": "OBS-0002", "file": "REG.TXT", "field": "DOB",
+         "stats": {"shape_rates": {"YYMMDD": 1.0}}}))
+    events.append(ledger_mod.LedgerEvent(
+        "E000004", "binding",
+        {"subject": "profile", "predicate": "pivot_year",
+         "binding": ["REG.TXT", "DOB"],
+         "evidence_refs": ["OBS-0002"]}))
     store = ClaimStore.from_ledger(events)
     pkg = specgen.generate_spec(events, store, "acceptance")
     rule = next(r for r in pkg.spec["rules"] if r["predicate"] == "pivot_year")

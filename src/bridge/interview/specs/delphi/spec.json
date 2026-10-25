@@ -2491,7 +2491,7 @@
    "predicate": "keying_story",
    "provenance": {
     "kind": "analyst",
-    "ref": "dispute resolved via ledger answers (Greg Holt, systems; Marla Denny, registration)"
+    "ref": "ledger:E000066 (Greg Holt, systems); dispute resolved via ledger answers (Greg Holt, systems; Marla Denny, registration)"
    },
    "subject": "identity",
    "value": {

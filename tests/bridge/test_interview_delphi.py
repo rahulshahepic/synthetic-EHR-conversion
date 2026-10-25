@@ -130,6 +130,14 @@ def _keying_spec(value):
     {"key_fields": ["REG.TXT.ACCT", "REG.TXT.DOB"], "master_index": False},
     {"key_fields": ["LAB.TXT.ACCT", "PHA.TXT.ACCT"], "master_index": True},
     {"key_fields": ["REG.TXT.ACCT"], "master_index": False},
+    # Round-2 review: demographic names beyond the old exact set, and
+    # composite tokens whose non-account part hides in front.
+    {"key_fields": ["REG.TXT.SSN", "REG.TXT.ACCT", "LAB.TXT.ACCT"],
+     "master_index": False},
+    {"key_fields": ["REG.TXT.PATIENT_NAME", "REG.TXT.ACCT", "LAB.TXT.ACCT"],
+     "master_index": False},
+    {"key_fields": ["LAB.TXT.MRN+REG.TXT.ACCT", "RAD.TXT.ACCT"],
+     "master_index": False},
 ])
 def test_keying_position_grades_facts_not_shape(value):
     """PR #43 review, finding 7: the true position is per-department
@@ -167,6 +175,35 @@ def test_duplicate_charts_requires_the_resolved_fact_recorded():
                              "master_index": False, "true_duplicates": True})
     verdict = scorecard.grade_entry({"id": "disagreement_duplicate_charts"}, recorded)
     assert verdict["verdict"] == "routed-to-runtime-question"
+
+
+@pytest.mark.parametrize("value", [
+    # true_duplicates recorded on a FALSE keying story resolves nothing:
+    {"key_fields": ["REG.TXT.SSN4", "REG.TXT.DOB"],
+     "master_index": True, "true_duplicates": True},
+    {"key_fields": ["REG.TXT.SSN4", "REG.TXT.DOB"],
+     "master_index": False, "true_duplicates": True},
+    {"key_fields": ["LAB.TXT.ACCT", "REG.TXT.ACCT"],
+     "master_index": True, "true_duplicates": True},
+])
+def test_duplicate_charts_also_requires_the_true_keying_position(value):
+    """PR #43 round-2 review: true_duplicates alone used to earn
+    "routed" whatever the keying story said. Routing also requires
+    _keying_position == truth."""
+    verdict = scorecard.grade_entry(
+        {"id": "disagreement_duplicate_charts"}, _keying_spec(value))
+    assert verdict["verdict"] == "swallowed", verdict
+
+
+def test_keying_rule_keeps_its_analyst_provenance(pkg):
+    """PR #43 round-2 review: the resolution adds true_duplicates on
+    top of Greg Holt's claimed story, so exact-value matching found no
+    winning claim and the rule's ref collapsed to the bare resolution.
+    The ref must keep the analyst attribution (match on the keying
+    core: key_fields + master_index)."""
+    rule = next(r for r in pkg.spec["rules"] if r["predicate"] == "keying_story")
+    assert rule["provenance"]["ref"].startswith(
+        "ledger:E000066 (Greg Holt, systems); dispute resolved via")
 
 
 def test_delphi_staging_through_committed_binding(tmp_path):
