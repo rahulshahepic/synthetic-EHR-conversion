@@ -197,7 +197,6 @@ def _value_checks(db: sqlite3.Connection, run_id: str, truth: dict[str, Any],
     knows the truth for must match it. Only loaded records are checked; DST-adjusted times are skipped.
     """
     checks: dict[str, _Check] = defaultdict(_Check)
-    merged_a08: list[dict[str, Any]] = []
     person_of = {pat: person for person, pats in persons.items() for pat in pats}
     rows = db.execute("SELECT rtype, source_key, source, mapped, annotations FROM records "
                       "WHERE run_id=? AND status='loaded'", (run_id,))
@@ -238,26 +237,25 @@ def _value_checks(db: sqlite3.Connection, run_id: str, truth: dict[str, Any],
                 if person:
                     checks["Patient birthDate = answer key"].record(key, person["dob"], mapped.get("birthDate"))
             phones = {t.get("value") for t in mapped.get("telecom", [])}
+            # Policy: the newest demographics win across merged charts (chart rows as of their LAST_UPD day).
+            stamps = [m.get("LAST_UPD", "") + "0000" for m in src.get("members", [])]
+            stamps += [(a or {}).get("at", "") for a in src.get("a08", {}).values()]
             for m in members:
-                if m in truth.get("a08_demographics", {}) and m != src.get("primary"):
-                    # Bridge applies A08 updates from the surviving chart only; which chart's demographics win
-                    # after a merge is policy, so these are listed rather than scored.
+                if m in truth.get("a08_demographics", {}):
                     want = truth["a08_demographics"][m]["phone"]
-                    if want not in phones:
-                        merged_a08.append({"key": key, "merged_chart": m, "a08_phone": want, "loaded": sorted(phones)})
-                elif m in truth.get("a08_demographics", {}):
-                    want = truth["a08_demographics"][m]["phone"]
+                    at = (src.get("a08", {}).get(m) or {}).get("at", "")
+                    superseded = any(other > at for other in stamps)
                     # A 7-digit A08 phone has no area code: the full number is unrecoverable from the source.
                     raw = (src.get("a08", {}).get(m) or {}).get("phone") or ""
                     digits = re.sub(r"\D", "", re.split(r"(?i)x|ext", raw)[0])
                     checks["Patient phone = latest ADT A08"].record(
-                        key, want, want if want in phones else sorted(phones) or None, skipped=len(digits) < 10)
+                        key, want, want if want in phones else sorted(phones) or None,
+                        skipped=len(digits) < 10 or not at or superseded)
     out = {name: check.report() for name, check in sorted(checks.items())}
     checked = sum(c["checked"] for c in out.values())
     mismatched = sum(c["mismatched"] for c in out.values())
     return {"checks": out, "checked": checked, "mismatched": mismatched,
-            "accuracy": (checked - mismatched) / checked if checked else 1.0,
-            "unapplied_merged_chart_a08": merged_a08}
+            "accuracy": (checked - mismatched) / checked if checked else 1.0}
 
 
 def score(export_dir: Path | str, run_db: Path | str, run_id: str | None = None) -> dict[str, Any]:
@@ -398,10 +396,6 @@ def render_markdown(report: dict[str, Any]) -> str:
             example = f"{ex['key']}: expected {ex['expected']}, got {ex['got']}" if ex else ""
             lines.append(f"| {cell(name)} | {c['checked']} | {c['mismatched']} | {c['missing']} | {c['skipped']} | {cell(example)} |")
         lines.append("")
-        if values.get("unapplied_merged_chart_a08"):
-            lines.append(f"Not scored (merge policy): {len(values['unapplied_merged_chart_a08'])} ADT A08 phone update(s) on a "
-                         "merged chart were not applied to the surviving patient.")
-            lines.append("")
     return "\n".join(lines)
 
 

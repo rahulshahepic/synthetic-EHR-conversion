@@ -191,6 +191,38 @@ def map_plan(ctx: MapContext) -> dict[str, Any]:
 SEX_MAP = {"M": "male", "F": "female", "U": "unknown"}
 
 
+def _newest(s: dict[str, Any], primary: dict[str, str], db_field: str, a08_field: str,
+            empty: str = "") -> tuple[str, str | None]:
+    """Newest non-empty value of a demographic field across every merged chart and its ADT A08 updates.
+
+    Returns (raw value, where it came from): None for the primary chart's own row, "a08:<PAT_ID>" for an
+    A08 message, "chart:<PAT_ID>" for another merged chart's row. A chart row counts as of the start of its
+    LAST_UPD day, so an A08 sent that day wins; between chart rows of the same day the primary wins.
+    """
+    best: tuple[str, str, str | None] | None = None  # (as-of timestamp, value, source)
+    for m in sorted(s["members"], key=lambda m: m is not primary):
+        candidates = [(m.get("LAST_UPD", "") + "0000", m.get(db_field, ""), None if m is primary else f"chart:{m['PAT_ID']}")]
+        a08 = s.get("a08", {}).get(m["PAT_ID"])
+        if a08:
+            candidates.append((a08.get("at", ""), a08.get(a08_field, ""), f"a08:{m['PAT_ID']}"))
+        for when, value, source in candidates:
+            if value and value.strip(empty + " ") and (best is None or when > best[0]):
+                best = (when, value, source)
+    if best is None:
+        return primary.get(db_field, ""), None
+    if best[2] and not best[2].endswith(f":{primary['PAT_ID']}") and best[1] == primary.get(db_field, ""):
+        return best[1], None  # another chart repeats the primary's value: nothing new came from it
+    return best[1], best[2]
+
+
+def _from(source: str | None, primary_id: str) -> str | None:
+    if source is None:
+        return None
+    kind, pat = source.split(":", 1)
+    where = "" if pat == primary_id else f" of merged chart {pat}"
+    return f"newer {{}} from ADT A08{where}" if kind == "a08" else f"newest {{}} from merged chart {pat}"
+
+
 @mapper("Patient")
 def map_patient(ctx: MapContext) -> dict[str, Any] | None:
     s = ctx.src
@@ -281,8 +313,9 @@ def map_patient(ctx: MapContext) -> dict[str, Any] | None:
     if race_txt == "hispanic":
         ctx.note("ethnicity", "inferred", 0.5, "'Hispanic' recorded in race field moved to ethnicity", p["RACE"])
 
-    a08 = s.get("a08", {}).get(p["PAT_ID"])
-    addr_raw = a08["addr"] if a08 and a08.get("addr", "").strip("^") else p["ADDR"]
+    # Newest demographics win, whichever merged chart (or ADT A08 for it) they came from.
+    addr_raw, addr_src = _newest(s, p, "ADDR", "addr", empty="^")
+    addr_note = _from(addr_src, p["PAT_ID"])
     address = []
     if addr_raw and addr_raw.strip("^ "):
         crammed = "^" not in addr_raw
@@ -293,7 +326,8 @@ def map_patient(ctx: MapContext) -> dict[str, Any] | None:
             ad = ad or demo.Address([addr_raw.strip()], "", "", "")
         else:
             ad = demo.parse_address(addr_raw)
-            ctx.note("address", "exact" if a08 else "transformed", 1.0, "newer address from ADT A08" if a08 else None)
+            from_a08 = bool(addr_src and addr_src.startswith("a08:"))
+            ctx.note("address", "exact" if from_a08 else "transformed", 1.0, addr_note.format("address") if addr_note else None)
         a = {"lines": ad.lines}
         if ad.city:
             a["city"] = ad.city
@@ -304,14 +338,18 @@ def map_patient(ctx: MapContext) -> dict[str, Any] | None:
         address.append(a)
 
     telecom = []
-    phones = [("home", a08["phone"] if a08 and a08.get("phone") else p["PHONE_HOME"]), ("mobile", p["PHONE_CELL"])]
+    home_raw, home_src = _newest(s, p, "PHONE_HOME", "phone")
+    # Annotate only when the phone came from another merged chart (the primary's own A08 was always used).
+    phone_note = _from(home_src, p["PAT_ID"]) if home_src and home_src.split(":", 1)[1] != p["PAT_ID"] else None
+    phones = [("home", home_raw), ("mobile", p["PHONE_CELL"])]
     for use, raw in phones:
         if not raw:
             continue
         e164, ext = demo.normalize_phone(raw), bool(re.search(r"(?i)(x|ext\.?)\s*\d+\s*$", raw))
         if e164:
             telecom.append({"system": "phone", "value": e164, "use": use})
-            ctx.note(f"telecom.{use}", "degraded" if ext else "transformed", 0.5, "extension dropped" if ext else None, raw if ext else None)
+            note = "extension dropped" if ext else (phone_note.format("phone") if use == "home" and phone_note else None)
+            ctx.note(f"telecom.{use}", "degraded" if ext else "transformed", 0.5, note, raw if ext else None)
         else:
             ctx.note(f"telecom.{use}", "dropped", 0.5, "phone not normalizable to E.164", raw)
 
