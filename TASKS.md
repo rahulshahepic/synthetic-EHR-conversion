@@ -80,8 +80,13 @@ Files: `testbed/scoring.py` (new), `tests/testbed/test_scoring.py`
 Given a Halcyon export dir and a Bridge run DB, report for every planted issue type in `answer_key/issues.jsonl` how many were *surfaced* by Bridge (a question linked to the record, a lossy fidelity annotation on it, or a dropped/superseded/held status), and identity accuracy (`answer_key/persons.json` vs Bridge's `xref` kind `pat`: pairwise precision/recall). Read the run DB with plain `sqlite3` (tables documented in `src/bridge/runs/store.py`) — `testbed/` must not import `bridge`. Output JSON + a short Markdown table. Acceptance: tests generate a small export, run Bridge via the fixtures pattern in `tests/bridge/conftest.py`, and assert the report has an entry for every issue type.
 
 ### T-110 · Performance at 50k patients · `done`
-Files: `tools/bench.py` (new) plus targeted changes in `src/bridge/runs/store.py` and `src/nimbus/service.py` only.
-Today a 500-patient run (~52k Nimbus records) takes ~26s. Profile (`python -m cProfile`) a 5k-patient run and remove the top hotspots (e.g. the `work_queue` blocked-record EXISTS join that concatenates strings, per-record JSON parsing, per-record Nimbus history inserts). Keep behavior identical: the full test suite must pass unchanged. Report before/after timings in the PR.
+Files: `tools/bench.py`, `.github/workflows/t110-50k.yml`, `src/bridge/runs/`, `src/bridge/monitor/rules.py`, `src/nimbus/service.py`
+Goal was a verified 50,000-patient end-to-end conversion with identical behavior. Outcome (#31): a full 50k run on GitHub's
+`ubuntu-latest` completed with all 4.82M records terminal and verification OK in 29.9 min (35.9 ms/patient; 29.0 at 2k,
+29.8 at 10k), peak RSS 2.1 GB. Main fixes: indexed work queue and dependent wakeups, UUIDv7 Nimbus ids, buffered/bulk
+SQLite writes, incremental drift baselines, primary-key blocked-record release, filtered verification scans. Conversion
+output is byte-identical to the pre-optimization code at equal batch size. PRs run 100-1000 patients; 2k-10k runs weekly
+and on dispatch (with a per-patient growth guard); 50k is dispatch-only with a 45-minute cap.
 
 ### T-111 · Export mutator for cutover testing · `done`
 Files: `testbed/halcyon/mutate.py` (new), CLI `python -m testbed.halcyon mutate --from <exportA> --out <exportB> --seed N`, `tests/testbed/test_mutate.py`

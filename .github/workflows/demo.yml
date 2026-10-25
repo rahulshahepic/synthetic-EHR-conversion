@@ -24,8 +24,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
           cache: pip
@@ -40,7 +40,7 @@ jobs:
         run: python tools/lakeside_summary.py demo_out/lakeside >> demo_out/DEMO_TRANSCRIPT.md
       - name: Publish summary
         run: cat demo_out/DEMO_TRANSCRIPT.md >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: conversion-demo-${{ github.run_number }}
           path: |
