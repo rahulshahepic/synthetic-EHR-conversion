@@ -26,7 +26,7 @@
    "subject": "identity"
   }
  ],
- "ledger_events": 80,
+ "ledger_events": 82,
  "policy_overrides": [
   {
    "claimed_values": [
@@ -2491,17 +2491,18 @@
    "predicate": "keying_story",
    "provenance": {
     "kind": "analyst",
-    "ref": "ledger:E000066 (Greg Holt, systems); dispute resolved via ledger answers (Greg Holt, systems; Marla Denny, registration)"
+    "ref": "dispute resolved via ledger answers (Greg Holt, systems; Marla Denny, registration)"
    },
    "subject": "identity",
    "value": {
     "key_fields": [
-     "REG.TXT.ACCT",
      "LAB.TXT.ACCT",
+     "PHA.TXT.ACCT",
      "RAD.TXT.ACCT",
-     "PHA.TXT.ACCT"
+     "REG.TXT.ACCT"
     ],
-    "master_index": false
+    "master_index": false,
+    "true_duplicates": true
    }
   },
   {

@@ -4,6 +4,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from bridge.interview import claims as claims_mod
 from bridge.interview import coverage as coverage_mod
 from bridge.interview import ledger as ledger_mod
@@ -54,6 +56,46 @@ def test_claims_dictionary_ingest_and_ledger_replay():
     ]
     replayed = claims_mod.ClaimStore.from_ledger(events)
     assert replayed.resolved_value("a", "b") == 2
+
+
+# -- subject bindings -----------------------------------------------------------
+
+@pytest.mark.parametrize("bad", [
+    ["REG.TXT"],                          # one element
+    ["REG.TXT", "DOB", "UNRELATED"],      # three elements
+    ["REG.TXT", 12],                      # non-string element
+    "REG.TXT.DOB",                        # a bare string, not a pair
+    ["REG.TXT", ""],                      # empty element
+    None,                                 # missing entirely
+])
+def test_malformed_bindings_are_rejected_at_the_boundary(bad):
+    """PR #43 review, finding 2: a binding's shape is validated once —
+    exactly two non-empty strings — at the binding boundary, both for
+    direct callers and for ledger binding events. A malformed binding
+    used to sail through tuple() and crash spec generation (IndexError
+    / AttributeError) or silently confirm via an ignored third element.
+    Now it raises a clear ValueError and records nothing, so it can
+    never crash generate_spec and never confirm."""
+    store = claims_mod.ClaimStore()
+    with pytest.raises(ValueError):
+        store.bind("profile", bad)
+    assert store.binding_for("profile") is None
+    events = [ledger_mod.LedgerEvent(
+        "E000001", "binding", {"subject": "profile", "binding": bad})]
+    with pytest.raises(ValueError):
+        claims_mod.ClaimStore.from_ledger(events)
+
+
+def test_binding_event_replays_to_the_store():
+    events = [ledger_mod.LedgerEvent(
+        "E000001", "binding",
+        {"subject": "profile", "binding": ["REG.TXT", "DOB"],
+         "evidence_refs": ["OBS-0007"]})]
+    store = claims_mod.ClaimStore.from_ledger(events)
+    assert store.binding_for("profile") == ("REG.TXT", "DOB")
+    assert store.to_json()["bindings"] == [
+        {"subject": "profile", "binding": ["REG.TXT", "DOB"],
+         "evidence_refs": ["OBS-0007"]}]
 
 
 # -- coverage -----------------------------------------------------------------

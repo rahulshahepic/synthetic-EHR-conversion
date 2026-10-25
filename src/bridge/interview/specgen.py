@@ -15,11 +15,14 @@ when a cited observation id resolves to an actual profiler observation
 recorded in the ledger — an ``OBS-<digits>`` event with non-empty stats —
 *and* that observation is about this rule's subject: a ``field:`` subject
 names its file and field in the subject itself, and any other subject
-confirms only through the subject-to-field binding recorded on the claim
-(or the resolution) that cites the observation. The generator carries no
-per-source binding table, so a subject from a new source can be confirmed
-as soon as its interview records the binding. An observation about some
-other field confirms nothing here, however real it is. A document quote
+confirms only through the binding recorded for the subject itself — a
+ledger ``binding`` event, recorded once per subject with its own
+evidence. A binding is never carried on a claim or a resolution, so no
+claim can bind itself to whatever observation it cites. The generator
+carries no per-source binding table, so a subject from a new source can
+be confirmed as soon as its interview records the binding. An
+observation about some other field confirms nothing here, however real
+it is. A document quote
 recorded under an observation-like id (an estate note, a dictionary
 excerpt) is document evidence: it can inform a resolution, but it never
 confirms anything and never earns the profiler-data kind. Resolutions
@@ -34,9 +37,10 @@ when an analyst describes merging as routine. The override applies to
 every identity claim other than the keying story, whatever predicate it
 arrives under. The overridden claim stays visible in the spec's
 ``policy_overrides``. The keying story itself is a fact (how charts are
-keyed), and it is a *structured* value — the key fields, and whether a
-master index exists — never a sentence: there is nowhere in that shape
-for an instruction to hide. A keying claim that arrives as free text (or
+keyed), and it is a *structured* value — the key fields, whether a
+master index exists, and whether registration creates true duplicate
+charts — never a sentence: there is nowhere in that shape for an
+instruction to hide. A keying claim that arrives as free text (or
 a malformed structure) is not a keying fact at all: it is flagged in
 ``policy_overrides`` and the subject surfaces as a known unknown, so the
 spec never carries an unflagged auto-merge instruction, whatever
@@ -81,23 +85,31 @@ MERGE_POLICY_RULE = {
 
 _OBS_DATA_ID = re.compile(r"^OBS-\d+$")
 
-# A key field in a structured keying story: one token — a field reference
-# such as ``REG.TXT.ACCT`` or ``SSN4+DOB`` — with no whitespace, so no
-# phrase (and no instruction) can hide inside an entry.
-_KEY_FIELD_TOKEN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_+./:-]*$")
+# A key field in a structured keying story: a field reference in a strict
+# grammar — an uppercase FILE.FIELD(.SEGMENT) reference such as
+# ``REG.TXT.ACCT``, optionally a ``+`` composite of such references
+# (``SSN4+DOB``). Lowercase, hyphens and free words fail the grammar, so
+# an instruction ("auto-merge-any-two-charts-...") cannot hide inside a
+# single token the way it could when only whitespace was banned.
+_KEY_FIELD_TOKEN = re.compile(
+    r"^[A-Z0-9_]+(\.[A-Z0-9_]+){1,2}(\+[A-Z0-9_]+(\.[A-Z0-9_]+)*)*$")
 
 
 def _valid_keying_story(value: Any) -> dict[str, Any] | None:
     """The keying story as a structured value, or None if it is not one.
 
-    A keying story states which fields key a chart and whether a master
-    index exists — a dict whose only keys are ``key_fields`` (a non-empty
-    list of distinct field tokens) and the optional boolean
-    ``master_index``. Anything else, above all a free-text string, is not
-    a keying fact and cannot enter the spec as one."""
+    A keying story states which fields key a chart, whether a master
+    index exists, and whether registration creates true duplicate charts
+    — a dict whose only keys are ``key_fields`` (a non-empty list of
+    field-reference tokens in the strict grammar above) and the optional
+    booleans ``master_index`` and ``true_duplicates``. Field order is not
+    meaningful: the returned story carries the fields de-duplicated and
+    sorted, so the same fields in a different order are the same story.
+    Anything else, above all a free-text string, is not a keying fact and
+    cannot enter the spec as one."""
     if not isinstance(value, dict):
         return None
-    if not set(value) <= {"key_fields", "master_index"}:
+    if not set(value) <= {"key_fields", "master_index", "true_duplicates"}:
         return None
     fields = value.get("key_fields")
     if not isinstance(fields, list) or not fields:
@@ -105,13 +117,13 @@ def _valid_keying_story(value: Any) -> dict[str, Any] | None:
     if any(not isinstance(f, str) or not _KEY_FIELD_TOKEN.match(f)
            for f in fields):
         return None
-    if len(set(fields)) != len(fields):
-        return None
-    if "master_index" in value and not isinstance(value["master_index"], bool):
-        return None
-    out: dict[str, Any] = {"key_fields": list(fields)}
-    if "master_index" in value:
-        out["master_index"] = value["master_index"]
+    for flag in ("master_index", "true_duplicates"):
+        if flag in value and not isinstance(value[flag], bool):
+            return None
+    out: dict[str, Any] = {"key_fields": sorted(set(fields))}
+    for flag in ("master_index", "true_duplicates"):
+        if flag in value:
+            out[flag] = value[flag]
     return out
 
 
@@ -139,8 +151,9 @@ def _is_data_observation(ref: str, observations: dict[str, dict[str, Any]]) -> b
 def _field_subject_binding(subject: str) -> tuple[str, str] | None:
     """The (file, field) a ``field:`` subject names, parsed from the
     subject itself. Non-field subjects have no intrinsic binding: theirs
-    is recorded on the claim or the resolution that cites the evidence
-    (``Claim.subject_field``). No binding, no confirmation."""
+    is the subject-level binding recorded on the store
+    (``ClaimStore.bindings``), from a ledger ``binding`` event. No
+    binding, no confirmation."""
     if subject.startswith("field:"):
         rest = subject[len("field:"):]
         if "." in rest:
@@ -226,14 +239,15 @@ def _rule_provenance(store: ClaimStore, subject: str, predicate: str, value: Any
     confirmed = False
     winning_src = ""
     # The binding an observation must match to confirm this rule: parsed
-    # from a ``field:`` subject, else the binding recorded on the winning
-    # claim (or, for the resolution route, on the resolution itself).
-    subject_binding = _field_subject_binding(subject)
+    # from a ``field:`` subject, else the subject-level binding recorded
+    # on the store. Claims and resolutions carry no binding of their own.
+    subject_binding = _field_subject_binding(subject) \
+        or store.binding_for(subject)
     if winners:
         kind = _claim_kind(winners[0], observations)
         winning_src = winners[0].source or ""
         for c in winners:
-            expected = subject_binding or c.subject_field
+            expected = subject_binding
             if expected is None:
                 continue
             refs = list(c.evidence_refs)
@@ -247,7 +261,7 @@ def _rule_provenance(store: ClaimStore, subject: str, predicate: str, value: Any
         # a sentence saying it does NOT support the resolution — confirms
         # nothing.
         refs = list(dispute.resolution_evidence_refs)
-        expected = subject_binding or dispute.resolution_subject_field
+        expected = subject_binding
         res_confirmed = expected is not None and _evidence_confirmed(
             refs, expected, observations)
         if res_confirmed:
@@ -272,14 +286,15 @@ def _with_extra_claims(store: ClaimStore, extra: list[Claim]) -> ClaimStore:
     store is left untouched, keeping generate_spec a pure function)."""
     new = ClaimStore()
     new.claims = list(store.claims)
+    new.bindings = dict(store.bindings)
+    new.binding_refs = dict(store.binding_refs)
     new.disputes = {
         key: Dispute(subject=d.subject, predicate=d.predicate, claims=list(d.claims),
                      resolved_value=d.resolved_value,
                      resolution_source=d.resolution_source,
                      resolution_claimed_by=d.resolution_claimed_by,
                      resolution_source_kind=d.resolution_source_kind,
-                     resolution_evidence_refs=d.resolution_evidence_refs,
-                     resolution_subject_field=d.resolution_subject_field)
+                     resolution_evidence_refs=d.resolution_evidence_refs)
         for key, d in store.disputes.items()
     }
     for c in extra:

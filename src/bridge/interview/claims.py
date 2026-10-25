@@ -20,7 +20,36 @@ from typing import Any
 
 
 def _canon(value: Any) -> str:
+    if isinstance(value, dict) and isinstance(value.get("key_fields"), list) \
+            and all(isinstance(f, str) for f in value["key_fields"]):
+        # A keying story's field order is not meaningful: the same fields
+        # in a different order are the same story, not a dispute.
+        value = {**value, "key_fields": sorted(set(value["key_fields"]))}
     return json.dumps(value, sort_keys=True, ensure_ascii=False, default=str)
+
+
+def validate_binding(value: Any) -> tuple[str, str]:
+    """A subject-to-field binding is exactly two non-empty strings:
+    ``(file, field)``. Anything else — a bare string, a 1- or 3-element
+    sequence, a non-string element — is rejected with a clear error.
+
+    This is the one place bindings are validated. A binding is recorded
+    once per subject (a ledger ``binding`` event, or ``ClaimStore.bind``),
+    never carried on an individual claim or resolution, so no claim can
+    bind itself to whatever observation it happens to cite."""
+    if isinstance(value, (str, bytes)) or not isinstance(value, (list, tuple)):
+        raise ValueError(
+            f"binding must be a (file, field) pair, got {value!r}")
+    if len(value) != 2:
+        raise ValueError(
+            f"binding must have exactly two elements (file, field), "
+            f"got {value!r}")
+    file, field = value
+    if not isinstance(file, str) or not isinstance(field, str) \
+            or not file.strip() or not field.strip():
+        raise ValueError(
+            f"binding elements must be non-empty strings, got {value!r}")
+    return file, field
 
 
 @dataclass(frozen=True)
@@ -38,12 +67,10 @@ class Claim:
     # ("E000017"), or an analyst id.
     source_kind: str = ""
     evidence_refs: tuple[str, ...] = ()
-    # The subject-to-field binding, recorded on the claim itself (T-121):
-    # for a subject that is not a ``field:`` subject, the (file, field) a
-    # profiler observation must describe to confirm this claim. Previously
-    # the generator hard-coded these bindings per source system, so a
-    # subject from any other source could never be data-confirmed.
-    subject_field: tuple[str, str] | None = None
+    # Deliberately NO subject-to-field binding here: a binding belongs to
+    # the subject, recorded once on the store (see ClaimStore.bindings).
+    # A per-claim binding lets any claim declare itself confirmed by
+    # whatever observation it cites.
 
     def key(self) -> tuple[str, str]:
         return (self.subject, self.predicate)
@@ -62,10 +89,6 @@ class Dispute:
     resolution_claimed_by: str = ""
     resolution_source_kind: str = ""
     resolution_evidence_refs: tuple[str, ...] = ()
-    # The resolution's own subject-to-field binding (see Claim.subject_field):
-    # the (file, field) a cited observation must describe to confirm the
-    # resolved value.
-    resolution_subject_field: tuple[str, str] | None = None
 
     @property
     def resolved(self) -> bool:
@@ -84,6 +107,12 @@ class ClaimStore:
     def __init__(self) -> None:
         self.claims: list[Claim] = []
         self.disputes: dict[tuple[str, str], Dispute] = {}
+        # Subject-to-field bindings, keyed by subject: the (file, field)
+        # a profiler observation must describe to data-confirm a claim on
+        # that subject. Recorded once per subject — in a ledger, as a
+        # ``binding`` event with its own evidence refs — never per claim.
+        self.bindings: dict[str, tuple[str, str]] = {}
+        self.binding_refs: dict[str, tuple[str, ...]] = {}
 
     def add(self, claim: Claim) -> Dispute | None:
         """Add a claim; returns the Dispute it created or joined, else None.
@@ -104,7 +133,6 @@ class ClaimStore:
                 d.resolution_claimed_by = ""
                 d.resolution_source_kind = ""
                 d.resolution_evidence_refs = ()
-                d.resolution_subject_field = None
         self.claims.append(claim)
         existing = [c for c in self.claims if c.key() == key]
         distinct = {_canon(c.value) for c in existing}
@@ -124,8 +152,7 @@ class ClaimStore:
 
     def resolve(self, subject: str, predicate: str, value: Any, source: str,
                 claimed_by: str = "", source_kind: str = "",
-                evidence_refs: tuple[str, ...] = (),
-                subject_field: tuple[str, str] | None = None) -> Dispute:
+                evidence_refs: tuple[str, ...] = ()) -> Dispute:
         """Record a resolution for a dispute (the value need not be one of the
         claimed values, but the source must say why: an observation id, a
         ledger event, a named analyst).
@@ -146,8 +173,22 @@ class ClaimStore:
         d.resolution_claimed_by = claimed_by
         d.resolution_source_kind = source_kind
         d.resolution_evidence_refs = tuple(evidence_refs)
-        d.resolution_subject_field = tuple(subject_field) if subject_field else None
         return d
+
+    # -- subject bindings ----------------------------------------------------
+    def bind(self, subject: str, binding: Any,
+             evidence_refs: tuple[str, ...] = ()) -> None:
+        """Record the subject-to-field binding for a subject: the (file,
+        field) a profiler observation must describe to data-confirm a
+        claim on this subject. The binding is validated here, at the one
+        boundary (``validate_binding``); a malformed binding raises and
+        records nothing. A later binding for the same subject replaces
+        the earlier one — ledger order is the record."""
+        self.bindings[subject] = validate_binding(binding)
+        self.binding_refs[subject] = tuple(evidence_refs)
+
+    def binding_for(self, subject: str) -> tuple[str, str] | None:
+        return self.bindings.get(subject)
 
     def resolved_value(self, subject: str, predicate: str, default: Any = None) -> Any:
         """The value spec generation may use: a dispute's resolution, else the
@@ -200,7 +241,8 @@ class ClaimStore:
     @classmethod
     def from_ledger(cls, events: list) -> "ClaimStore":
         """Rebuild a store from a ledger: ``claim`` events assert claims,
-        ``resolve`` events resolve disputes. Deterministic in event order."""
+        ``resolve`` events resolve disputes, ``binding`` events record
+        subject-to-field bindings. Deterministic in event order."""
         store = cls()
         for e in events:
             p = e.payload
@@ -209,16 +251,20 @@ class ClaimStore:
                                 value=p.get("value"), source=p["source"],
                                 confidence=p.get("confidence", 1.0),
                                 source_kind=p.get("source_kind", ""),
-                                evidence_refs=tuple(p.get("evidence_refs", ())),
-                                subject_field=(tuple(p["subject_field"])
-                                               if p.get("subject_field") else None)))
+                                evidence_refs=tuple(p.get("evidence_refs", ()))))
             elif e.type == "resolve":
                 store.resolve(p["subject"], p["predicate"], p.get("value"), p["source"],
                               claimed_by=p.get("claimed_by", ""),
                               source_kind=p.get("source_kind", ""),
-                              evidence_refs=tuple(p.get("evidence_refs", ())),
-                              subject_field=(tuple(p["subject_field"])
-                                             if p.get("subject_field") else None))
+                              evidence_refs=tuple(p.get("evidence_refs", ())))
+            elif e.type == "binding":
+                # A binding event records the subject's (file, field)
+                # once, with its own evidence refs. The shape is
+                # validated in bind(): a malformed binding event fails
+                # the replay with a clear error, before any spec is
+                # generated from it.
+                store.bind(p["subject"], p.get("binding"),
+                           evidence_refs=tuple(p.get("evidence_refs", ())))
         return store
 
     def to_json(self) -> dict[str, Any]:
@@ -230,8 +276,6 @@ class ClaimStore:
                 out["source_kind"] = c.source_kind
             if c.evidence_refs:
                 out["evidence_refs"] = list(c.evidence_refs)
-            if c.subject_field:
-                out["subject_field"] = list(c.subject_field)
             return out
 
         def dispute_json(d: Dispute) -> dict[str, Any]:
@@ -245,12 +289,13 @@ class ClaimStore:
                 out["resolution_source_kind"] = d.resolution_source_kind
             if d.resolution_evidence_refs:
                 out["resolution_evidence_refs"] = list(d.resolution_evidence_refs)
-            if d.resolution_subject_field:
-                out["resolution_subject_field"] = list(d.resolution_subject_field)
             return out
 
         return {
             "claims": [claim_json(c) for c in self.claims],
             "disputes": [dispute_json(d) for d in sorted(
                 self.disputes.values(), key=lambda d: (d.subject, d.predicate))],
+            "bindings": [{"subject": s, "binding": list(b),
+                          "evidence_refs": list(self.binding_refs.get(s, ()))}
+                         for s, b in sorted(self.bindings.items())],
         }

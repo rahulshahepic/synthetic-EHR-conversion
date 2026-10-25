@@ -98,7 +98,8 @@ def test_recorded_observation_confirms_the_claim_it_backs():
     store.add(Claim("profile", "pivot_year", 30, "ledger:E000001 (analyst)",
                     source_kind="analyst", evidence_refs=("E000001",)))
     store.resolve("profile", "pivot_year", 30, "OBS-0007 (DOB distribution)",
-                  evidence_refs=("OBS-0007",), subject_field=("REG.TXT", "DOB"))
+                  evidence_refs=("OBS-0007",))
+    store.bind("profile", ("REG.TXT", "DOB"), evidence_refs=("OBS-0007",))
     events = [ledger_mod.LedgerEvent(
         "E000100", "observation",
         {"obs_id": "OBS-0007", "file": "REG.TXT", "field": "DOB",
@@ -483,25 +484,67 @@ def test_keying_story_regex_evading_phrasings_are_flagged(text):
 
 def test_binding_recorded_in_the_ledger_confirms_a_non_field_subject():
     """T-121 acceptance: the subject-to-field binding travels in the
-    ledger itself (on the claim event), so a Halcyon-shaped subject — a
-    file/field pair the generator has never heard of — is data-confirmed
-    purely from the recorded binding."""
+    ledger itself, as its own ``binding`` event for the subject, so a
+    Halcyon-shaped subject — a file/field pair the generator has never
+    heard of — is data-confirmed purely from the recorded binding."""
     events = [
         ledger_mod.LedgerEvent(
             "E000001", "observation",
             {"obs_id": "OBS-0003", "file": "DEMOG.TXT", "field": "DOBYR",
              "stats": {"shape_rates": {"YY": 1.0}}}),
         ledger_mod.LedgerEvent(
-            "E000002", "claim",
+            "E000002", "binding",
+            {"subject": "profile", "binding": ["DEMOG.TXT", "DOBYR"],
+             "evidence_refs": ["OBS-0003"]}),
+        ledger_mod.LedgerEvent(
+            "E000003", "claim",
             {"subject": "profile", "predicate": "pivot_year", "value": 30,
              "source": "ledger:E000001 (analyst)", "source_kind": "analyst",
-             "evidence_refs": ["OBS-0003"],
-             "subject_field": ["DEMOG.TXT", "DOBYR"]}),
+             "evidence_refs": ["OBS-0003"]}),
     ]
     store = ClaimStore.from_ledger(events)
     pkg = specgen.generate_spec(events, store, "acceptance")
     rule = next(r for r in pkg.spec["rules"] if r["predicate"] == "pivot_year")
     assert rule["data_confirmed"] is True
+
+
+def test_claim_cannot_bind_itself_to_the_observation_it_cites():
+    """PR #43 review, finding 1 (the self-confirmation hole): a claim
+    used to carry its own subject_field, so any claim could bind itself
+    to whatever real observation it cited and earn data_confirmed.
+    Bindings now belong to the subject. A claim event that attempts to
+    smuggle a binding in its payload is ignored, and even with a proper
+    subject binding on record, an observation about a DIFFERENT field
+    confirms nothing."""
+    events = [
+        ledger_mod.LedgerEvent(
+            "E000001", "observation",
+            {"obs_id": "OBS-0001", "file": "NOTE.TXT", "field": "TEXT",
+             "stats": {"shape_rates": {"TEXT": 1.0}}}),
+        ledger_mod.LedgerEvent(
+            "E000002", "claim",
+            {"subject": "profile", "predicate": "pivot_year", "value": 50,
+             "source": "ledger:E000001 (analyst)", "source_kind": "analyst",
+             "evidence_refs": ["OBS-0001"],
+             # Attempted self-binding: no longer read from a claim event.
+             "subject_field": ["NOTE.TXT", "TEXT"]}),
+    ]
+    store = ClaimStore.from_ledger(events)
+    pkg = specgen.generate_spec(events, store, "acceptance")
+    rule = next(r for r in pkg.spec["rules"] if r["predicate"] == "pivot_year")
+    assert rule["data_confirmed"] is False
+
+    # With the subject's binding properly recorded (profile = REG.TXT
+    # DOB), the same NOTE.TXT.TEXT observation still confirms nothing:
+    # it is about a different field than the subject's binding.
+    events.append(ledger_mod.LedgerEvent(
+        "E000003", "binding",
+        {"subject": "profile", "binding": ["REG.TXT", "DOB"],
+         "evidence_refs": ["OBS-0001"]}))
+    store = ClaimStore.from_ledger(events)
+    pkg = specgen.generate_spec(events, store, "acceptance")
+    rule = next(r for r in pkg.spec["rules"] if r["predicate"] == "pivot_year")
+    assert rule["data_confirmed"] is False
 
 
 # --------------------------------------------- round two: A40 evidence kept

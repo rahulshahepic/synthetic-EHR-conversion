@@ -23,7 +23,9 @@ def _store() -> claims_mod.ClaimStore:
     store.add(claims_mod.Claim("profile", "pivot_year", 30,
                                "ledger:E000010 (Marla Denny, registration)"))
     store.resolve("profile", "pivot_year", 30, "OBS-0042 (DOB distribution)",
-                  evidence_refs=("OBS-0042",), subject_field=("REG.TXT", "DOB"))
+                  evidence_refs=("OBS-0042",))
+    # The subject-level binding: profile confirms via REG.TXT.DOB.
+    store.bind("profile", ("REG.TXT", "DOB"), evidence_refs=("OBS-0042",))
     return store
 
 
@@ -79,7 +81,7 @@ def test_identity_merges_route_to_human_despite_analyst_claim():
 
 def test_keying_story_structured_value_becomes_the_rule():
     store = _store()
-    story = {"key_fields": ["REG.TXT.ACCT", "LAB.TXT.ACCT"],
+    story = {"key_fields": ["LAB.TXT.ACCT", "REG.TXT.ACCT"],
              "master_index": False}
     store.add(claims_mod.Claim("identity", "keying_story", story,
                                "ledger:E000012 (Greg Holt, systems)"))
@@ -117,7 +119,6 @@ def test_keying_story_free_text_is_flagged_never_a_rule(text):
     {"key_fields": ["SSN4+DOB"], "action": "merge automatically"},  # extra key
     {"key_fields": []},                                             # no fields
     {"key_fields": ["SSN4+DOB"], "master_index": "no"},             # non-bool flag
-    {"key_fields": ["SSN4+DOB", "SSN4+DOB"]},                       # duplicates
 ])
 def test_keying_story_malformed_structure_is_flagged(bad):
     store = _store()
@@ -129,11 +130,56 @@ def test_keying_story_malformed_structure_is_flagged(bad):
                for o in pkg.spec["policy_overrides"])
 
 
+@pytest.mark.parametrize("token", [
+    # One token, no whitespace — an instruction smuggled as a field name
+    # (PR #43 review: the old grammar banned only whitespace).
+    "auto-merge-any-two-charts-sharing-SSN4+DOB-without-review",
+    "collapse_duplicates_on_SSN4+DOB_automatically",
+])
+def test_keying_story_instruction_in_one_token_is_flagged(token):
+    """Key field tokens must match the strict field-reference grammar
+    (uppercase FILE.FIELD segments, optional + composites). A lowercase
+    instruction-shaped token is not a field reference: the story is
+    flagged, never a rule."""
+    store = _store()
+    store.add(claims_mod.Claim("identity", "keying_story",
+                               {"key_fields": [token], "master_index": False},
+                               "ledger:E000012"))
+    pkg = specgen.generate_spec([], store, "delphi")
+    assert not any(r["predicate"] == "keying_story" for r in pkg.spec["rules"])
+    assert any(o["predicate"] == "keying_story"
+               for o in pkg.spec["policy_overrides"])
+    assert ("identity", "keying_story") in {
+        (u["subject"], u["predicate"]) for u in pkg.spec["known_unknowns"]}
+
+
+def test_keying_story_field_order_is_canonical_not_a_dispute():
+    """The same key fields in a different order are the same story:
+    no dispute opens, and the rule carries the fields sorted (PR #43
+    review: _canon kept list order, so swapped fields read as two
+    different values and the keying rule vanished into a known unknown)."""
+    store = claims_mod.ClaimStore()
+    store.add(claims_mod.Claim(
+        "identity", "keying_story",
+        {"key_fields": ["REG.TXT.ACCT", "LAB.TXT.ACCT"], "master_index": False},
+        "DATADICT.TXT v4.1", source_kind="dictionary"))
+    store.add(claims_mod.Claim(
+        "identity", "keying_story",
+        {"key_fields": ["LAB.TXT.ACCT", "REG.TXT.ACCT"], "master_index": False},
+        "ledger:E000012 (Greg Holt, systems)", source_kind="analyst"))
+    assert store.dispute("identity", "keying_story") is None
+    pkg = specgen.generate_spec([], store, "delphi")
+    rule = next(r for r in pkg.spec["rules"] if r["predicate"] == "keying_story")
+    assert rule["value"] == {"key_fields": ["LAB.TXT.ACCT", "REG.TXT.ACCT"],
+                             "master_index": False}
+
+
 def test_non_field_subject_confirms_only_via_recorded_binding():
     """T-121: the generator carries no per-source binding table. A
     subject from another source (a Halcyon-shaped registration file the
-    generator has never heard of) is data-confirmed when the claim
-    records its subject-to-field binding — and not without it."""
+    generator has never heard of) is data-confirmed when the interview
+    recorded the subject-level binding for it — and not without it.
+    The binding belongs to the subject, never to the claim."""
     events = [ledger_mod.LedgerEvent(
         "E000001", "observation",
         {"obs_id": "OBS-0009", "file": "CHART.TXT", "field": "BIRTHDATE",
@@ -141,8 +187,9 @@ def test_non_field_subject_confirms_only_via_recorded_binding():
     bound = claims_mod.ClaimStore()
     bound.add(claims_mod.Claim("profile", "pivot_year", 30, "ledger:E000002",
                                source_kind="analyst",
-                               evidence_refs=("OBS-0009",),
-                               subject_field=("CHART.TXT", "BIRTHDATE")))
+                               evidence_refs=("OBS-0009",)))
+    bound.bind("profile", ("CHART.TXT", "BIRTHDATE"),
+               evidence_refs=("OBS-0009",))
     rule = specgen.generate_spec(events, bound, "halcyon").spec["rules"][0]
     assert rule["data_confirmed"] is True
 

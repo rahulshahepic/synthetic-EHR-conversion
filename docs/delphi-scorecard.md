@@ -23,7 +23,7 @@ grading ledger (16 entries: 9 dictionary discrepancies, 5 analyst beliefs,
 | belief_pharmacy_misc_meds_skippable | caught-by-analyst | spec carries the true position via analyst |
 | belief_systems_dictionary_current | caught-by-documents | spec carries the true position via dictionary |
 | disagreement_pivot_year | caught-by-analyst | spec value 30 via analyst |
-| disagreement_duplicate_charts | routed-to-runtime-question | the disagreement resolves into per-person matching (keying story) with every merge decided by a human |
+| disagreement_duplicate_charts | routed-to-runtime-question | the disagreement resolves into per-person matching (keying story, true duplicate charts recorded) with every merge decided by a human |
 
 ## Summary
 

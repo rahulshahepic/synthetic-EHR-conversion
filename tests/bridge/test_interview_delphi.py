@@ -101,6 +101,74 @@ def test_scorecard_verdicts(verdicts):
                        "routed-to-runtime-question": 4, "caught-by-documents": 3}
 
 
+def test_single_key_claims_do_not_invent_a_master_index(events):
+    """PR #43 review, finding 5: the dictionary's "one account per
+    patient" and Tom Reyes's "the L number is the patient" are single-key
+    positions — one key_fields entry, master_index false. The estate is
+    explicit that no master index exists (the vendor module was never
+    bought), so the ledger must not record master_index: true for them."""
+    store = claims_mod.ClaimStore.from_ledger(events)
+    values = {c.source: c.value for c in store.get("identity", "keying_story")}
+    assert values["DATADICT.TXT v4.1"] == {"key_fields": ["REG.TXT.ACCT"],
+                                           "master_index": False}
+    assert values["ledger:E000050 (Tom Reyes, laboratory)"] == {
+        "key_fields": ["LAB.TXT.ACCT"], "master_index": False}
+
+
+def _keying_spec(value):
+    return {"rules": [
+        {"id": "R001", "subject": "identity", "predicate": "keying_story",
+         "value": value, "provenance": {"kind": "analyst"},
+         "data_confirmed": False},
+        dict(specgen.MERGE_POLICY_RULE),
+    ], "known_unknowns": []}
+
+
+@pytest.mark.parametrize("value", [
+    {"key_fields": ["REG.TXT.SSN4", "REG.TXT.DOB"], "master_index": False},
+    {"key_fields": ["NOTE.TXT.TEXT", "BILL.TXT.AMOUNT"], "master_index": False},
+    {"key_fields": ["REG.TXT.ACCT", "REG.TXT.DOB"], "master_index": False},
+    {"key_fields": ["LAB.TXT.ACCT", "PHA.TXT.ACCT"], "master_index": True},
+    {"key_fields": ["REG.TXT.ACCT"], "master_index": False},
+])
+def test_keying_position_grades_facts_not_shape(value):
+    """PR #43 review, finding 7: the true position is per-department
+    account keys with no master index — graded against the expected
+    structured facts, not token counts. A demographic key pair, unrelated
+    fields, a single-department composite, a master-index story, or a
+    single key must NOT earn caught-by-analyst for either identity
+    discrepancy."""
+    for entry_id in ("dict_registration_account_claim",
+                     "belief_lab_account_is_identity"):
+        verdict = scorecard.grade_entry({"id": entry_id}, _keying_spec(value))
+        assert verdict["verdict"] == "swallowed", (entry_id, value, verdict)
+
+
+def test_keying_position_master_index_absent_is_the_true_position():
+    """PR #43 review, finding 7 (second half): master_index is optional
+    in the spec validator, so a departmental story that omits it must
+    grade as the true position — not None, not swallowed."""
+    spec = _keying_spec({"key_fields": ["LAB.TXT.ACCT", "REG.TXT.ACCT"]})
+    for entry_id in ("dict_registration_account_claim",
+                     "belief_lab_account_is_identity"):
+        verdict = scorecard.grade_entry({"id": entry_id}, spec)
+        assert verdict["verdict"] == "caught-by-analyst", (entry_id, verdict)
+
+
+def test_duplicate_charts_requires_the_resolved_fact_recorded():
+    """PR #43 review, finding 6: routed requires the keying story to
+    record the resolved fact (true_duplicates: true). A keying rule plus
+    the merge policy alone overstates what was resolved."""
+    plain = _keying_spec({"key_fields": ["LAB.TXT.ACCT", "REG.TXT.ACCT"],
+                          "master_index": False})
+    verdict = scorecard.grade_entry({"id": "disagreement_duplicate_charts"}, plain)
+    assert verdict["verdict"] == "swallowed"
+    recorded = _keying_spec({"key_fields": ["LAB.TXT.ACCT", "REG.TXT.ACCT"],
+                             "master_index": False, "true_duplicates": True})
+    verdict = scorecard.grade_entry({"id": "disagreement_duplicate_charts"}, recorded)
+    assert verdict["verdict"] == "routed-to-runtime-question"
+
+
 def test_delphi_staging_through_committed_binding(tmp_path):
     from testbed.delphi import generate
     out = tmp_path / "delphi"

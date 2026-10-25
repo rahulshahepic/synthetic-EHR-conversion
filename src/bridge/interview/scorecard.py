@@ -36,10 +36,14 @@ CHECKS: dict[str, dict[str, Any]] = {
                                     "truth": "R", "false": None},
     "dict_registration_account_claim": {"subjects": [("identity", "keying_story")],
                                         "truth": "No master index",
-                                        "false": "one account per patient"},
+                                        "false": "one account per patient",
+                                        "keying_truth": {"account_field": "ACCT",
+                                                         "min_departments": 2}},
     "belief_lab_account_is_identity": {"subjects": [("identity", "keying_story")],
                                        "truth": "Departmental accounts",
-                                       "false": "L number is the patient"},
+                                       "false": "L number is the patient",
+                                       "keying_truth": {"account_field": "ACCT",
+                                                        "min_departments": 2}},
     "belief_lab_nonnumeric_bench_error": {"subjects": [("field:LAB.TXT.RESULT", "convention")],
                                           "truth": "carried as text",
                                           "false": "excluded"},
@@ -87,18 +91,37 @@ def _caught_by(rule: dict[str, Any]) -> str:
     return "caught-by-profiling" if rule.get("data_confirmed") else "swallowed"
 
 
-def _keying_position(value: dict[str, Any]) -> str | None:
-    """The position a structured keying story takes (T-121: the keying
-    story is a structured value — key fields, no action verb — so the
-    text substring checks cannot grade it). The false family is a single
-    key: one department's account number, or a master index, treated as
-    identity itself. The true position is no master index, with charts
-    keyed per department. Anything else takes neither position."""
+# Field names that make a key a cross-person demographic match — the
+# position the graders treat as false, whatever its shape.
+_DEMOGRAPHIC_FIELDS = {"SSN4", "DOB", "NAME"}
+
+
+def _keying_position(value: dict[str, Any], check: dict[str, Any]) -> str | None:
+    """The position a structured keying story takes, graded against the
+    expected structured facts in the check data (``keying_truth``) — not
+    shape alone. The true position: charts keyed by per-department
+    account fields (the departmental ``*.ACCT`` fields, at least
+    ``min_departments`` distinct departments) and no master index. The
+    false family: a master index, a single key treated as identity, or
+    demographic match keys (SSN4/DOB/NAME). ``master_index`` absent
+    grades the same as False — the spec validator treats the flag as
+    optional, so a departmental story without it is the true position,
+    not neither. Anything else — unrelated fields, one department's
+    keys alone — takes neither position."""
     fields = value.get("key_fields") or []
-    if value.get("master_index") is False and len(fields) >= 2:
-        return "truth"
+    expected = check.get("keying_truth") or {}
+    account_field = expected.get("account_field", "ACCT")
+    min_departments = expected.get("min_departments", 2)
     if value.get("master_index") is True or len(fields) == 1:
         return "false"
+    leaf_fields = [str(token).rsplit(".", 1)[-1]
+                   for token in fields for token in str(token).split("+")]
+    if any(leaf in _DEMOGRAPHIC_FIELDS for leaf in leaf_fields):
+        return "false"
+    departments = {str(token).split(".")[0] for token in fields
+                   if str(token).rsplit(".", 1)[-1] == account_field}
+    if len(departments) >= min_departments:
+        return "truth"
     return None
 
 
@@ -121,9 +144,16 @@ def grade_entry(entry: dict[str, Any], spec: dict[str, Any]) -> dict[str, Any]:
         policy = next((r for r in spec.get("rules", []) if r.get("id") == "SAFETY-IDENTITY-MERGE"),
                       None)
         if keying is not None and policy is not None:
-            return {"id": entry["id"], "verdict": "routed-to-runtime-question",
-                    "detail": "the disagreement resolves into per-person matching "
-                              "(keying story) with every merge decided by a human"}
+            value = keying.get("value")
+            if isinstance(value, dict) and value.get("true_duplicates") is True:
+                return {"id": entry["id"], "verdict": "routed-to-runtime-question",
+                        "detail": "the disagreement resolves into per-person matching "
+                                  "(keying story, true duplicate charts recorded) "
+                                  "with every merge decided by a human"}
+            return {"id": entry["id"], "verdict": "swallowed",
+                    "detail": "the spec's keying story does not record the resolved "
+                              "fact (registration creates true duplicate charts), "
+                              "so the resolution is not fully recorded"}
         return {"id": entry["id"], "verdict": "swallowed",
                 "detail": "no keying story / merge policy in the spec"}
     for subject, predicate in check["subjects"]:
@@ -137,7 +167,7 @@ def grade_entry(entry: dict[str, Any], spec: dict[str, Any]) -> dict[str, Any]:
         text = value if isinstance(value, str) else ""
         if (subject, predicate) == ("identity", "keying_story") \
                 and isinstance(value, dict):
-            position = _keying_position(value)
+            position = _keying_position(value, check)
             if position == "false":
                 return {"id": entry["id"], "verdict": "swallowed",
                         "detail": f"spec adopted the false position "
