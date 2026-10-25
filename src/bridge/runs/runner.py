@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import traceback
+from concurrent.futures import Future, ThreadPoolExecutor
 from time import perf_counter
 from datetime import date
 from typing import Any
@@ -22,11 +23,16 @@ LOAD_ORDER = [
 ]
 # Match Nimbus' per-request import limit to amortize batch setup and close overhead.
 DEFAULT_BATCH_SIZE = 500
+# Records per import call. A batch is sent to Nimbus in chunks while the rest of it is still being mapped, so
+# Nimbus (a separate system) imports in parallel with Bridge's mapping and result persistence.
+PIPELINE_CHUNK = 100
 
 
 class Runner:
     def __init__(self, store: S.RunStore, client: NimbusClient, profile: Any = halcyon_profile):
         self.store, self.client, self.profile = store, client, profile
+        # One sender thread: import calls stay strictly ordered, and only it uses the client mid-batch.
+        self._sender: ThreadPoolExecutor | None = None
 
     # ---------------------------------------------------------------- lifecycle
     def start(self, source: str, target_label: str = "nimbus", batch_size: int = DEFAULT_BATCH_SIZE,
@@ -107,44 +113,79 @@ class Runner:
 
     # ---------------------------------------------------------------- one batch
     def process_batch(self, run_id: str, rtype: str, recs: list[dict[str, Any]]) -> bool:
+        """Map a batch, import it into Nimbus, persist the outcome, then measure.
+
+        Mapping never depends on this batch's own import results (every record is mapped before any outcome
+        is persisted), so mapped records are sent in chunks while mapping continues, and results are persisted
+        as chunks come back. Outcomes and their order are exactly those of mapping, then importing, then persisting.
+        """
         started = perf_counter()
         results: list[dict[str, Any]] = []
-        submit: list[tuple[dict[str, Any], MapContext, dict[str, Any]]] = []
-        with self.store.tx():
-            for rec in recs:
-                ctx = MapContext(self.store, run_id, rtype, rec, self.profile)
-                try:
-                    outcome = run_mapper(ctx)
-                except Exception as exc:  # a mapper bug must surface as a rejection, not vanish
-                    results.append(self._finish(run_id, rtype, rec, ctx, S.REJECTED, issues=[{
-                        "code": "BRIDGE_MAPPER_ERROR", "message": f"{type(exc).__name__}: {exc}", "severity": "error",
-                        "trace": traceback.format_exc(limit=3)}]))
-                    continue
-                if outcome.status == "ok":
-                    submit.append((rec, ctx, outcome.payload))
-                else:
-                    status = {"held": S.HELD, "blocked": S.BLOCKED, "dropped": S.DROPPED, "superseded": S.SUPERSEDED}[outcome.status]
-                    results.append(self._finish(run_id, rtype, rec, ctx, status, note=outcome.note))
-
-        map_seconds = perf_counter() - started
+        chunks: list[tuple[list[tuple[dict[str, Any], MapContext, dict[str, Any]]], Future]] = []
+        pending: list[tuple[dict[str, Any], MapContext, dict[str, Any]]] = []
         nimbus_batch = None
         bridge_batch_id = None
-        setup_seconds = submit_seconds = close_seconds = persist_seconds = 0.0
-        if submit:
-            setup_started = perf_counter()
-            bridge_batch_id = self.store.create_batch(run_id, rtype, "")
-            nimbus_batch = self.client.create_batch(rtype, bridge_batch_id)
-            self.store.db.execute("UPDATE batches SET nimbus_batch_id=? WHERE id=?", (nimbus_batch, bridge_batch_id))
-            setup_seconds = perf_counter() - setup_started
-            submit_started = perf_counter()
-            resp = self.client.submit(nimbus_batch, [{"sourceKey": r["source_key"], "resource": p} for r, _, p in submit])
-            submit_seconds = perf_counter() - submit_started
+        setup_seconds = 0.0
+
+        def send() -> None:
+            nonlocal nimbus_batch, bridge_batch_id, setup_seconds
+            if nimbus_batch is None:
+                setup_started = perf_counter()
+                bridge_batch_id = self.store.create_batch(run_id, rtype, "")
+                nimbus_batch = self.client.create_batch(rtype, bridge_batch_id)
+                self.store.db.execute("UPDATE batches SET nimbus_batch_id=? WHERE id=?", (nimbus_batch, bridge_batch_id))
+                setup_seconds = perf_counter() - setup_started
+            if self._sender is None:
+                self._sender = ThreadPoolExecutor(max_workers=1, thread_name_prefix="nimbus-import")
+            body = [{"sourceKey": r["source_key"], "resource": p} for r, _, p in pending]
+            chunks.append((list(pending), self._sender.submit(self._timed_submit, nimbus_batch, body)))
+            pending.clear()
+
+        try:
+            with self.store.tx():
+                for rec in recs:
+                    ctx = MapContext(self.store, run_id, rtype, rec, self.profile)
+                    try:
+                        outcome = run_mapper(ctx)
+                    except Exception as exc:  # a mapper bug must surface as a rejection, not vanish
+                        results.append(self._finish(run_id, rtype, rec, ctx, S.REJECTED, issues=[{
+                            "code": "BRIDGE_MAPPER_ERROR", "message": f"{type(exc).__name__}: {exc}", "severity": "error",
+                            "trace": traceback.format_exc(limit=3)}]))
+                        continue
+                    if outcome.status == "ok":
+                        pending.append((rec, ctx, outcome.payload))
+                        if len(pending) >= PIPELINE_CHUNK and getattr(self.client, "out_of_process", False):
+                            send()
+                    else:
+                        status = {"held": S.HELD, "blocked": S.BLOCKED, "dropped": S.DROPPED, "superseded": S.SUPERSEDED}[outcome.status]
+                        results.append(self._finish(run_id, rtype, rec, ctx, status, note=outcome.note))
+                if pending:
+                    send()
+        except BaseException:
+            # Mapping failed after some chunks were sent: undo them in Nimbus so nothing outlives the rolled-back
+            # mapping transaction, then re-raise.
+            for _, future in chunks:
+                future.exception()
+            if nimbus_batch is not None:
+                try:
+                    self.client.close(nimbus_batch)
+                    self.client.rollback(nimbus_batch)
+                except Exception:
+                    pass
+            raise
+
+        map_seconds = perf_counter() - started
+        submit_seconds = close_seconds = persist_seconds = 0.0
+        if chunks:
+            for records, future in chunks:
+                resp, busy = future.result()
+                submit_seconds += busy
+                persist_started = perf_counter()
+                self._persist_results(run_id, rtype, records, resp, bridge_batch_id, results)
+                persist_seconds += perf_counter() - persist_started
             close_started = perf_counter()
             self.client.close(nimbus_batch)
             close_seconds = perf_counter() - close_started
-            persist_started = perf_counter()
-            self._persist_results(run_id, rtype, submit, resp, bridge_batch_id, results)
-            persist_seconds = perf_counter() - persist_started
         else:
             bridge_batch_id = self.store.create_batch(run_id, rtype, "")
         load_seconds = perf_counter() - started - map_seconds
@@ -153,6 +194,11 @@ class Runner:
                              {'map_seconds': map_seconds, 'load_seconds': load_seconds,
                               'target_setup_seconds': setup_seconds, 'target_submit_seconds': submit_seconds,
                               'target_close_seconds': close_seconds, 'persist_seconds': persist_seconds})
+
+    def _timed_submit(self, nimbus_batch: str, body: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], float]:
+        t = perf_counter()
+        resp = self.client.submit(nimbus_batch, body)
+        return resp, perf_counter() - t
 
     def _persist_results(self, run_id, rtype, submit, resp, bridge_batch_id, results) -> None:
         # Same per-record outcome as _finish, written with a handful of executemany calls per batch.

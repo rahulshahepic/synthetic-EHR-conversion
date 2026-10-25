@@ -7,6 +7,8 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Iterable
 
+from .. import jsonx
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS runs (
   id TEXT PRIMARY KEY, source TEXT, target TEXT, status TEXT, created_at TEXT, updated_at TEXT,
@@ -73,12 +75,8 @@ def now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-# Same output as json.dumps(v, default=str), without constructing an encoder on every call.
-_encode = json.JSONEncoder(default=str).encode
-
-
 def _j(v: Any) -> str | None:
-    return None if v is None else _encode(v)
+    return None if v is None else jsonx.dumps(v)  # == json.dumps(v, default=str) once parsed
 
 
 def _l(v: str | None) -> Any:

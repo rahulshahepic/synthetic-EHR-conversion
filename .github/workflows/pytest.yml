@@ -11,6 +11,7 @@ permissions:
   contents: read
 
 jobs:
+  # Job name "pytest" is a required status check: keep it (3.12, the oldest supported version).
   pytest:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -19,6 +20,21 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
+          cache: pip
+      - name: Install dependencies
+        run: python -m pip install -e ".[dev]" pytest-xdist
+      - name: Run tests
+        run: python -m pytest -q -n 4 --dist loadfile --durations=20
+
+  # Benchmarks run on 3.13 (~13% faster), so test it too.
+  pytest-py313:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
           cache: pip
       - name: Install dependencies
         run: python -m pip install -e ".[dev]" pytest-xdist
