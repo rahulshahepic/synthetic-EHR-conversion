@@ -7,20 +7,36 @@ when profiler observations (directly, or as a dispute resolution) back the
 rule. The generated Python profile is a thin rendering of that spec, never
 the artifact of record.
 
+Provenance is derived from validated evidence, never from substring
+matching on free-text source strings. A rule is ``profiler-data`` only
+when the claim that stated its value (or the resolution that settled it)
+carries structured profiler evidence, and ``data_confirmed`` is true only
+when a cited observation id resolves to an actual profiler observation
+recorded in the ledger — an ``OBS-<digits>`` event with non-empty stats.
+A document quote recorded under an observation-like id (an estate note,
+a dictionary excerpt) is document evidence: it can inform a resolution,
+but it never confirms anything and never earns the profiler-data kind.
+
 Pure function: same ledger + claims in, byte-identical spec out.
 
 One rule is policy, not evidence, and overrides any claim: identity merges
 route to a human reconciliation question, never an auto-merge rule — even
-when an analyst describes merging as routine. The overridden claim stays
-visible in the spec's ``policy_overrides``.
+when an analyst describes merging as routine. The override applies to
+every identity claim other than the keying story, whatever predicate it
+arrives under. The overridden claim stays visible in the spec's
+``policy_overrides``.
 """
 from __future__ import annotations
 
+import csv
+import io
 import json
+import re
 from dataclasses import dataclass
 from typing import Any
 
-from .claims import ClaimStore
+from .claims import Claim, ClaimStore, Dispute, _canon
+from .coverage import Inventory, build_checklist, uncovered
 from .ledger import LedgerEvent
 
 PROFILE_CONSTANTS: dict[tuple[str, str], str] = {
@@ -47,20 +63,111 @@ MERGE_POLICY_RULE = {
 }
 
 
-def _provenance_of(source: str) -> tuple[str, bool]:
-    """(kind, data_confirmed) for a claim's provenance string (or a dispute
-    provenance string of the form '<winner source>; dispute resolved via X')."""
-    s = source or ""
-    data_confirmed = "OBS-" in s or "profiler" in s.lower()
-    if s.startswith("ledger:"):
-        kind = "analyst"
-    elif "OBS-" in s or "profiler" in s.lower():
-        kind = "profiler-data"
-    elif "dict" in s.lower() or "DATADICT" in s:
-        kind = "dictionary"
-    else:
-        kind = "analyst" if "ledger" in s else "dictionary"
-    return kind, data_confirmed
+_OBS_DATA_ID = re.compile(r"^OBS-\d+$")
+_OBS_TOKEN = re.compile(r"OBS-[A-Za-z0-9_-]+")
+
+
+def _observation_stats(events: list[LedgerEvent]) -> dict[str, dict[str, Any]]:
+    """Observation id -> stats, for every observation recorded in the ledger."""
+    out: dict[str, dict[str, Any]] = {}
+    for e in events:
+        if e.type == "observation":
+            oid = e.payload.get("obs_id")
+            if oid:
+                out[oid] = e.payload.get("stats") or {}
+    return out
+
+
+def _is_data_observation(ref: str, observations: dict[str, dict[str, Any]]) -> bool:
+    """A reference is profiler *data* evidence only if it names an actual
+    profiler observation recorded in the ledger: an ``OBS-<digits>`` id
+    whose event carries non-empty stats. Document quotes filed under
+    observation-like ids (``OBS-ESTATE-1``, ``OBS-VERSION``) fail this —
+    deliberately."""
+    return bool(_OBS_DATA_ID.match(ref or "")) and bool(observations.get(ref))
+
+
+def _claim_kind(claim: Claim, observations: dict[str, dict[str, Any]]) -> str:
+    """The provenance kind of one claim, from its structured provenance
+    when recorded, else from a conservative reading of its source: an exact
+    data-observation source is profiler-data, a ledger answer is an
+    analyst, an estate document (dictionary, layouts, interface notes) is
+    dictionary evidence. Free text merely *mentioning* an observation or
+    the profiler earns nothing."""
+    if claim.source_kind:
+        return claim.source_kind
+    src = claim.source or ""
+    first = src.split()[0].rstrip("(:") if src.split() else ""
+    if _is_data_observation(first, observations):
+        return "profiler-data"
+    if src.startswith("ledger:"):
+        return "analyst"
+    low = src.lower()
+    if low.startswith("profiler"):
+        return "profiler-data"
+    if any(mark in low for mark in ("dictionary", "datadict", "estate",
+                                    "layouts", "interface notes")):
+        return "dictionary"
+    return "analyst"
+
+
+def _evidence_confirmed(refs: Any, observations: dict[str, dict[str, Any]]) -> bool:
+    return any(_is_data_observation(r, observations) for r in refs)
+
+
+def _rule_provenance(store: ClaimStore, subject: str, predicate: str, value: Any,
+                     observations: dict[str, dict[str, Any]]) -> tuple[str, bool, str | None]:
+    """(kind, data_confirmed, ref) for a rule, derived from validated evidence.
+
+    The kind is the kind of the claim that stated the winning value (the
+    claim is what the rule asserts); when no claim states the resolved
+    value (a resolution introduced it), the resolution's own kind decides.
+    ``data_confirmed`` is kept separate from who claimed the value: an
+    analyst's claim confirmed by a profiler observation is analyst-kind
+    and data-confirmed.
+    """
+    dispute = store.dispute(subject, predicate)
+    winners = [c for c in store.get(subject, predicate)
+               if _canon(c.value) == _canon(value)]
+    kind: str | None = None
+    confirmed = False
+    if winners:
+        kind = _claim_kind(winners[0], observations)
+        for c in winners:
+            refs = list(c.evidence_refs)
+            if c.source and c.source.split():
+                refs.append(c.source.split()[0].rstrip("(:"))
+            if _evidence_confirmed(refs, observations):
+                confirmed = True
+    if dispute is not None and dispute.resolved:
+        refs = list(dispute.resolution_evidence_refs)
+        if not refs and dispute.resolution_source:
+            refs = _OBS_TOKEN.findall(dispute.resolution_source)
+        if _evidence_confirmed(refs, observations):
+            confirmed = True
+        if kind is None:
+            kind = dispute.resolution_source_kind or (
+                "profiler-data" if _evidence_confirmed(refs, observations) else "analyst")
+    return kind or "analyst", confirmed, store.provenance(subject, predicate)
+
+
+def _with_extra_claims(store: ClaimStore, extra: list[Claim]) -> ClaimStore:
+    """A copy of ``store`` with additional claims folded in (the original
+    store is left untouched, keeping generate_spec a pure function)."""
+    new = ClaimStore()
+    new.claims = list(store.claims)
+    new.disputes = {
+        key: Dispute(subject=d.subject, predicate=d.predicate, claims=list(d.claims),
+                     resolved_value=d.resolved_value,
+                     resolution_source=d.resolution_source,
+                     resolution_claimed_by=d.resolution_claimed_by,
+                     resolution_source_kind=d.resolution_source_kind,
+                     resolution_evidence_refs=d.resolution_evidence_refs)
+        for key, d in store.disputes.items()
+    }
+    for c in extra:
+        new.add(c)
+    return new
 
 
 @dataclass
@@ -75,26 +182,43 @@ class SpecPackage:
         return json.dumps(self.spec, indent=1, sort_keys=True) + "\n"
 
 
-def generate_spec(events: list[LedgerEvent], store: ClaimStore, source: str) -> SpecPackage:
+def generate_spec(events: list[LedgerEvent], store: ClaimStore, source: str,
+                  inventory: Inventory | None = None,
+                  profile_report: dict[str, Any] | None = None) -> SpecPackage:
+    """Build the spec package from a ledger and its claim store.
+
+    ``inventory`` (the coverage checklist's view of the export) is carried
+    into the spec: every checklist item the claims leave open or disputed
+    appears in ``known_unknowns`` instead of being silently dropped.
+    ``profile_report`` (a profiler report over the export) contributes
+    profiler value-shape claims, so a data-observed value shape can
+    dispute an analyst's contrary belief instead of being swallowed.
+    """
+    if profile_report is not None:
+        from .profiler import value_shape_claims
+        extra = value_shape_claims(profile_report)
+        if extra:
+            store = _with_extra_claims(store, extra)
+    observations = _observation_stats(events)
     rules: list[dict[str, Any]] = []
     overrides: list[dict[str, Any]] = []
     keys = sorted({c.key() for c in store.claims})
     n = 0
     for subject, predicate in keys:
-        value = store.resolved_value(subject, predicate)
-        prov_str = store.provenance(subject, predicate)
-        if subject == "identity" and predicate == "merge_policy":
+        if subject == "identity" and predicate != "keying_story":
+            # Merge policy is policy, not evidence — for ANY predicate that
+            # expresses it, not only the one literally named merge_policy.
             claimed = [c.value for c in store.get(subject, predicate)]
             if any(v != "route_to_reconciliation" for v in claimed):
                 overrides.append({"subject": subject, "predicate": predicate,
                                   "claimed_values": claimed,
                                   "policy": "route_to_reconciliation"})
             continue  # the policy rule below replaces any claim on this key
-        if value is None and store.dispute(subject, predicate) is not None:
-            continue  # unresolved dispute -> known unknown, not a rule
+        value = store.resolved_value(subject, predicate)
         if value is None:
-            continue
-        kind, confirmed = _provenance_of(prov_str or "")
+            continue  # unresolved / null-resolved dispute -> known unknown
+        kind, confirmed, prov_str = _rule_provenance(
+            store, subject, predicate, value, observations)
         n += 1
         rules.append({
             "id": f"R{n:03d}",
@@ -108,12 +232,32 @@ def generate_spec(events: list[LedgerEvent], store: ClaimStore, source: str) -> 
     rules.append(dict(MERGE_POLICY_RULE))
 
     known_unknowns: list[dict[str, Any]] = []
-    for d in sorted(store.unresolved_disputes(), key=lambda d: (d.subject, d.predicate)):
-        known_unknowns.append({
-            "subject": d.subject, "predicate": d.predicate,
-            "claimed_values": d.values,
-            "disposition": "runtime_question",
-        })
+    seen_unknowns: set[tuple[str, str]] = set()
+
+    def add_unknown(subject: str, predicate: str, **kw: Any) -> None:
+        if (subject, predicate) in seen_unknowns:
+            return
+        seen_unknowns.add((subject, predicate))
+        known_unknowns.append({"subject": subject, "predicate": predicate, **kw})
+
+    open_disputes = sorted(
+        store.unresolved_disputes() + store.null_resolved_disputes(),
+        key=lambda d: (d.subject, d.predicate))
+    for d in open_disputes:
+        entry: dict[str, Any] = {"claimed_values": d.values,
+                                 "disposition": "runtime_question"}
+        if d.resolved:  # resolved to None: "absent" was the resolution
+            entry["resolved_value"] = None
+            entry["note"] = ("dispute resolved to absent (None); the subject "
+                              "stays visible as a known unknown rather than "
+                              "vanishing from the spec")
+        add_unknown(d.subject, d.predicate, **entry)
+    if inventory is not None:
+        for item in uncovered(build_checklist(inventory, store)):
+            add_unknown(item.subject, item.predicate, claimed_values=[],
+                        disposition="runtime_question",
+                        note=f"coverage checklist item {item.id} is {item.status}: "
+                             f"{item.description}")
     known_unknowns.append({
         "subject": "identity", "predicate": "merge_decisions",
         "disposition": "runtime_question",
@@ -153,10 +297,13 @@ def _render_crosswalks(rules: list[dict[str, Any]]) -> dict[str, str]:
             name = rule["subject"][len("codeset:"):]
             value = rule["value"]
             rows = value.items() if isinstance(value, dict) else value
-            lines = ["source,target,provenance"]
+            buf = io.StringIO()
+            writer = csv.writer(buf, lineterminator="\n")
+            writer.writerow(["source", "target", "provenance"])
             for src, tgt in sorted(rows):
-                lines.append(f"{src},{tgt},{rule['provenance']['kind']}:{rule['provenance']['ref']}")
-            out[name] = "\n".join(lines) + "\n"
+                writer.writerow([src, tgt, f"{rule['provenance']['kind']}:"
+                                            f"{rule['provenance']['ref']}"])
+            out[name] = buf.getvalue()
     return out
 
 

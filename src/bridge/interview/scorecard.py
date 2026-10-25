@@ -127,7 +127,10 @@ def grade_entry(entry: dict[str, Any], spec: dict[str, Any]) -> dict[str, Any]:
                                   f"{rule['provenance']['kind']}"}
         return {"id": entry["id"], "verdict": "swallowed",
                 "detail": f"spec value {value!r} matches neither position"}
-    return {"id": entry["id"], "verdict": "routed-to-runtime-question",
+    # No rule and no known unknown: the fact was never handled at all.
+    # Absence is a miss, not a routed question — "routed" requires an
+    # explicit unknown/routing artifact in the spec.
+    return {"id": entry["id"], "verdict": "missed",
             "detail": "no rule and no unknown recorded for the checked subjects"}
 
 

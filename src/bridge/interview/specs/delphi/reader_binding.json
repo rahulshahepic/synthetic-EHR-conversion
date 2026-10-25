@@ -1,7 +1,14 @@
 {
  "files": {
   "APPT": {
-   "key_field": "ACCT",
+   "discriminator": {
+    "field": "RT",
+    "start": 0,
+    "width": 2
+   },
+   "key_fields": {
+    "S": "APPT"
+   },
    "layouts": {
     "S": [
      {
@@ -63,7 +70,14 @@
    "path": "APPT.TXT"
   },
   "BILL": {
-   "key_field": "ACCT",
+   "discriminator": {
+    "field": "RT",
+    "start": 0,
+    "width": 2
+   },
+   "key_fields": {
+    "B": "CHG"
+   },
    "layouts": {
     "B": [
      {
@@ -119,7 +133,14 @@
    "path": "BILL.TXT"
   },
   "CHGDICT": {
-   "key_field": "ACCT",
+   "discriminator": {
+    "field": "RT",
+    "start": 0,
+    "width": 2
+   },
+   "key_fields": {
+    "C": "CODE"
+   },
    "layouts": {
     "C": [
      {
@@ -151,7 +172,14 @@
    "path": "CHGDICT.TXT"
   },
   "DX": {
-   "key_field": "ACCT",
+   "discriminator": {
+    "field": "RT",
+    "start": 0,
+    "width": 2
+   },
+   "key_fields": {
+    "P": "DXID"
+   },
    "layouts": {
     "P": [
      {
@@ -213,7 +241,14 @@
    "path": "DX.TXT"
   },
   "DXDICT": {
-   "key_field": "ACCT",
+   "discriminator": {
+    "field": "RT",
+    "start": 0,
+    "width": 2
+   },
+   "key_fields": {
+    "D": "CODE"
+   },
    "layouts": {
     "D": [
      {
@@ -239,7 +274,14 @@
    "path": "DXDICT.TXT"
   },
   "ENC": {
-   "key_field": "ACCT",
+   "discriminator": {
+    "field": "RT",
+    "start": 0,
+    "width": 2
+   },
+   "key_fields": {
+    "V": "VISIT"
+   },
    "layouts": {
     "V": [
      {
@@ -319,7 +361,14 @@
    "path": "ENC.TXT"
   },
   "JOURNAL": {
-   "key_field": "ACCT",
+   "discriminator": {
+    "field": "RT",
+    "start": 0,
+    "width": 2
+   },
+   "key_fields": {
+    "J": "SEQ"
+   },
    "layouts": {
     "J": [
      {
@@ -381,7 +430,18 @@
    "path": "JOURNAL.TXT"
   },
   "LAB": {
-   "key_field": "ACCT",
+   "discriminator": {
+    "field": "RT",
+    "start": 0,
+    "width": 2
+   },
+   "key_fields": {
+    "A": "ACCT",
+    "R": [
+     "ACC",
+     "TEST"
+    ]
+   },
    "layouts": {
     "A": [
      {
@@ -481,7 +541,14 @@
    "path": "LAB.TXT"
   },
   "LABDICT": {
-   "key_field": "ACCT",
+   "discriminator": {
+    "field": "RT",
+    "start": 0,
+    "width": 2
+   },
+   "key_fields": {
+    "T": "TEST"
+   },
    "layouts": {
     "T": [
      {
@@ -525,7 +592,18 @@
    "path": "LABDICT.TXT"
   },
   "NOTE": {
-   "key_field": "ACCT",
+   "discriminator": {
+    "field": "RT",
+    "start": 0,
+    "width": 2
+   },
+   "key_fields": {
+    "C": [
+     "NOTE",
+     "SEQ"
+    ],
+    "N": "NOTE"
+   },
    "layouts": {
     "C": [
      {
@@ -613,7 +691,15 @@
    "path": "NOTE.TXT"
   },
   "PHA": {
-   "key_field": "ACCT",
+   "discriminator": {
+    "field": "RT",
+    "start": 0,
+    "width": 2
+   },
+   "key_fields": {
+    "A": "ACCT",
+    "M": "ORD"
+   },
    "layouts": {
     "A": [
      {
@@ -731,7 +817,14 @@
    "path": "PHA.TXT"
   },
   "PROV": {
-   "key_field": "ACCT",
+   "discriminator": {
+    "field": "RT",
+    "start": 0,
+    "width": 2
+   },
+   "key_fields": {
+    "D": "CODE"
+   },
    "layouts": {
     "D": [
      {
@@ -781,7 +874,18 @@
    "path": "PROV.TXT"
   },
   "RAD": {
-   "key_field": "ACCT",
+   "discriminator": {
+    "field": "RT",
+    "start": 0,
+    "width": 2
+   },
+   "key_fields": {
+    "A": "ACCT",
+    "X": [
+     "ACCT",
+     "EXAM"
+    ]
+   },
    "layouts": {
     "A": [
      {
@@ -875,7 +979,14 @@
    "path": "RAD.TXT"
   },
   "REG": {
-   "key_field": "ACCT",
+   "discriminator": {
+    "field": "RT",
+    "start": 0,
+    "width": 2
+   },
+   "key_fields": {
+    "A": "ACCT"
+   },
    "layouts": {
     "A": [
      {
