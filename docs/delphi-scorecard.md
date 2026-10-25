@@ -8,11 +8,11 @@ grading ledger (16 entries: 9 dictionary discrepancies, 5 analyst beliefs,
 
 | Entry | Verdict | How |
 |---|---|---|
-| dict_version_skew | swallowed | spec carries the true position via dictionary |
+| dict_version_skew | caught-by-documents | spec carries the true position via dictionary |
 | dict_dob_format | caught-by-profiling | spec carries the true position via profiler-data |
 | dict_pivot_year | caught-by-analyst | spec value 30 via analyst |
 | dict_potassium_unit | caught-by-analyst | spec carries the true position via analyst |
-| dict_stale_field_fax | swallowed | spec carries the true position via dictionary |
+| dict_stale_field_fax | caught-by-documents | spec carries the true position via dictionary |
 | dict_undocumented_yday | caught-by-analyst | spec carries the true position via analyst |
 | dict_undocumented_allergy_field | caught-by-analyst | spec carries the true position via analyst |
 | dict_appt_status_incomplete | routed-to-runtime-question | field:APPT.TXT.STATUS convention is an unresolved dispute in the spec |
@@ -21,7 +21,7 @@ grading ledger (16 entries: 9 dictionary discrepancies, 5 analyst beliefs,
 | belief_lab_nonnumeric_bench_error | routed-to-runtime-question | field:LAB.TXT.RESULT convention is an unresolved dispute in the spec |
 | belief_registration_merges_routine | routed-to-runtime-question | identity merges route to a human reconciliation question by policy, whatever any analyst claimed |
 | belief_pharmacy_misc_meds_skippable | caught-by-analyst | spec carries the true position via analyst |
-| belief_systems_dictionary_current | swallowed | spec carries the true position via dictionary |
+| belief_systems_dictionary_current | caught-by-documents | spec carries the true position via dictionary |
 | disagreement_pivot_year | caught-by-analyst | spec value 30 via analyst |
 | disagreement_duplicate_charts | routed-to-runtime-question | the disagreement resolves into per-person matching (keying story) with every merge decided by a human |
 
@@ -30,19 +30,20 @@ grading ledger (16 entries: 9 dictionary discrepancies, 5 analyst beliefs,
 - caught-by-profiling: 1
 - caught-by-analyst: 8
 - routed-to-runtime-question: 4
-- swallowed: 3
+- caught-by-documents: 3
+- swallowed: 0
 
-Three of the swallowed entries need a caveat: the spec carries the *true*
-position for all three (the dictionary is stale; there is no FAX field;
-Holt's "current" belief is refuted). They grade as swallowed because of
-what proved them. The PR #42 round-4 fixes tightened the provenance
-doctrine: the profiler-data kind is earned only by subject-bound data
-confirmation, and document evidence — comparing DATADICT.TXT against
-LAYOUTS.DAT, which is how all three were established — earns the
-dictionary kind. The grader credits no "caught" verdict to a
-dictionary-kind rule: a dictionary agreeing with the truth is not a
-catch, and a document comparison is not a measurement. The verdicts are
-honest about the evidence even where that under-credits the process.
+Three entries are caught-by-documents: the version skew, the stale FAX
+field, and Holt's "the dictionary is current" belief. All three were
+established by comparing estate documents (DATADICT.TXT against
+LAYOUTS.DAT), and the spec carries the true position for each. The
+PR #42 review rounds tightened the provenance doctrine in two steps:
+round 4 made the profiler-data kind require subject-bound data
+confirmation, so document evidence earns the dictionary kind instead;
+round 5 gave the grader a verdict that names what happened. "Swallowed"
+means a false position was adopted unchallenged — the opposite of what
+happened here — and crediting document comparison as profiling would
+overstate the evidence the other way.
 
 History: this scorecard originally showed one swallow — the lab analyst's
 position that non-numeric results are bench errors was adopted into the

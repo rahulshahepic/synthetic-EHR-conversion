@@ -90,6 +90,15 @@ def stage_records(export: FixedWidthExport) -> list[dict[str, Any]]:
         fpath = export.path / spec.get("path", f"{stem}.TXT")
         if not fpath.exists():
             if spec.get("optional"):
+                # Optional permits absence only when the delivery agrees
+                # the file is empty: a positive manifest count for a
+                # missing file is a contradiction, not an option.
+                expected = manifest_counts.get(stem)
+                if expected:
+                    raise ValueError(
+                        f"bound file missing from export: {fpath} but the "
+                        f"export manifest counts {expected} records for "
+                        f"{stem}")
                 continue
             raise FileNotFoundError(
                 f"bound file missing from export: {fpath} "

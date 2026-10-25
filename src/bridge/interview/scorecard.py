@@ -75,8 +75,15 @@ def _caught_by(rule: dict[str, Any]) -> str:
         return "caught-by-profiling" if rule.get("data_confirmed") else "swallowed"
     if kind == "analyst":
         return "caught-by-analyst"
-    # A dictionary-sourced rule that happens to match truth was not caught
-    # by anything; if it is also data-confirmed, the profiler did it.
+    if kind == "dictionary":
+        # Both call sites reach here only once the spec is known to
+        # carry the true position, so a dictionary-kind winner means the
+        # truth was established by comparing estate documents. That is a
+        # catch, by documents — not a swallow, which means the false
+        # position was adopted. If the rule is also data-confirmed, the
+        # profiler's measurement did the work.
+        return "caught-by-profiling" if rule.get("data_confirmed") \
+            else "caught-by-documents"
     return "caught-by-profiling" if rule.get("data_confirmed") else "swallowed"
 
 

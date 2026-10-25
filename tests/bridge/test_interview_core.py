@@ -61,12 +61,12 @@ def test_claims_dictionary_ingest_and_ledger_replay():
 def test_coverage_statuses():
     inv = coverage_mod.Inventory(files={"REG.TXT": ["DOB", "NAME"]}, code_sets=["payer"])
     store = claims_mod.ClaimStore()
-    store.add(claims_mod.Claim("file:REG.TXT", "layout_binding", "LAYOUTS.DAT v5.0", "estate"))
+    store.add(claims_mod.Claim("file:REG", "layout_binding", "LAYOUTS.DAT v5.0", "estate"))
     store.add(claims_mod.Claim("field:REG.TXT.DOB", "convention", "YYMMDD", "OBS-0001"))
     store.add(claims_mod.Claim("field:REG.TXT.NAME", "convention", "text30", "dict"))
     store.add(claims_mod.Claim("field:REG.TXT.NAME", "convention", "text40", "ledger:E1"))
     items = {i.subject: i for i in coverage_mod.build_checklist(inv, store)}
-    assert items["file:REG.TXT"].status == "covered"
+    assert items["file:REG"].status == "covered"
     assert items["field:REG.TXT.DOB"].status == "covered"
     assert items["field:REG.TXT.NAME"].status == "disputed"
     assert items["identity"].status == "open"

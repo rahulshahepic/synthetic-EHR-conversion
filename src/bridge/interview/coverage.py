@@ -46,6 +46,15 @@ class ChecklistItem:
                 "evidence": self.evidence}
 
 
+def _file_stem(name: str) -> str:
+    """The canonical file identity for layout bindings: the file's stem,
+    without its extension. The profiler's inventory names files as they
+    sit on disk (``REG.TXT``); layout claims and reader bindings name
+    them by stem (``file:REG``). Field subjects keep the full file name
+    (``field:REG.TXT.DOB``) — only the file-level identity is the stem."""
+    return name.rsplit(".", 1)[0] if "." in name else name
+
+
 def build_checklist(inventory: Inventory, store: ClaimStore) -> list[ChecklistItem]:
     items: list[ChecklistItem] = []
 
@@ -72,7 +81,8 @@ def build_checklist(inventory: Inventory, store: ClaimStore) -> list[ChecklistIt
                                    description=description, status=status, evidence=evidence))
 
     for fname in sorted(inventory.files):
-        add(f"file:{fname}", "layout_binding", f"Layout binding for {fname}")
+        add(f"file:{_file_stem(fname)}", "layout_binding",
+            f"Layout binding for {fname}")
         for field in inventory.files[fname]:
             add(f"field:{fname}.{field}", "convention",
                 f"Type/format convention for {fname}.{field}",

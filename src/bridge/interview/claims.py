@@ -178,7 +178,8 @@ class ClaimStore:
         for row in rows:
             self.add(Claim(subject=row["subject"], predicate=row["predicate"],
                            value=row["value"], source=source,
-                           confidence=row.get("confidence", confidence)))
+                           confidence=row.get("confidence", confidence),
+                           source_kind="dictionary"))
             n += 1
         return n
 

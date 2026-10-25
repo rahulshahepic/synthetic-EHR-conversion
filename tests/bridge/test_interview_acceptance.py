@@ -682,6 +682,97 @@ def test_repo_scoped_roots_still_refuse_structure(tmp_path):
     assert "estate manual" in svc.read_estate("manual.md")["text"]
 
 
+# ------------------------------ broad audit: injection, identity, origins
+
+def test_reader_claim_value_cannot_inject_into_generated_profile():
+    """Broad audit P1, value route: a reader claim whose value is a
+    code-shaped string is rejected at generation time — the reader name
+    must be a plain identifier, never raw text in the profile module."""
+    store = ClaimStore()
+    store.add(Claim("profile", "reader",
+                    'fixed_width"\nUNEXPECTED_SIDE_EFFECT = True\n#',
+                    "attacker-controlled claim"))
+    with pytest.raises(ValueError, match="not a permitted identifier"):
+        specgen.generate_spec([], store, "acceptance")
+
+
+def test_profile_values_and_citations_cannot_inject_code():
+    """Broad audit P1, both remaining routes: a constant's value is
+    rendered as a Python literal, and a provenance citation is flattened
+    into one comment line. Executing the generated module must define
+    exactly the intended constants and nothing else."""
+    payload = 'x"\nUNEXPECTED_SIDE_EFFECT = True\n#'
+    store = ClaimStore()
+    store.add(Claim("profile", "system_org", payload, "analyst claim"))
+    store.add(Claim("profile", "mrn_system", "MRN-9",
+                    "ledger:E1\nUNEXPECTED_SIDE_EFFECT = True\n#"))
+    pkg = specgen.generate_spec([], store, "acceptance")
+    assert "UNEXPECTED_SIDE_EFFECT = True" not in \
+        [line.strip() for line in pkg.profile_code.splitlines()]
+    ns: dict = {}
+    exec(pkg.profile_code, ns)
+    assert "UNEXPECTED_SIDE_EFFECT" not in ns
+    assert ns["SYSTEM_ORG"] == payload
+
+
+def test_real_inventory_covers_all_committed_layout_bindings(delphi_export):
+    """Broad audit P2: with a real profiler-derived inventory (files
+    named as on disk, REG.TXT) and the committed Delphi ledger (layout
+    claims under file:REG), every layout checklist item is covered.
+    Inventory file identity and layout-claim identity must agree."""
+    layouts, _ = profiler_mod.parse_layouts_dat(
+        (delphi_export / "LAYOUTS.DAT").read_text())
+    report = profiler_mod.profile_export(delphi_export, layouts)
+    inventory = Inventory.from_profile_report(report)
+    events = ledger_mod.read_events(LEDGERS / "delphi.jsonl")
+    store = ClaimStore.from_ledger(events)
+    items = [i for i in build_checklist(inventory, store)
+             if i.predicate == "layout_binding"]
+    assert len(items) == 14
+    assert all(i.status == "covered" for i in items), \
+        [(i.subject, i.status) for i in items if i.status != "covered"]
+
+
+def test_ingested_dictionary_rows_keep_dictionary_origin():
+    """Broad audit P2: rows ingested through the dictionary-ingestion
+    API are dictionary claims. The scorecard must not invent an analyst
+    finding for a fact no analyst supplied, whatever the source file is
+    named."""
+    store = ClaimStore()
+    store.ingest_rows([{"subject": "profile", "predicate": "pivot_year",
+                        "value": 30}], source="vendor-manual.md")
+    spec = specgen.generate_spec([], store, "acceptance").spec
+    rule = next(r for r in spec["rules"] if r["predicate"] == "pivot_year")
+    assert rule["provenance"]["kind"] == "dictionary"
+    assert grade_entry({"id": "dict_pivot_year"}, spec)["verdict"] == \
+        "caught-by-documents"
+
+
+def test_optional_file_with_positive_manifest_count_is_an_error(tmp_path):
+    """Broad audit P2: 'optional' permits a missing file only when the
+    manifest agrees it carries no records. A positive manifest count
+    for a missing optional file is a contradiction and must raise."""
+    (tmp_path / "REG.TXT").write_bytes(b"A1234567\n")
+    (tmp_path / "manifest.json").write_text(json.dumps(
+        {"counts": {"REG": 1, "LAB": 1}}))
+    fields = [{"name": "RT", "start": 0, "width": 1, "type": "T"},
+              {"name": "ACCT", "start": 1, "width": 7, "type": "T"}]
+    binding = {"source": "probe", "files": {
+        "REG": {"path": "REG.TXT", "key_field": "ACCT",
+                "discriminator": {"start": 0, "width": 1},
+                "layouts": {"A": fields}},
+        "LAB": {"path": "LAB.TXT", "key_field": "ACCT", "optional": True,
+                "discriminator": {"start": 0, "width": 1},
+                "layouts": {"A": fields}}}}
+    with pytest.raises(ValueError, match="manifest counts 1"):
+        reader_mod.stage_records(reader_mod.FixedWidthExport(tmp_path, binding))
+    (tmp_path / "manifest.json").write_text(json.dumps(
+        {"counts": {"REG": 1, "LAB": 0}}))
+    records = reader_mod.stage_records(
+        reader_mod.FixedWidthExport(tmp_path, binding))
+    assert len(records) == 1 and records[0]["record_type"] == "REG"
+
+
 # ------------------------------------------------------------------- ledger
 
 def test_ledger_appends_are_unique_under_concurrent_writers(tmp_path):

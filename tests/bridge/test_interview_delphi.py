@@ -19,17 +19,16 @@ SPEC_DIR = ROOT / "src/bridge/interview/specs/delphi"
 
 EXPECTED = {
     # The version skew and the stale FAX field were both established by
-    # comparing estate documents (DATADICT.TXT vs LAYOUTS.DAT). Since the
-    # PR #42 round-4 fixes, document evidence earns the dictionary kind,
-    # never profiler-data: the profiler-data kind requires subject-bound
-    # data confirmation. The grader credits no "caught" verdict to a
-    # dictionary-kind rule, so these grade as swallowed — the spec still
-    # carries the true position in both cases (see docs/delphi-scorecard.md).
-    "dict_version_skew": "swallowed",
+    # comparing estate documents (DATADICT.TXT vs LAYOUTS.DAT). Document
+    # evidence earns the dictionary kind, never profiler-data: since the
+    # PR #42 round-4 fixes the profiler-data kind requires subject-bound
+    # data confirmation, and since round 5 the grader names this verdict
+    # for what it is — caught by document comparison (docs/delphi-scorecard.md).
+    "dict_version_skew": "caught-by-documents",
     "dict_dob_format": "caught-by-profiling",
     "dict_pivot_year": "caught-by-analyst",
     "dict_potassium_unit": "caught-by-analyst",
-    "dict_stale_field_fax": "swallowed",
+    "dict_stale_field_fax": "caught-by-documents",
     "dict_undocumented_yday": "caught-by-analyst",
     "dict_undocumented_allergy_field": "caught-by-analyst",
     "dict_appt_status_incomplete": "routed-to-runtime-question",
@@ -43,7 +42,7 @@ EXPECTED = {
     "belief_pharmacy_misc_meds_skippable": "caught-by-analyst",
     # Holt's "the dictionary is current" belief is refuted by the same
     # version-skew rule, so it shares that rule's verdict.
-    "belief_systems_dictionary_current": "swallowed",
+    "belief_systems_dictionary_current": "caught-by-documents",
     "disagreement_pivot_year": "caught-by-analyst",
     "disagreement_duplicate_charts": "routed-to-runtime-question",
 }
@@ -99,7 +98,7 @@ def test_scorecard_verdicts(verdicts):
     assert verdicts == EXPECTED
     summary = scorecard.summarize([{"verdict": v} for v in verdicts.values()])
     assert summary == {"caught-by-profiling": 1, "caught-by-analyst": 8,
-                       "routed-to-runtime-question": 4, "swallowed": 3}
+                       "routed-to-runtime-question": 4, "caught-by-documents": 3}
 
 
 def test_delphi_staging_through_committed_binding(tmp_path):

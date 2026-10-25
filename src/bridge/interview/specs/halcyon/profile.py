@@ -6,7 +6,7 @@ from. Do not edit by hand; re-run the interview/spec generation.
 from datetime import date
 
 SOURCE_SYSTEM = 'halcyon'
-READER = "halcyon"
+READER = 'halcyon'
 # provenance: analyst — dispute resolved via OBS-ESTATE-2 + ledger answer (Tom Okafor, interface engineering) (data_confirmed=False)
 CHARGE_CENTS_FROM = date(2012, 1, 1)
 # provenance: dictionary — Halcyon interface notes (estate); dispute resolved via OBS-ESTATE-1 + ledger answer (Tom Okafor, interface engineering) (data_confirmed=False)

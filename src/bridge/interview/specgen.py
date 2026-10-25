@@ -362,6 +362,14 @@ def generate_spec(events: list[LedgerEvent], store: ClaimStore, source: str,
     })
 
     reader_name = store.resolved_value("profile", "reader") or "fixed_width"
+    if not isinstance(reader_name, str) or \
+            not re.fullmatch(r"[a-z][a-z0-9_]*", reader_name):
+        # The reader name is claim-derived text that ends up in the
+        # generated profile; anything that is not a plain identifier is
+        # rejected here rather than rendered.
+        raise ValueError(
+            f"reader name from claims is not a permitted identifier: "
+            f"{reader_name!r}")
     binding = _reader_binding(rules, source, reader_name)
     spec = {
         "source": source,
@@ -403,6 +411,15 @@ def _render_crosswalks(rules: list[dict[str, Any]]) -> dict[str, str]:
     return out
 
 
+def _comment_text(text: str) -> str:
+    """Flatten claim-derived text for a comment or docstring line in
+    generated code. Control characters become visible escapes, so a
+    newline inside a claim value or citation can never terminate the
+    comment and promote data into an executable statement."""
+    return (text.replace("\\", "\\\\").replace("\r", "\\r")
+                .replace("\n", "\\n").replace("\t", "\\t"))
+
+
 def _render_profile(source: str, rules: list[dict[str, Any]],
                     known_unknowns: list[dict[str, Any]],
                     reader_name: str = "fixed_width") -> str:
@@ -412,7 +429,7 @@ def _render_profile(source: str, rules: list[dict[str, Any]],
         if const:
             by_const[const] = rule
     lines = [
-        f'"""GENERATED profile for {source} by the Socratic import builder.',
+        f'"""GENERATED profile for {_comment_text(source)} by the Socratic import builder.',
         "",
         "Artifact of record: the declarative spec (spec.json) this was rendered",
         "from. Do not edit by hand; re-run the interview/spec generation.",
@@ -422,7 +439,7 @@ def _render_profile(source: str, rules: list[dict[str, Any]],
         lines.append("from datetime import date")
     lines.append("")
     lines.append(f"SOURCE_SYSTEM = {source!r}")
-    lines.append(f'READER = "{reader_name}"')
+    lines.append(f"READER = {reader_name!r}")
     for const in sorted(by_const):
         rule = by_const[const]
         value = rule["value"]
@@ -431,7 +448,8 @@ def _render_profile(source: str, rules: list[dict[str, Any]],
             expr = f"date({y}, {m}, {d})"
         else:
             expr = repr(value)
-        lines.append(f"# provenance: {rule['provenance']['kind']} — {rule['provenance']['ref']}"
+        lines.append(f"# provenance: {_comment_text(rule['provenance']['kind'])}"
+                     f" — {_comment_text(rule['provenance']['ref'])}"
                      f" (data_confirmed={rule['data_confirmed']})")
         lines.append(f"{const} = {expr}")
     lines.append("")

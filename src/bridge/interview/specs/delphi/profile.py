@@ -5,7 +5,7 @@ from. Do not edit by hand; re-run the interview/spec generation.
 """
 
 SOURCE_SYSTEM = 'delphi'
-READER = "fixed_width"
+READER = 'fixed_width'
 # provenance: analyst — ledger:E000032 (Marla Denny, registration); dispute resolved via OBS-0126 + ledger answer (Marla Denny, registration): window starts 1930 (data_confirmed=True)
 PIVOT_YEAR = 30
 
