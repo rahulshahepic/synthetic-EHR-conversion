@@ -381,3 +381,57 @@ def test_binding_event_filters_non_string_refs_and_keeps_the_valid_one():
          "binding": ["REG.TXT", "DOB"], "evidence_refs": ["OBS-0007"]}]
     assert store.binding_for("profile", "merge_window_days") is None
     assert [f["event"] for f in store.flagged_bindings] == ["E000003"]
+
+
+# -- round-5 review: refs discipline on claim/resolve events -------------------
+
+@pytest.mark.parametrize("bad_refs", [7, None, {"ref": "OBS-0007"}, "OBS-0007"])
+def test_claim_event_with_non_list_refs_replays(bad_refs):
+    """PR #43 round-5 review: the round-4 refs hardening covered only
+    binding events — a claim event with ``evidence_refs: 7`` (or null,
+    or a dict) still raised TypeError out of tuple() and aborted the
+    whole replay. Recorded evidence gets the same discipline on every
+    event type: a non-list refs slot contributes no refs, non-string
+    elements are dropped, and the event itself still replays."""
+    events = [
+        ledger_mod.LedgerEvent("E000001", "claim",
+                               {"subject": "profile",
+                                "predicate": "pivot_year", "value": 30,
+                                "source": "ledger:E000002 (Marla Denny)",
+                                "evidence_refs": bad_refs}),
+        ledger_mod.LedgerEvent("E000002", "claim",
+                               {"subject": "profile",
+                                "predicate": "pivot_year", "value": 50,
+                                "source": "DATADICT.TXT v4.1",
+                                "evidence_refs": [7, ["OBS-0007"]]}),
+    ]
+    store = claims_mod.ClaimStore.from_ledger(events)
+    claims = store.get("profile", "pivot_year")
+    assert [c.value for c in claims] == [30, 50]
+    assert all(c.evidence_refs == () for c in claims)
+
+
+@pytest.mark.parametrize("bad_refs", [7, None, {"ref": "OBS-0007"}])
+def test_resolve_event_with_non_list_refs_replays(bad_refs):
+    """The resolve half of the same hole: ``evidence_refs: null`` on a
+    resolve event aborted replay the same way. The resolution itself
+    still records; it just carries no refs."""
+    events = [
+        ledger_mod.LedgerEvent("E000001", "claim",
+                               {"subject": "profile",
+                                "predicate": "pivot_year", "value": 30,
+                                "source": "ledger:E000002 (Marla Denny)"}),
+        ledger_mod.LedgerEvent("E000002", "claim",
+                               {"subject": "profile",
+                                "predicate": "pivot_year", "value": 50,
+                                "source": "DATADICT.TXT v4.1"}),
+        ledger_mod.LedgerEvent("E000003", "resolve",
+                               {"subject": "profile",
+                                "predicate": "pivot_year", "value": 30,
+                                "source": "ledger:E000002 (Marla Denny)",
+                                "evidence_refs": bad_refs}),
+    ]
+    store = claims_mod.ClaimStore.from_ledger(events)
+    assert store.resolved_value("profile", "pivot_year") == 30
+    dispute = store.dispute("profile", "pivot_year")
+    assert dispute is not None and dispute.resolution_evidence_refs == ()

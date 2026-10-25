@@ -138,6 +138,60 @@ def validate_binding(value: Any) -> tuple[str, str]:
     return file.upper(), field.upper()
 
 
+_DATA_OBSERVATION_ID = re.compile(r"^OBS-\d+$")
+
+
+def is_data_observation(ref: Any,
+                        observations: dict[str, dict[str, Any]]) -> bool:
+    """A reference is profiler *data* evidence only if it names an actual
+    profiler observation recorded in the ledger: an ``OBS-<digits>`` id
+    whose event carries non-empty stats. Document quotes filed under
+    observation-like ids (``OBS-ESTATE-1``, ``OBS-VERSION``) fail this —
+    deliberately. A non-string ref (an int or a nested list out of a
+    hand-edited ledger) is not evidence either — it is ignored, never
+    handed to a matcher to crash on.
+
+    This is the one definition, shared by ledger replay (a binding
+    event's evidence check, in ``ClaimStore.from_ledger`` below) and by
+    spec generation (specgen's confirmation checks): the two must not
+    be able to drift into disagreeing about what counts as data."""
+    if not isinstance(ref, str):
+        return False
+    return bool(_DATA_OBSERVATION_ID.match(ref)) and bool(
+        observations.get(ref, {}).get("stats"))
+
+
+def observation_confirms(ref: Any, expected: tuple[str, str],
+                         observations: dict[str, dict[str, Any]]) -> bool:
+    """A reference confirms a (file, field) only if it is a real profiler
+    data observation (see ``is_data_observation``) *about that field*.
+    Existence is not enough: an observation of NOTE.TXT.TEXT says
+    nothing about the pivot year."""
+    if not is_data_observation(ref, observations):
+        return False
+    payload = observations[ref]
+    actual = (str(payload.get("file", "")), str(payload.get("field", "")))
+    return (actual[0].lower(), actual[1].lower()) == \
+        (expected[0].lower(), expected[1].lower())
+
+
+def string_refs(raw: Any) -> tuple[str, ...]:
+    """Evidence refs as recorded evidence may carry them, reduced to
+    the usable form: only a list/tuple contributes refs at all (a
+    scalar, null, or dict in the ``evidence_refs`` slot is malformed
+    and contributes none — not a ``TypeError`` that aborts the whole
+    replay), and only its string elements are refs (a stray int or a
+    nested list is ignored, never stored to crash a matcher later).
+
+    Ledger replay applies this to claim, resolve, and binding events
+    alike. Direct ``Claim``/``resolve`` construction in code keeps the
+    caller's values as given; this filter is the *recorded-evidence*
+    boundary."""
+    if not isinstance(raw, (list, tuple)):
+        return ()
+    return tuple(r for r in raw if isinstance(r, str))
+
+
 @dataclass(frozen=True)
 class Claim:
     subject: str
@@ -412,17 +466,12 @@ class ClaimStore:
 
         def binding_evidence_ok(refs: tuple[str, ...],
                                 parsed: tuple[str, str]) -> bool:
-            for ref in refs:
-                if not isinstance(ref, str) or not re.match(r"^OBS-\d+$", ref):
-                    continue
-                payload = observations.get(ref, {})
-                if not payload.get("stats"):
-                    continue
-                actual = (str(payload.get("file", "")), str(payload.get("field", "")))
-                if (actual[0].lower(), actual[1].lower()) == \
-                        (parsed[0].lower(), parsed[1].lower()):
-                    return True
-            return False
+            # The shared definition (observation_confirms, above):
+            # replay judges a binding's evidence by exactly the rule
+            # spec generation's confirmation checks use, so the two
+            # cannot drift apart.
+            return any(observation_confirms(ref, parsed, observations)
+                       for ref in refs)
 
         for e in events:
             p = e.payload
@@ -431,12 +480,14 @@ class ClaimStore:
                                 value=p.get("value"), source=p["source"],
                                 confidence=p.get("confidence", 1.0),
                                 source_kind=p.get("source_kind", ""),
-                                evidence_refs=tuple(p.get("evidence_refs", ()))))
+                                evidence_refs=string_refs(
+                                    p.get("evidence_refs"))))
             elif e.type == "resolve":
                 store.resolve(p["subject"], p["predicate"], p.get("value"), p["source"],
                               claimed_by=p.get("claimed_by", ""),
                               source_kind=p.get("source_kind", ""),
-                              evidence_refs=tuple(p.get("evidence_refs", ())))
+                              evidence_refs=string_refs(
+                                  p.get("evidence_refs")))
             elif e.type == "binding":
                 # A binding event records the (subject, predicate)'s
                 # (file, field) once, with its own evidence refs. The
@@ -446,14 +497,14 @@ class ClaimStore:
                 # callers.
                 subject = p.get("subject")
                 predicate = p.get("predicate")
-                refs_raw = p.get("evidence_refs", ())
-                # Non-string refs are unusable — filter them here, at
-                # the replay boundary, so what bind() stores can never
-                # crash the generator's matchers later. A binding left
-                # with no usable ref fails the evidence check below
-                # and is skipped + flagged like any other bad event.
-                refs = tuple(r for r in refs_raw if isinstance(r, str)) \
-                    if isinstance(refs_raw, (list, tuple)) else ()
+                # Non-string refs are unusable — filtered here, at the
+                # replay boundary (string_refs, the same filter claim
+                # and resolve events get), so what bind() stores can
+                # never crash the generator's matchers later. A binding
+                # left with no usable ref fails the evidence check
+                # below and is skipped + flagged like any other bad
+                # event.
+                refs = string_refs(p.get("evidence_refs"))
                 reason: str | None = None
                 parsed: tuple[str, str] | None = None
                 try:

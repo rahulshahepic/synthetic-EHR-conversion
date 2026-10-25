@@ -238,3 +238,22 @@ def test_delphi_staging_through_committed_binding(tmp_path):
         by_type[r["record_type"]] = by_type.get(r["record_type"], 0) + 1
     for stem, count in manifest["counts"].items():
         assert by_type.get(stem) == count, stem
+
+
+def test_keying_check_without_truth_grades_ungraded(monkeypatch):
+    """PR #43 round-5 review (minor): _keying_position fell back to a
+    hardcoded ('ACCT', 2) truth when a check carried no keying_truth,
+    so a missing or misspelled key in the grading data quietly graded
+    against facts nobody recorded. No truth in the check, no grade:
+    the verdict is "ungraded", never a confident caught/swallowed
+    computed from the default."""
+    spec = _keying_spec({"key_fields": ["LAB.TXT.ACCT", "REG.TXT.ACCT"],
+                         "master_index": False, "true_duplicates": True})
+    for entry_id in ("dict_registration_account_claim",
+                     "belief_lab_account_is_identity",
+                     "disagreement_duplicate_charts"):
+        variant = dict(scorecard.CHECKS[entry_id])
+        del variant["keying_truth"]
+        monkeypatch.setitem(scorecard.CHECKS, entry_id, variant)
+        verdict = scorecard.grade_entry({"id": entry_id}, spec)
+        assert verdict["verdict"] == "ungraded", (entry_id, verdict)

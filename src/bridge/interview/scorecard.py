@@ -115,11 +115,19 @@ def _keying_position(value: dict[str, Any], check: dict[str, Any]) -> str | None
     same as False — the spec validator treats the flag as optional, so
     a departmental story without it is the true position, not neither.
     Anything else — unrelated fields, one department's keys alone, a
-    mix of account and non-account fields — takes neither position."""
+    mix of account and non-account fields — takes neither position.
+
+    The truth is required, never defaulted: a check whose data lacks
+    ``keying_truth`` (a missing or misspelled key in the grading data)
+    grades as "ungraded", not against a silently assumed
+    ACCT / 2-departments truth that would report a confident verdict
+    computed from facts nobody recorded."""
     fields = value.get("key_fields") or []
     expected = check.get("keying_truth") or {}
-    account_field = expected.get("account_field", "ACCT")
-    min_departments = expected.get("min_departments", 2)
+    account_field = expected.get("account_field")
+    min_departments = expected.get("min_departments")
+    if account_field is None or min_departments is None:
+        return "ungraded"
     if value.get("master_index") is True or len(fields) == 1:
         return "false"
     parts = [part for token in fields for part in str(token).split("+")]
@@ -153,6 +161,12 @@ def grade_entry(entry: dict[str, Any], spec: dict[str, Any]) -> dict[str, Any]:
                       None)
         if keying is not None and policy is not None:
             value = keying.get("value")
+            if isinstance(value, dict) \
+                    and _keying_position(value, check) == "ungraded":
+                return {"id": entry["id"], "verdict": "ungraded",
+                        "detail": "check data carries no keying_truth for "
+                                  "this entry; refusing to grade against a "
+                                  "default truth"}
             # Routing requires BOTH the recorded resolved fact AND a
             # keying story that takes the true position: true_duplicates
             # recorded on top of a false keying story (a demographic
@@ -183,6 +197,11 @@ def grade_entry(entry: dict[str, Any], spec: dict[str, Any]) -> dict[str, Any]:
         if (subject, predicate) == ("identity", "keying_story") \
                 and isinstance(value, dict):
             position = _keying_position(value, check)
+            if position == "ungraded":
+                return {"id": entry["id"], "verdict": "ungraded",
+                        "detail": "check data carries no keying_truth for "
+                                  "this entry; refusing to grade against a "
+                                  "default truth"}
             if position == "false":
                 return {"id": entry["id"], "verdict": "swallowed",
                         "detail": f"spec adopted the false position "
