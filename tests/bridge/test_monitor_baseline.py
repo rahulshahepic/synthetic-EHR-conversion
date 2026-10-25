@@ -62,7 +62,8 @@ def test_non_finite_values_behave_like_statistics(tmp_path):
         bid = store.create_batch(run, "Observation", "")
         store.finish_batch(bid, "loaded", {}, {"attempted": 100, "fidelity_mean": v})
     hist = rules._baseline(store, run, "Observation", "fidelity_mean", "none")
-    with pytest.raises(ValueError):
+    # The exception type differs across Python versions (3.12: AttributeError, 3.13: ValueError); match it.
+    with pytest.raises(Exception) as expected:
         statistics.pstdev(hist)
-    with pytest.raises(ValueError):
+    with pytest.raises(expected.type):
         rules._baseline_stats(store, run, "Observation", "fidelity_mean", "none")
