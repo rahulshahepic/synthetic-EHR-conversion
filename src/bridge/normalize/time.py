@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
+from functools import lru_cache
 from zoneinfo import ZoneInfo
 
 
@@ -11,6 +12,9 @@ from zoneinfo import ZoneInfo
 _LOCAL_FORMATS = {14: "%Y%m%d%H%M%S", 12: "%Y%m%d%H%M", 8: "%Y%m%d"}
 
 
+# Pure functions of their (hashable) arguments returning immutable values: memoized because
+# clinical feeds repeat the same timestamps across many records.
+@lru_cache(maxsize=1 << 16)
 def parse_local(raw: str | None) -> datetime | None:
     raw = (raw or "").strip()
     fmt = _LOCAL_FORMATS.get(len(raw))
@@ -22,6 +26,7 @@ def parse_local(raw: str | None) -> datetime | None:
         return None
 
 
+@lru_cache(maxsize=1 << 16)
 def localize(naive: datetime, tz: str) -> tuple[datetime, str | None]:
     """Attach a zone. Returns (aware datetime, flag) where flag is None, 'ambiguous' (fall-back hour,
     first occurrence chosen) or 'nonexistent' (spring-forward gap, shifted forward)."""

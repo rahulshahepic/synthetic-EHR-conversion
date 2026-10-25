@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import importlib
 import weakref
-from typing import Any
+from typing import Any, Iterator
 
 import httpx
 
@@ -61,6 +61,36 @@ class NimbusClient:
     def search(self, rtype: str, **params: Any) -> list[dict[str, Any]]:
         return self._req("GET", f"/api/v1/{rtype}", params=params)["items"]
 
+    def iter_search(self, rtype: str, page_size: int = 1000,
+                    match: dict[str, list[str]] | None = None) -> Iterator[dict[str, Any]]:
+        """Traverse a collection with indexed keyset pagination instead of OFFSET scans.
+
+        `match` ({field: [values]}) asks Nimbus to return only resources whose top-level field has one of
+        the values, so callers that need a small subset don't pull the whole collection over the API.
+        """
+        if not 1 <= page_size <= 1000:
+            raise ValueError("page_size must be between 1 and 1000")
+        cursor = None
+        while True:
+            params: dict[str, Any] = {"limit": page_size}
+            if match:
+                params["match"] = [f"{fld}:{'|'.join(values)}" for fld, values in match.items()]
+            if cursor is not None:
+                params["afterCreatedAt"], params["afterId"] = cursor
+            page = self.search(rtype, **params)
+            yield from page
+            if len(page) < page_size:
+                return
+            last = page[-1]
+            created = last.get("meta", {}).get("createdAt")
+            rid = last.get("id")
+            if not created or not rid:
+                raise ValueError("Nimbus search response missing keyset cursor metadata")
+            next_cursor = (created, rid)
+            if next_cursor == cursor:
+                raise RuntimeError("Nimbus search cursor did not advance")
+            cursor = next_cursor
+
     def merge(self, target_id: str, source_id: str, batch_id: str | None = None) -> dict[str, Any]:
         return self._req("POST", f"/api/v1/patients/{target_id}/$merge",
                          json={"sourcePatientId": source_id, "importBatchId": batch_id})
@@ -72,8 +102,7 @@ def connect(target: str) -> NimbusClient:
         api = importlib.import_module("nimbus.api")
         service = importlib.import_module("nimbus.service")
         from fastapi.testclient import TestClient
-        # Keep the AnyIO portal alive across embedded requests instead of
-        # starting a new portal/thread for each TestClient.request call.
+        # Reuse one AnyIO portal for all embedded requests.
         http = TestClient(api.create_app(service.NimbusService(db)))
         http.__enter__()
         client = NimbusClient(http)

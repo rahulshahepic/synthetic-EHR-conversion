@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import traceback
+from time import perf_counter
 from datetime import date
 from typing import Any
 
@@ -19,7 +20,8 @@ LOAD_ORDER = [
     "Condition", "AllergyIntolerance", "MedicationRequest", "Observation", "Immunization",
     "DocumentReference", "Appointment", "ChargeItem", "UserAccount",
 ]
-DEFAULT_BATCH_SIZE = 200
+# Match Nimbus' per-request import limit to amortize batch setup and close overhead.
+DEFAULT_BATCH_SIZE = 500
 
 
 class Runner:
@@ -35,7 +37,9 @@ class Runner:
         cfg = {"batch_size": batch_size, "as_of": as_of, "types": types or [t for t in LOAD_ORDER if t in MAPPERS]}
         run_id = self.store.create_run(str(source), target_label, cfg)
         self.store.set_status(run_id, "extracting")
+        staging_started = perf_counter()
         stage_all(self.store, run_id, export, self.profile)
+        self.store.event(run_id, "staging_timing", {"seconds": perf_counter() - staging_started})
         if prior_run_db:
             from ..reconcile.rules_io import load_rules
             from .delta import stage_source_deletions
@@ -55,6 +59,7 @@ class Runner:
             raise RuntimeError(f"run is {run['status']}")
         self.store.set_status(run_id, "running")
         self.store.bump_pass(run_id)
+        self.store.release_ready_blocked(run_id)
         types = run["config"]["types"]
         size = run["config"]["batch_size"]
         progress = True
@@ -62,7 +67,7 @@ class Runner:
             progress = False
             for rtype in types:
                 while True:
-                    queue = self.store.work_queue(run_id, rtype, size)
+                    queue = self.store.work_queue(run_id, rtype, size, full=False)
                     if not queue:
                         break
                     progress = True
@@ -73,7 +78,9 @@ class Runner:
         outstanding = sum(c.get(S.HELD, 0) + c.get(S.BLOCKED, 0) + c.get(S.REJECTED, 0) for c in counts.values())
         status = "completed" if not outstanding else "completed_with_exceptions"
         from ..verify import verify_run
+        verification_started = perf_counter()
         report = verify_run(self.store, self.client, run_id)
+        self.store.event(run_id, "verification_timing", {"seconds": perf_counter() - verification_started})
         if not report["ok"]:
             self.store.set_status(run_id, "paused", "end-of-run verification failed: see alerts")
             return "paused"
@@ -100,6 +107,7 @@ class Runner:
 
     # ---------------------------------------------------------------- one batch
     def process_batch(self, run_id: str, rtype: str, recs: list[dict[str, Any]]) -> bool:
+        started = perf_counter()
         results: list[dict[str, Any]] = []
         submit: list[tuple[dict[str, Any], MapContext, dict[str, Any]]] = []
         with self.store.tx():
@@ -118,34 +126,58 @@ class Runner:
                     status = {"held": S.HELD, "blocked": S.BLOCKED, "dropped": S.DROPPED, "superseded": S.SUPERSEDED}[outcome.status]
                     results.append(self._finish(run_id, rtype, rec, ctx, status, note=outcome.note))
 
+        map_seconds = perf_counter() - started
         nimbus_batch = None
         bridge_batch_id = None
+        setup_seconds = submit_seconds = close_seconds = persist_seconds = 0.0
         if submit:
+            setup_started = perf_counter()
             bridge_batch_id = self.store.create_batch(run_id, rtype, "")
             nimbus_batch = self.client.create_batch(rtype, bridge_batch_id)
             self.store.db.execute("UPDATE batches SET nimbus_batch_id=? WHERE id=?", (nimbus_batch, bridge_batch_id))
+            setup_seconds = perf_counter() - setup_started
+            submit_started = perf_counter()
             resp = self.client.submit(nimbus_batch, [{"sourceKey": r["source_key"], "resource": p} for r, _, p in submit])
+            submit_seconds = perf_counter() - submit_started
+            close_started = perf_counter()
             self.client.close(nimbus_batch)
+            close_seconds = perf_counter() - close_started
+            persist_started = perf_counter()
             self._persist_results(run_id, rtype, submit, resp, bridge_batch_id, results)
+            persist_seconds = perf_counter() - persist_started
         else:
             bridge_batch_id = self.store.create_batch(run_id, rtype, "")
+        load_seconds = perf_counter() - started - map_seconds
         released = sum(1 for r in recs if r["status"] == S.BLOCKED or (r.get("note") or "").startswith("released by"))
-        return self._measure(run_id, rtype, results, bridge_batch_id, nimbus_batch, released)
+        return self._measure(run_id, rtype, results, bridge_batch_id, nimbus_batch, released,
+                             {'map_seconds': map_seconds, 'load_seconds': load_seconds,
+                              'target_setup_seconds': setup_seconds, 'target_submit_seconds': submit_seconds,
+                              'target_close_seconds': close_seconds, 'persist_seconds': persist_seconds})
 
     def _persist_results(self, run_id, rtype, submit, resp, bridge_batch_id, results) -> None:
+        # Same per-record outcome as _finish, written with a handful of executemany calls per batch.
+        updates: list[tuple[str, dict[str, Any]]] = []
+        losses: list[tuple[str, list[dict[str, Any]]]] = []
+        for (rec, ctx, payload), res in zip(submit, resp):
+            if res["status"] in ("accepted", "unchanged"):
+                status, extra = S.LOADED, {"target_id": res.get("targetId"), "unchanged": res["status"] == "unchanged",
+                                           "operation": res.get("operation")}
+            else:
+                status, extra = S.REJECTED, {}
+            fields, result = self._outcome(run_id, rtype, rec, ctx, status, payload=payload, batch_id=bridge_batch_id,
+                                           issues=res.get("issues"), **extra)
+            updates.append((rec["source_key"], fields))
+            if status == S.LOADED:
+                losses.append((rec["source_key"], ctx.losses()))
+            results.append(result)
         with self.store.tx():
-            for (rec, ctx, payload), res in zip(submit, resp):
-                if res["status"] in ("accepted", "unchanged"):
-                    results.append(self._finish(run_id, rtype, rec, ctx, S.LOADED, payload=payload, target_id=res.get("targetId"),
-                                                batch_id=bridge_batch_id, issues=res.get("issues"), unchanged=res["status"] == "unchanged",
-                                                operation=res.get("operation")))
-                else:
-                    results.append(self._finish(run_id, rtype, rec, ctx, S.REJECTED, payload=payload, issues=res.get("issues"),
-                                                batch_id=bridge_batch_id))
+            self.store.update_records(run_id, rtype, updates)
+            self.store.record_losses(run_id, rtype, losses)
 
     def _measure(self, run_id: str, rtype: str, results: list[dict[str, Any]], bridge_batch_id: str,
-                 nimbus_batch: str | None, released: int = 0) -> bool:
+                 nimbus_batch: str | None, released: int = 0, timings: dict | None = None) -> bool:
         m = batch_metrics(results)
+        m['timings'] = timings or {}
         # records released by answers (or by a parent loading) are not a fair sample for drift baselines
         m["released_share"] = round(released / len(results), 4) if results else 0.0
         samples = {
@@ -174,8 +206,21 @@ class Runner:
                 payload: dict[str, Any] | None = None, target_id: str | None = None, batch_id: str | None = None,
                 issues: list[dict[str, Any]] | None = None, note: str | None = None, unchanged: bool = False,
                 operation: str | None = None) -> dict[str, Any]:
+        fields, result = self._outcome(run_id, rtype, rec, ctx, status, payload=payload, target_id=target_id,
+                                       batch_id=batch_id, issues=issues, note=note, unchanged=unchanged, operation=operation)
+        self.store.update_record(run_id, rtype, rec["source_key"], **fields)
+        if status in (S.LOADED, S.DROPPED, S.SUPERSEDED):
+            self.store.record_loss(run_id, rtype, rec["source_key"], ctx.losses())
+        return result
+
+    def _outcome(self, run_id: str, rtype: str, rec: dict[str, Any], ctx: MapContext, status: str, *,
+                 payload: dict[str, Any] | None = None, target_id: str | None = None, batch_id: str | None = None,
+                 issues: list[dict[str, Any]] | None = None, note: str | None = None, unchanged: bool = False,
+                 operation: str | None = None) -> tuple[dict[str, Any], dict[str, Any]]:
+        """Record columns to write and the result row for metrics."""
         ann = [a.__dict__ for a in ctx.annotations]
-        fields: dict[str, Any] = {"status": status, "annotations": ann, "fidelity": ctx.fidelity(), "issues": issues,
+        fidelity = ctx.fidelity()
+        fields: dict[str, Any] = {"status": status, "annotations": ann, "fidelity": fidelity, "issues": issues,
                                   "held_by": ctx.held_by if status == S.HELD else None,
                                   "blocked_by": ctx.blocked_by if status == S.BLOCKED else None, "note": note}
         if payload is not None:
@@ -186,8 +231,5 @@ class Runner:
             fields["batch_id"] = batch_id
         if status == S.SUPERSEDED and ctx.superseded_by:
             self.store.xset(run_id, "superseded", f"{rtype}/{rec['source_key']}", ctx.superseded_by)
-        self.store.update_record(run_id, rtype, rec["source_key"], **fields)
-        if status in (S.LOADED, S.DROPPED, S.SUPERSEDED):
-            self.store.record_loss(run_id, rtype, rec["source_key"], ctx.losses())
-        return {"source_key": rec["source_key"], "status": status, "fidelity": ctx.fidelity(), "issues": issues,
-                "annotations": ann, "held_by": ctx.held_by, "unchanged": unchanged, "operation": operation}
+        return fields, {"source_key": rec["source_key"], "status": status, "fidelity": fidelity, "issues": issues,
+                        "annotations": ann, "held_by": ctx.held_by, "unchanged": unchanged, "operation": operation}

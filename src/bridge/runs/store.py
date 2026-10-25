@@ -19,16 +19,21 @@ CREATE TABLE IF NOT EXISTS records (
   PRIMARY KEY (run_id, rtype, source_key)
 );
 CREATE INDEX IF NOT EXISTS ix_records_status ON records(run_id, rtype, status);
+CREATE INDEX IF NOT EXISTS ix_records_pending_seq ON records(run_id, rtype, seq) WHERE status='pending';
+CREATE INDEX IF NOT EXISTS ix_records_blocked_seq ON records(run_id, rtype, seq) WHERE status='blocked';
 CREATE INDEX IF NOT EXISTS ix_records_held ON records(run_id, held_by);
 CREATE INDEX IF NOT EXISTS ix_records_batch ON records(run_id, batch_id);
 -- Accelerate the work_queue blocker lookup without changing its key semantics.
 CREATE INDEX IF NOT EXISTS ix_records_blocker_key
   ON records(run_id, (rtype || '/' || source_key), status);
+CREATE INDEX IF NOT EXISTS ix_records_waiting_on ON records(run_id, blocked_by) WHERE status='blocked';
 CREATE TABLE IF NOT EXISTS xref (run_id TEXT, kind TEXT, key TEXT, value TEXT, PRIMARY KEY (run_id, kind, key));
 CREATE TABLE IF NOT EXISTS batches (
   id TEXT PRIMARY KEY, run_id TEXT, rtype TEXT, seq INTEGER, nimbus_batch_id TEXT, status TEXT,
   created_at TEXT, counts TEXT, metrics TEXT
 );
+-- create_batch repeatedly computes MAX(seq) for the current run.
+CREATE INDEX IF NOT EXISTS ix_bridge_batches_run_seq ON batches(run_id, seq);
 CREATE TABLE IF NOT EXISTS alerts (
   id TEXT PRIMARY KEY, run_id TEXT, batch_id TEXT, rtype TEXT, rule TEXT, metric TEXT, observed REAL,
   threshold REAL, severity TEXT, status TEXT, message TEXT, samples TEXT, suggested TEXT, created_at TEXT,
@@ -65,8 +70,12 @@ def now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
+# Same output as json.dumps(v, default=str), without constructing an encoder on every call.
+_encode = json.JSONEncoder(default=str).encode
+
+
 def _j(v: Any) -> str | None:
-    return None if v is None else json.dumps(v, default=str)
+    return None if v is None else _encode(v)
 
 
 def _l(v: str | None) -> Any:
@@ -81,7 +90,11 @@ class RunStore:
         if path != ":memory:":
             self.db.execute("PRAGMA journal_mode=WAL")
             self.db.execute("PRAGMA synchronous=NORMAL")
+            # Fewer, larger checkpoints: the default (1000 pages) checkpoints on almost every batch commit.
+            self.db.execute("PRAGMA wal_autocheckpoint=10000")
         self.db.executescript(SCHEMA)
+        # Bumped whenever this connection rewrites an existing batch's status (see monitor baselines).
+        self.batch_epoch = 0
 
     def tx(self):
         return _Tx(self.db)
@@ -119,13 +132,20 @@ class RunStore:
 
     # ---------------------------------------------------------------- records
     def stage(self, run_id: str, rtype: str, records: Iterable[tuple[str, dict[str, Any], dict[str, Any]]]) -> int:
+        """Stage a streaming source with one SQLite executemany call per table."""
         n = 0
-        with self.tx():
+        stamp = now()
+
+        def rows():
+            nonlocal n
             for i, (key, source, lineage) in enumerate(records):
-                self.db.execute(
-                    "INSERT OR REPLACE INTO records (run_id, rtype, source_key, seq, status, source, lineage, updated_at)"
-                    " VALUES (?,?,?,?,?,?,?,?)", (run_id, rtype, key, i, PENDING, _j(source), _j(lineage), now()))
-                n += 1
+                n = i + 1
+                yield (run_id, rtype, key, i, PENDING, _j(source), _j(lineage), stamp)
+
+        with self.tx():
+            self.db.executemany(
+                "INSERT OR REPLACE INTO records (run_id, rtype, source_key, seq, status, source, lineage, updated_at)"
+                " VALUES (?,?,?,?,?,?,?,?)", rows())
         return n
 
     def record(self, run_id: str, rtype: str, key: str) -> dict[str, Any] | None:
@@ -147,14 +167,33 @@ class RunStore:
         row = self.db.execute("SELECT status FROM records WHERE run_id=? AND rtype=? AND source_key=?", (run_id, rtype, key)).fetchone()
         return row[0] if row else None
 
-    def work_queue(self, run_id: str, rtype: str, limit: int = -1) -> list[dict[str, Any]]:
-        """Pending records plus blocked ones whose blocker has since loaded."""
+    def release_ready_blocked(self, run_id: str) -> int:
+        """Migrate previously blocked rows whose dependency is already terminal."""
+        cursor = self.db.execute(
+            """UPDATE records SET status='pending', note='released by ' || blocked_by,
+                      blocked_by=NULL, updated_at=?
+               WHERE run_id=? AND status='blocked'
+                 AND EXISTS (SELECT 1 FROM records b WHERE b.run_id=records.run_id
+                   -- blocked_by is '<rtype>/<source_key>' and rtypes never contain '/': splitting at the
+                   -- first '/' lets SQLite use the primary key instead of scanning the run per blocked row.
+                   AND b.rtype=substr(records.blocked_by, 1, instr(records.blocked_by, '/') - 1)
+                   AND b.source_key=substr(records.blocked_by, instr(records.blocked_by, '/') + 1)
+                   AND b.status IN ('loaded','superseded'))""", (now(), run_id))
+        return cursor.rowcount
+
+    def work_queue(self, run_id: str, rtype: str, limit: int = -1, *, full: bool = True) -> list[dict[str, Any]]:
+        """Ready records only; dependency transitions release blocked rows into pending.
+
+        full=False returns just what mapping reads (rtype, source_key, status, note, decoded source).
+        """
+        cols = "*" if full else "rtype, source_key, status, note, source"
         rows = self.db.execute(
-            """SELECT r.* FROM records r WHERE r.run_id=? AND r.rtype=? AND (r.status='pending' OR (r.status='blocked'
-               AND EXISTS (SELECT 1 FROM records b WHERE b.run_id=r.run_id
-                 AND b.rtype || '/' || b.source_key = r.blocked_by AND b.status IN ('loaded','superseded'))))
-               ORDER BY r.seq LIMIT ?""", (run_id, rtype, limit))
-        return [self._rec(r) for r in rows]
+            f"""SELECT {cols} FROM records INDEXED BY ix_records_pending_seq
+               WHERE run_id=? AND rtype=? AND status='pending'
+               ORDER BY seq LIMIT ?""", (run_id, rtype, limit))
+        if full:
+            return [self._rec(r) for r in rows]
+        return [{"rtype": r[0], "source_key": r[1], "status": r[2], "note": r[3], "source": _l(r[4])} for r in rows]
 
     def update_record(self, run_id: str, rtype: str, key: str, **fields: Any) -> None:
         for k in ("source", "mapped", "annotations", "issues"):
@@ -164,6 +203,37 @@ class RunStore:
         cols = ", ".join(f"{k}=?" for k in fields)
         self.db.execute(f"UPDATE records SET {cols} WHERE run_id=? AND rtype=? AND source_key=?",
                         (*fields.values(), run_id, rtype, key))
+        if fields.get("status") in (LOADED, SUPERSEDED):
+            # Targeted wakeup replaces repeated full scans of blocked records.
+            self.db.execute(
+                """UPDATE records SET status='pending', blocked_by=NULL, note=?, updated_at=?
+                   WHERE run_id=? AND blocked_by=? AND status='blocked'""",
+                (f"released by {rtype}/{key}", now(), run_id, f"{rtype}/{key}"))
+
+    def update_records(self, run_id: str, rtype: str, rows: list[tuple[str, dict[str, Any]]]) -> None:
+        """Bulk update_record: one executemany per distinct column set, then one dependent wakeup pass."""
+        stamp = now()
+        groups: dict[tuple[str, ...], list[tuple[Any, ...]]] = {}
+        released: list[str] = []
+        for key, fields in rows:
+            fields = dict(fields)
+            for k in ("source", "mapped", "annotations", "issues"):
+                if k in fields:
+                    fields[k] = _j(fields[k])
+            fields["updated_at"] = stamp
+            groups.setdefault(tuple(fields), []).append((*fields.values(), run_id, rtype, key))
+            if fields.get("status") in (LOADED, SUPERSEDED):
+                released.append(key)
+        for cols, params in groups.items():
+            self.db.executemany(f"UPDATE records SET {', '.join(f'{k}=?' for k in cols)}"
+                                " WHERE run_id=? AND rtype=? AND source_key=?", params)
+        # Same wakeup as update_record; skipped outright when nothing in the run is blocked.
+        if released and self.db.execute(
+                "SELECT 1 FROM records WHERE run_id=? AND status='blocked' LIMIT 1", (run_id,)).fetchone():
+            self.db.executemany(
+                """UPDATE records SET status='pending', blocked_by=NULL, note=?, updated_at=?
+                   WHERE run_id=? AND blocked_by=? AND status='blocked'""",
+                [(f"released by {rtype}/{key}", stamp, run_id, f"{rtype}/{key}") for key in released])
 
     def status_counts(self, run_id: str) -> dict[str, dict[str, int]]:
         out: dict[str, dict[str, int]] = {}
@@ -196,10 +266,14 @@ class RunStore:
         return bid
 
     def finish_batch(self, batch_id: str, status: str, counts: dict[str, Any], metrics: dict[str, Any]) -> None:
+        prior = self.db.execute("SELECT status FROM batches WHERE id=?", (batch_id,)).fetchone()
         self.db.execute("UPDATE batches SET status=?, counts=?, metrics=? WHERE id=?", (status, _j(counts), _j(metrics), batch_id))
+        if prior is not None and prior[0] != "open":
+            self.batch_epoch += 1
 
     def set_batch_status(self, batch_id: str, status: str) -> None:
         self.db.execute("UPDATE batches SET status=? WHERE id=?", (status, batch_id))
+        self.batch_epoch += 1
 
     def batches(self, run_id: str, rtype: str | None = None, status: str | None = None) -> list[dict[str, Any]]:
         sql, args = "SELECT * FROM batches WHERE run_id=?", [run_id]
@@ -323,6 +397,16 @@ class RunStore:
         for l in losses:
             self.db.execute("INSERT OR REPLACE INTO loss VALUES (?,?,?,?,?,?,?)",
                             (run_id, rtype, key, l["field"], l["klass"], _j(l.get("original")), l.get("note")))
+
+    def record_losses(self, run_id: str, rtype: str, items: list[tuple[str, list[dict[str, Any]]]]) -> None:
+        """Bulk record_loss for distinct source keys."""
+        if not items:
+            return
+        self.db.executemany("DELETE FROM loss WHERE run_id=? AND rtype=? AND source_key=?",
+                            [(run_id, rtype, key) for key, _ in items])
+        self.db.executemany("INSERT OR REPLACE INTO loss VALUES (?,?,?,?,?,?,?)",
+                            [(run_id, rtype, key, l["field"], l["klass"], _j(l.get("original")), l.get("note"))
+                             for key, losses in items for l in losses])
 
     def loss_summary(self, run_id: str, rtype: str | None = None) -> list[dict[str, Any]]:
         sql = ("SELECT l.rtype, l.field, l.klass, COUNT(*) n, MIN(l.note) example FROM loss l JOIN records r"

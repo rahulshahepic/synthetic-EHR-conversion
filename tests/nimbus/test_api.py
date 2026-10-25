@@ -259,3 +259,67 @@ def test_rollback_of_update_batch_not_blocked_by_earlier_references(client):
     r = client.post(f"/api/v1/import/batches/{b3}/rollback")
     assert r.status_code == 200, r.text
     assert client.get("/api/v1/Condition/$count").json()["total"] == 1
+
+
+def test_keyset_pagination_handles_equal_timestamps_and_legacy_offset(client):
+    from bridge.load.client import NimbusClient
+
+    bid = batch(client, "Patient")
+    records = [{"sourceKey": f"P{i}", "resource": patient(mrn=str(i))} for i in range(1, 8)]
+    assert all(r["status"] == "accepted" for r in submit(client, bid, records))
+    service = client.app.state.service
+    service._db.execute(
+        "UPDATE resources SET created_at='2020-01-01T00:00:00+00:00' WHERE rtype='Patient'"
+    )
+    scanned = list(NimbusClient(client).iter_search("Patient", page_size=2))
+    assert len(scanned) == 7
+    assert len({r["id"] for r in scanned}) == 7
+    assert [r["id"] for r in scanned] == sorted(r["id"] for r in scanned)
+    assert all(r["meta"]["createdAt"] == "2020-01-01T00:00:00+00:00" for r in scanned)
+    offset_page = client.get("/api/v1/Patient", params={"limit": 2, "offset": 2}).json()["items"]
+    assert [r["id"] for r in offset_page] == [r["id"] for r in scanned[2:4]]
+    invalid = client.get("/api/v1/Patient", params={"afterCreatedAt": "2020-01-01"})
+    assert invalid.status_code == 400
+
+
+def test_repeated_parent_reference_uses_batch_local_cache(client):
+    load_patient(client, key="P1")
+    service = client.app.state.service
+    original = service._row_by_sk
+    calls = []
+
+    def tracked(rt, sk):
+        if (rt, sk) == ("Patient", "P1"):
+            calls.append(sk)
+        return original(rt, sk)
+
+    service._row_by_sk = tracked
+    bid = batch(client, "Condition")
+    base = {
+        "patient": {"sourceKey": "Patient/P1"},
+        "code": {"coding": [{"system": "ICD-10-CM", "code": "E11.9"}]},
+        "clinicalStatus": "active",
+    }
+    results = submit(client, bid, [
+        {"sourceKey": f"C{i}", "resource": base} for i in range(8)
+    ])
+    assert all(r["status"] == "accepted" for r in results)
+    assert len(calls) == 1
+
+
+def test_search_match_filters_top_level_fields(client):
+    from bridge.load.client import NimbusClient
+
+    bid = batch(client, "Patient")
+    records = [{"sourceKey": f"P{i}", "resource": patient(mrn=str(i), sexAtBirth=sex)}
+               for i, sex in enumerate(["female", "male", "female", "unknown", "male"], 1)]
+    assert all(r["status"] == "accepted" for r in submit(client, bid, records))
+    nc = NimbusClient(client)
+    assert sorted(r["sourceKey"] for r in nc.iter_search("Patient", page_size=1, match={"sexAtBirth": ["female"]})) == ["P1", "P3"]
+    both = nc.iter_search("Patient", page_size=2, match={"sexAtBirth": ["female", "unknown"], "active": ["x"]})
+    assert list(both) == []  # every field must match; non-string fields never equal a string value
+    assert len(list(nc.iter_search("Patient", match={"sexAtBirth": ["female", "unknown"]}))) == 3
+    bad = client.get("/api/v1/Patient", params={"match": "sexAtBirth"})
+    assert bad.status_code == 400
+    bad = client.get("/api/v1/Patient", params={"match": "data') OR 1=1 --:x"})
+    assert bad.status_code == 400

@@ -6,8 +6,11 @@ it and the prior state, which is what makes batch rollback exact.
 from __future__ import annotations
 
 import json
+import os
+import re
 import sqlite3
 import threading
+import time
 import uuid
 from datetime import datetime, timezone
 from typing import Any
@@ -28,10 +31,14 @@ CREATE TABLE IF NOT EXISTS refs (
 );
 CREATE INDEX IF NOT EXISTS ix_refs_target ON refs(target_rtype, target_id);
 CREATE INDEX IF NOT EXISTS ix_refs_owner ON refs(owner_rtype, owner_id);
+-- Used by repeated per-patient noKnownAllergies and coverage conflict lookups.
+CREATE INDEX IF NOT EXISTS ix_refs_owner_target ON refs(owner_rtype, target_id, field);
 CREATE TABLE IF NOT EXISTS identifiers (
   system TEXT NOT NULL, value TEXT NOT NULL, patient_id TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS ix_ident ON identifiers(system, value);
+-- _unindex() deletes by patient_id on every Patient insert; prevent quadratic scans.
+CREATE INDEX IF NOT EXISTS ix_ident_patient ON identifiers(patient_id);
 CREATE TABLE IF NOT EXISTS history (
   seq INTEGER PRIMARY KEY AUTOINCREMENT, rtype TEXT NOT NULL, id TEXT NOT NULL,
   batch_id TEXT, op TEXT NOT NULL, prior_data TEXT, prior_version INTEGER,
@@ -44,6 +51,8 @@ CREATE TABLE IF NOT EXISTS batches (
   accepted INTEGER NOT NULL DEFAULT 0, rejected INTEGER NOT NULL DEFAULT 0,
   unchanged INTEGER NOT NULL DEFAULT 0, system TEXT
 );
+CREATE INDEX IF NOT EXISTS ix_nimbus_batches_seq ON batches(seq);
+CREATE INDEX IF NOT EXISTS ix_resources_rtype_created_id ON resources(rtype, created_at, id);
 """
 
 MAX_RECORDS_PER_CALL = 500
@@ -72,6 +81,21 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+_last_id_tick = 0
+_id_lock = threading.Lock()
+
+
+def _new_id() -> str:
+    """Monotonic UUIDv7: time-ordered ids append to the B-tree instead of dirtying random pages."""
+    global _last_id_tick
+    with _id_lock:
+        # 48-bit Unix milliseconds + 12-bit sequence, so ids stay strictly increasing within a millisecond.
+        _last_id_tick = tick = max(_last_id_tick + 1, (time.time_ns() // 1_000_000) << 12)
+    rand = int.from_bytes(os.urandom(8), "big") & ((1 << 62) - 1)
+    h = f"{((tick >> 12) << 80) | (0x7 << 76) | ((tick & 0xFFF) << 64) | (0b10 << 62) | rand:032x}"
+    return f"{h[:8]}-{h[8:12]}-{h[12:16]}-{h[16:20]}-{h[20:]}"
+
+
 class NimbusService:
     def __init__(self, db_path: str = ":memory:"):
         self._db = sqlite3.connect(db_path, check_same_thread=False, isolation_level=None)
@@ -79,8 +103,14 @@ class NimbusService:
         if db_path != ":memory:":
             self._db.execute("PRAGMA journal_mode=WAL")
             self._db.execute("PRAGMA synchronous=NORMAL")
+            # Fewer, larger checkpoints: the default (1000 pages) checkpoints on almost every import commit.
+            self._db.execute("PRAGMA wal_autocheckpoint=10000")
         self._db.executescript(SCHEMA)
         self._lock = threading.RLock()
+        # During submit_records, write-only rows (history, refs) are buffered and flushed with executemany.
+        # Anything that reads refs calls _flush_pending() first, so reads always see every buffered row.
+        self._pending_history: list[tuple[Any, ...]] | None = None
+        self._pending_refs: dict[tuple[str, str], list[tuple[str, str, str, str, str]]] | None = None
 
     # ------------------------------------------------------------------ batches
     def create_batch(self, resource_type: str, external_batch_id: str | None = None,
@@ -127,11 +157,14 @@ class NimbusService:
             results = []
             counts = {"accepted": 0, "rejected": 0, "unchanged": 0}
             self._db.execute("BEGIN")
+            ref_cache: dict[tuple[str, str, str], Any] = {}
+            self._pending_history, self._pending_refs = [], {}
             try:
                 for rec in records:
-                    res = self._submit_one(b, rec)
+                    res = self._submit_one(b, rec, ref_cache)
                     results.append(res)
                     counts[res["status"] if res["status"] in counts else "accepted"] += 1
+                self._flush_pending()
                 self._db.execute(
                     "UPDATE batches SET accepted=accepted+?, rejected=rejected+?, unchanged=unchanged+? WHERE id=?",
                     (counts["accepted"], counts["rejected"], counts["unchanged"], batch_id),
@@ -140,9 +173,23 @@ class NimbusService:
             except Exception:
                 self._db.execute("ROLLBACK")
                 raise
+            finally:
+                self._pending_history = self._pending_refs = None
         return {"batchId": batch_id, "results": results}
 
-    def _submit_one(self, batch: dict[str, Any], rec: dict[str, Any]) -> dict[str, Any]:
+    def _flush_pending(self) -> None:
+        if self._pending_history:
+            self._db.executemany(
+                "INSERT INTO history (rtype, id, batch_id, op, prior_data, prior_version, prior_batch_id, prior_source_key, at)"
+                " VALUES (?,?,?,?,?,?,?,?,?)", self._pending_history)
+            self._pending_history.clear()
+        if self._pending_refs:
+            self._db.executemany("INSERT INTO refs VALUES (?,?,?,?,?)",
+                                 [row for rows in self._pending_refs.values() for row in rows])
+            self._pending_refs.clear()
+
+    def _submit_one(self, batch: dict[str, Any], rec: dict[str, Any],
+                    ref_cache: dict[tuple[str, str, str], sqlite3.Row] | None = None) -> dict[str, Any]:
         rt = batch["resourceType"]
         sk = rec.get("sourceKey")
         payload = rec.get("resource")
@@ -150,8 +197,10 @@ class NimbusService:
         if not sk or not isinstance(payload, dict):
             return {**out, "status": "rejected", "issues": [Issue("E_REQUIRED", "sourceKey and resource required").to_dict()]}
         model, issues = parse(rt, payload)
+        refs = None
         if model is not None:
-            issues += self._resolve_refs(rt, model)
+            refs = list(iter_refs(rt, model))  # resolved in place below, then reused for indexing
+            issues += self._resolve_refs(rt, model, ref_cache, refs)
         existing = self._row_by_sk(rt, sk)
         if model is not None and not any(i.severity == "error" for i in issues):
             issues += self._contextual_checks(rt, model, existing["id"] if existing else None)
@@ -168,20 +217,24 @@ class NimbusService:
             if json.loads(existing["data"]) == data:
                 return {**out, "status": "unchanged", "operation": "unchanged", "targetId": existing["id"]}
             rid = existing["id"]
-            self._record_history(rt, rid, batch["batchId"], "update", existing)
+            self._record_history(rt, rid, batch["batchId"], "update", existing, now)
             self._db.execute(
                 "UPDATE resources SET data=?, version=version+1, batch_id=?, updated_at=? WHERE rtype=? AND id=?",
                 (json.dumps(data), batch["batchId"], now, rt, rid),
             )
         else:
-            rid = str(uuid.uuid4())
-            self._record_history(rt, rid, batch["batchId"], "create", None)
+            rid = _new_id()
+            self._record_history(rt, rid, batch["batchId"], "create", None, now)
             self._db.execute(
                 "INSERT INTO resources (rtype, id, source_key, version, data, batch_id, created_at, updated_at)"
                 " VALUES (?,?,?,?,?,?,?,?)",
                 (rt, rid, sk, 1, json.dumps(data), batch["batchId"], now, now),
             )
-        self._index(rt, rid, data)
+        self._index(rt, rid, data, model=model, existing=existing is not None, refs=refs)
+        if ref_cache is not None:
+            ref_cache.pop((rt, "id", rid), None)
+            ref_cache.pop((rt, "sk", sk), None)
+            ref_cache.pop((rt, "active", rid), None)
         return {**out, "status": "accepted", "operation": "updated" if existing is not None else "created", "targetId": rid}
 
     # ------------------------------------------------------------------ helpers
@@ -191,18 +244,32 @@ class NimbusService:
     def _row(self, rt: str, rid: str) -> sqlite3.Row | None:
         return self._db.execute("SELECT * FROM resources WHERE rtype=? AND id=?", (rt, rid)).fetchone()
 
-    def _resolve_refs(self, rt: str, model: Any) -> list[Issue]:
+    def _resolve_refs(self, rt: str, model: Any,
+                      cache: dict[tuple[str, str, str], Any] | None = None,
+                      refs: list[tuple[str, Any, str]] | None = None) -> list[Issue]:
         issues = []
-        for field, ref, target in iter_refs(rt, model):
+        if cache is None:
+            cache = {}
+        for field, ref, target in (iter_refs(rt, model) if refs is None else refs):
             row = None
             if ref.id:
-                row = self._row(target, ref.id)
+                ck = (target, "id", ref.id)
+                row = cache.get(ck)
+                if row is None:
+                    row = self._row(target, ref.id)
+                    if row is not None:
+                        cache[ck] = row
             elif ref.sourceKey:
                 rtype, _, key = ref.sourceKey.partition("/")
                 if rtype != target or not key:
                     issues.append(Issue("E_REF_TYPE", f"{field} must reference {target} ('{target}/<key>')", field))
                     continue
-                row = self._row_by_sk(target, key)
+                ck = (target, "sk", key)
+                row = cache.get(ck)
+                if row is None:
+                    row = self._row_by_sk(target, key)
+                    if row is not None:
+                        cache[ck] = row
             else:
                 issues.append(Issue("E_REQUIRED", "reference needs id or sourceKey", field))
                 continue
@@ -211,7 +278,13 @@ class NimbusService:
                 continue
             ref.id = row["id"]
             ref.sourceKey = f"{target}/{row['source_key']}" if row["source_key"] else None
-            if target == "Patient" and not json.loads(row["data"]).get("active", True):
+            if target == "Patient":
+                ak = (target, "active", row["id"])
+                active = cache.get(ak)
+                if active is None:
+                    active = cache[ak] = json.loads(row["data"]).get("active", True)
+                if active:
+                    continue
                 issues.append(Issue("W_INACTIVE_PATIENT", "references an inactive (merged) patient", field, "warning"))
         return issues
 
@@ -245,6 +318,7 @@ class NimbusService:
             if pat.get("noKnownAllergies"):
                 issues.append(Issue("E_CONFLICT", "patient is flagged noKnownAllergies", "patient"))
         elif rt == "Coverage":
+            self._flush_pending()
             for row in self._db.execute(
                 "SELECT r.id, r.data FROM refs f JOIN resources r ON r.rtype=f.owner_rtype AND r.id=f.owner_id"
                 " WHERE f.owner_rtype='Coverage' AND f.field='patient' AND f.target_id=?", (model.patient.id,)
@@ -254,30 +328,44 @@ class NimbusService:
         return issues
 
     def _count_refs(self, owner_rt: str, target_id: str) -> int:
+        self._flush_pending()
         return self._db.execute(
             "SELECT COUNT(*) FROM refs WHERE owner_rtype=? AND target_id=?", (owner_rt, target_id)
         ).fetchone()[0]
 
-    def _record_history(self, rt: str, rid: str, batch_id: str | None, op: str, prior: sqlite3.Row | None) -> None:
+    def _record_history(self, rt: str, rid: str, batch_id: str | None, op: str, prior: sqlite3.Row | None,
+                        at: str | None = None) -> None:
+        row = (rt, rid, batch_id, op,
+               prior["data"] if prior else None, prior["version"] if prior else None,
+               prior["batch_id"] if prior else None, prior["source_key"] if prior else None, at or _now())
+        if self._pending_history is not None:
+            self._pending_history.append(row)
+            return
         self._db.execute(
             "INSERT INTO history (rtype, id, batch_id, op, prior_data, prior_version, prior_batch_id, prior_source_key, at)"
-            " VALUES (?,?,?,?,?,?,?,?,?)",
-            (rt, rid, batch_id, op,
-             prior["data"] if prior else None, prior["version"] if prior else None,
-             prior["batch_id"] if prior else None, prior["source_key"] if prior else None, _now()),
-        )
+            " VALUES (?,?,?,?,?,?,?,?,?)", row)
 
-    def _index(self, rt: str, rid: str, data: dict[str, Any]) -> None:
-        self._unindex(rt, rid)
-        model = m.RESOURCE_MODELS[rt].model_validate(data)
-        for field, ref, target in iter_refs(rt, model):
-            if ref.id:
-                self._db.execute("INSERT INTO refs VALUES (?,?,?,?,?)", (rt, rid, field, target, ref.id))
+    def _index(self, rt: str, rid: str, data: dict[str, Any], *, model: Any = None, existing: bool = True,
+               refs: list[tuple[str, Any, str]] | None = None) -> None:
+        if existing:
+            self._unindex(rt, rid)
+        if refs is None:
+            if model is None:
+                model = m.RESOURCE_MODELS[rt].model_validate(data)
+            refs = list(iter_refs(rt, model))
+        rows = [(rt, rid, field, target, ref.id) for field, ref, target in refs if ref.id]
+        if self._pending_refs is not None:
+            if rows:
+                self._pending_refs.setdefault((rt, rid), []).extend(rows)
+        elif rows:
+            self._db.executemany("INSERT INTO refs VALUES (?,?,?,?,?)", rows)
         if rt == "Patient":
             for ident in data.get("identifiers", []):
                 self._db.execute("INSERT INTO identifiers VALUES (?,?,?)", (ident["system"], ident["value"], rid))
 
     def _unindex(self, rt: str, rid: str) -> None:
+        if self._pending_refs is not None:
+            self._pending_refs.pop((rt, rid), None)
         self._db.execute("DELETE FROM refs WHERE owner_rtype=? AND owner_id=?", (rt, rid))
         if rt == "Patient":
             self._db.execute("DELETE FROM identifiers WHERE patient_id=?", (rid,))
@@ -406,7 +494,7 @@ class NimbusService:
     def _out(self, rt: str, row: sqlite3.Row) -> dict[str, Any]:
         return {
             "resourceType": rt, "id": row["id"], "sourceKey": row["source_key"],
-            "meta": {"version": row["version"], "updatedAt": row["updated_at"]},
+            "meta": {"version": row["version"], "createdAt": row["created_at"], "updatedAt": row["updated_at"]},
             "provenance": {"importBatchId": row["batch_id"]},
             **json.loads(row["data"]),
         }
@@ -418,7 +506,10 @@ class NimbusService:
         return self._out(rt, row)
 
     def search(self, rt: str, source_key: str | None = None, identifier: str | None = None,
-               patient: str | None = None, limit: int = 100, offset: int = 0) -> list[dict[str, Any]]:
+               patient: str | None = None, limit: int = 100, offset: int = 0,
+               after_created_at: str | None = None, after_id: str | None = None,
+               match: dict[str, list[str]] | None = None) -> list[dict[str, Any]]:
+        """`match` keeps resources whose top-level string field equals one of the given values."""
         if rt not in m.RESOURCE_MODELS:
             raise NimbusError("E_RESOURCE_TYPE", f"unknown resource type {rt!r}")
         sql, args = "SELECT r.* FROM resources r", []
@@ -434,6 +525,16 @@ class NimbusService:
         if patient:
             where.append("r.id IN (SELECT owner_id FROM refs WHERE owner_rtype=? AND target_rtype='Patient' AND target_id=?)")
             args += [rt, patient]
+        for fld, values in (match or {}).items():
+            if not re.fullmatch(r"[A-Za-z][A-Za-z0-9]*", fld) or not values:
+                raise NimbusError("E_MATCH", f"invalid match filter {fld!r}")
+            where.append(f"json_extract(r.data, ?) IN ({','.join('?' * len(values))})")
+            args += [f"$.{fld}", *values]
+        if (after_created_at is None) != (after_id is None):
+            raise NimbusError("E_CURSOR", "both cursor fields are required")
+        if after_created_at is not None:
+            where.append("(r.created_at, r.id) > (?, ?)")
+            args.extend((after_created_at, after_id))
         sql += " WHERE " + " AND ".join(where) + " ORDER BY r.created_at, r.id LIMIT ? OFFSET ?"
         args += [limit, offset]
         return [self._out(rt, r) for r in self._db.execute(sql, args)]
