@@ -6,17 +6,24 @@ from functools import lru_cache
 from zoneinfo import ZoneInfo
 
 
+# Pick the format by length. Trying "%Y%m%d%H%M%S" first is wrong: strptime accepts single-digit
+# fields, so a 12-digit YYYYMMDDHHMM parsed as HH:M:S (12:30 -> 12:03:00). At exactly these lengths
+# every field must be two digits, so the parse is unambiguous.
+_LOCAL_FORMATS = {14: "%Y%m%d%H%M%S", 12: "%Y%m%d%H%M", 8: "%Y%m%d"}
+
+
 # Pure functions of their (hashable) arguments returning immutable values: memoized because
 # clinical feeds repeat the same timestamps across many records.
 @lru_cache(maxsize=1 << 16)
 def parse_local(raw: str | None) -> datetime | None:
     raw = (raw or "").strip()
-    for fmt in ("%Y%m%d%H%M%S", "%Y%m%d%H%M", "%Y%m%d"):
-        try:
-            return datetime.strptime(raw, fmt)
-        except ValueError:
-            continue
-    return None
+    fmt = _LOCAL_FORMATS.get(len(raw))
+    if fmt is None or not raw.isdigit():
+        return None
+    try:
+        return datetime.strptime(raw, fmt)
+    except ValueError:
+        return None
 
 
 @lru_cache(maxsize=1 << 16)

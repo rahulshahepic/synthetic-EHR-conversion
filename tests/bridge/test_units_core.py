@@ -3,7 +3,7 @@ from datetime import datetime
 from bridge.extract.hl7 import parse_message
 from bridge.mapping.identity import resolve, score_pair
 from bridge.normalize.legacy import fix_mojibake, parse_crammed_address
-from bridge.normalize.time import localize
+from bridge.normalize.time import localize, parse_local
 
 
 def pat(pid, name, dob="19800101", ssn="1234"):
@@ -51,3 +51,12 @@ def test_dst_flags():
 def test_hl7_basic():
     m = parse_message("MSH|^~\\&|A|B|C|D|202001011200||SIU^S15|X1|P|2.3\rSCH|AP1||||||F/U||||^^20^202701131400||||||||||||||Cancelled")
     assert m.type == "SIU^S15" and m.get("SCH-25") == "Cancelled" and m.get("SCH-11.4") == "202701131400"
+
+
+def test_parse_local_reads_minutes_and_seconds_by_length():
+    assert parse_local("202103151230") == datetime(2021, 3, 15, 12, 30)  # was 12:03:00
+    assert parse_local("202103152359") == datetime(2021, 3, 15, 23, 59)  # was 23:05:09
+    assert parse_local("20210315235945") == datetime(2021, 3, 15, 23, 59, 45)
+    assert parse_local(" 20210315 ") == datetime(2021, 3, 15)
+    for bad in (None, "", "2021031512", "2021031512300", "20210230", "2021-03-15", "202103152460"):
+        assert parse_local(bad) is None, bad
