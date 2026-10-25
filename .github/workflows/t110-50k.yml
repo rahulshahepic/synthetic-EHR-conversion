@@ -1,4 +1,4 @@
-name: T-110 scalability validation (50k manual only)
+name: T-110 scalability validation (50k manual only; weekly 2k-10k)
 
 on:
   pull_request:
@@ -20,6 +20,10 @@ on:
           - short
           - scaling
           - full-50k
+  schedule:
+    # Weekly scaling check on main (Mondays 06:17 UTC): catches throughput or growth regressions
+    # that the 100-1000 patient PR tier is too small to show.
+    - cron: '17 6 * * 1'
 
 concurrency:
   group: t110-50k-${{ github.ref }}
@@ -35,8 +39,8 @@ jobs:
     # Measured 2k-10k throughput projects ~25 minutes; a hard cap keeps a regression from running for hours.
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
           cache: pip
@@ -74,19 +78,19 @@ jobs:
         run: df -h / /mnt
       - name: Upload logs even on failure
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: t110-full-50k
           path: benchmark-output/
           if-no-files-found: warn
 
   scaling-validation:
-    if: github.event_name == 'workflow_dispatch' && inputs.benchmark_size == 'scaling'
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.benchmark_size == 'scaling')
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
           cache: pip
@@ -101,7 +105,16 @@ jobs:
             echo "::endgroup::"
           done
           df -h / /mnt
-      - uses: actions/upload-artifact@v4
+      - name: Per-patient cost must stay roughly flat from 2k to 10k
+        # Measured 29.0 -> 29.8 ms/patient; a quadratic cost shows up here long before it reaches 50k.
+        run: |
+          python - <<'PY'
+          import json
+          per = {n: json.load(open(f"benchmark-output/{n}.json"))["conversion_seconds"] * 1000 / n for n in (2000, 5000, 10000)}
+          print({n: round(v, 1) for n, v in per.items()}, "ms/patient")
+          assert per[10000] <= 1.25 * per[2000], f"10k costs {per[10000] / per[2000]:.2f}x per patient vs 2k (limit 1.25x)"
+          PY
+      - uses: actions/upload-artifact@v5
         if: always()
         with:
           name: t110-scaling-validation
@@ -112,8 +125,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
           cache: pip
@@ -129,7 +142,7 @@ jobs:
             python -c 'import json,sys; d=json.load(open(sys.argv[1])); print("RESULT",d["patients"],d["run_status"],d["conversion_seconds"],d["loaded_records"],flush=True); assert d["run_status"] == "completed" and d["loaded_records"] > 0' "benchmark-output/$n.json"
             echo "::endgroup::"
           done
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         if: always()
         with:
           name: t110-short-validation

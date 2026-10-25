@@ -161,3 +161,51 @@ def test_duplicate_ground_truth_pat_ids_rejected(tmp_path, env):
     rid = store.create_run("src", "target", {"types": []})
     with pytest.raises(ValueError, match="multiple answer-key persons"):
         score(export, store.path, rid)
+
+
+def test_loaded_values_match_source_and_answer_key(tmp_path, env):
+    """Every loaded timestamp/date keeps its source wall-clock value and truth-known fields match the key.
+
+    This is the check that would have caught 12-digit timestamps losing their minutes (12:30 -> 12:03).
+    """
+    from bridge.reconcile.answers import answer
+    from testbed.simulated_user import SimulatedAnalyst
+
+    store, _, runner = env
+    export = tmp_path / "generated"
+    generate(export, seed=11, patients=40)
+    rid = runner.start(str(export))
+    analyst = SimulatedAnalyst(export)
+    for _ in range(30):  # answer like the benchmark's simulated analyst until the run completes
+        blocking = [q for q in store.questions(rid) if q["blocking"]]
+        if store.run(rid)["status"] != "paused" and not blocking:
+            break
+        for q in blocking:
+            detail = store.question(q["id"])
+            linked = detail["affected"]
+            rec = store.record(rid, linked[0]["rtype"], linked[0]["source_key"]) if linked else None
+            option, value, why = analyst.choose(detail, rec["source"] if rec else None)
+            answer(store, q["id"], option, value, analyst.name, why)
+        runner.resume(rid, "test", analyst.name)
+    assert store.run(rid)["status"] in ("completed", "completed_with_exceptions")
+    values = score(export, store.path, rid)["values"]
+    checks = values["checks"]
+    for name in ("Encounter.period.start = ADMIT_DT", "Observation.effective = TAKEN_DT",
+                 "Appointment.start = APPT_DT", "Condition.onsetDate = ONSET_DT", "Patient birthDate = answer key"):
+        assert checks[name]["checked"] > 0, name
+    bad = {name: c["mismatch_examples"] for name, c in checks.items() if c["mismatched"]}
+    assert not bad, bad
+
+
+def test_value_checks_flag_a_shifted_timestamp(tmp_path, env):
+    store, _, _ = env
+    export = _key(tmp_path, {"person": ["P1"]}, [])
+    (export / "answer_key" / "truth.json").write_text(json.dumps({"appt_status": {"A1": "fulfilled"}}))
+    rid = store.create_run("src", "target", {"types": []})
+    store.stage(rid, "Appointment", [("A1", {"APPT_ID": "A1", "APPT_DT": "202103151230"}, {"table": "SCHED", "id": "A1"})])
+    store.update_record(rid, "Appointment", "A1", status="loaded",
+                        mapped={"start": "2021-03-15T12:03:00-05:00", "status": "fulfilled"})
+    checks = score(export, store.path, rid)["values"]["checks"]
+    assert checks["Appointment.start = APPT_DT"]["mismatched"] == 1
+    assert checks["Appointment.start = APPT_DT"]["mismatch_examples"][0]["expected"] == "2021-03-15T12:30"
+    assert checks["Appointment status = answer key"]["mismatched"] == 0

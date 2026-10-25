@@ -37,6 +37,7 @@ class MapContext:
                  terms: Terminology = TERMS):
         self.store, self.run_id, self.rtype, self.rec = store, run_id, rtype, rec
         self.key = rec["source_key"]
+        self.seq: int | None = rec.get("seq")
         self.src: dict[str, Any] = rec["source"]
         self.profile = profile
         self.terms = terms
@@ -136,6 +137,14 @@ class MapContext:
             self.superseded_by = owner
             self.note("record", "dropped", 0.0, f"duplicate of {owner}")
             return True
+        # Earliest record wins, independent of when answers arrive: don't claim while an earlier record of this
+        # type for the same patient is still held or blocked (it may turn out to be the same thing).
+        if self.seq is not None:
+            pat_ids = self.store.patient_pat_ids(self.run_id, scope) or [scope]  # scope: patient key, else raw PAT_ID
+            earlier = self.store.earliest_unresolved(self.run_id, self.rtype, pat_ids, self.seq)
+            if earlier and earlier != self.key:
+                self.blocked_by = self.blocked_by or f"{self.rtype}/{earlier}"
+                return False
         self.store.xset(self.run_id, "dedupe", xk, self.key)
         return False
 
