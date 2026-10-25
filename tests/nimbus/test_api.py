@@ -305,3 +305,21 @@ def test_repeated_parent_reference_uses_batch_local_cache(client):
     ])
     assert all(r["status"] == "accepted" for r in results)
     assert len(calls) == 1
+
+
+def test_search_match_filters_top_level_fields(client):
+    from bridge.load.client import NimbusClient
+
+    bid = batch(client, "Patient")
+    records = [{"sourceKey": f"P{i}", "resource": patient(mrn=str(i), sexAtBirth=sex)}
+               for i, sex in enumerate(["female", "male", "female", "unknown", "male"], 1)]
+    assert all(r["status"] == "accepted" for r in submit(client, bid, records))
+    nc = NimbusClient(client)
+    assert sorted(r["sourceKey"] for r in nc.iter_search("Patient", page_size=1, match={"sexAtBirth": ["female"]})) == ["P1", "P3"]
+    both = nc.iter_search("Patient", page_size=2, match={"sexAtBirth": ["female", "unknown"], "active": ["x"]})
+    assert list(both) == []  # every field must match; non-string fields never equal a string value
+    assert len(list(nc.iter_search("Patient", match={"sexAtBirth": ["female", "unknown"]}))) == 3
+    bad = client.get("/api/v1/Patient", params={"match": "sexAtBirth"})
+    assert bad.status_code == 400
+    bad = client.get("/api/v1/Patient", params={"match": "data') OR 1=1 --:x"})
+    assert bad.status_code == 400

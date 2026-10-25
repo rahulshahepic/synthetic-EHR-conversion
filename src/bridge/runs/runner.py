@@ -67,7 +67,7 @@ class Runner:
             progress = False
             for rtype in types:
                 while True:
-                    queue = self.store.work_queue(run_id, rtype, size)
+                    queue = self.store.work_queue(run_id, rtype, size, full=False)
                     if not queue:
                         break
                     progress = True

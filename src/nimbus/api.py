@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import Body, FastAPI, Request
+from fastapi import Body, FastAPI, Query, Request
 from fastapi.responses import JSONResponse
 
 from . import models as m
@@ -66,8 +66,17 @@ def create_app(service: NimbusService | None = None) -> FastAPI:
     @app.get("/api/v1/{resource_type}")
     def search(resource_type: str, sourceKey: str | None = None, identifier: str | None = None,
                patient: str | None = None, limit: int = 100, offset: int = 0,
-               afterCreatedAt: str | None = None, afterId: str | None = None) -> dict[str, Any]:
-        items = svc.search(resource_type, sourceKey, identifier, patient, min(limit, 1000), offset, afterCreatedAt, afterId)
+               afterCreatedAt: str | None = None, afterId: str | None = None,
+               match: list[str] = Query(default=[])) -> dict[str, Any]:
+        # match=<field>:<value>[|<value>...], repeatable; e.g. match=category:laboratory
+        filters: dict[str, list[str]] = {}
+        for m_ in match:
+            fld, sep, values = m_.partition(":")
+            if not sep:
+                raise NimbusError("E_MATCH", f"match must be <field>:<value>[|<value>...], got {m_!r}")
+            filters.setdefault(fld, []).extend(values.split("|"))
+        items = svc.search(resource_type, sourceKey, identifier, patient, min(limit, 1000), offset, afterCreatedAt, afterId,
+                           filters or None)
         return {"resourceType": resource_type, "items": items}
 
     return app

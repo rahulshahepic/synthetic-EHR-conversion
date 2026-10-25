@@ -61,13 +61,20 @@ class NimbusClient:
     def search(self, rtype: str, **params: Any) -> list[dict[str, Any]]:
         return self._req("GET", f"/api/v1/{rtype}", params=params)["items"]
 
-    def iter_search(self, rtype: str, page_size: int = 1000) -> Iterator[dict[str, Any]]:
-        """Traverse a collection with indexed keyset pagination instead of OFFSET scans."""
+    def iter_search(self, rtype: str, page_size: int = 1000,
+                    match: dict[str, list[str]] | None = None) -> Iterator[dict[str, Any]]:
+        """Traverse a collection with indexed keyset pagination instead of OFFSET scans.
+
+        `match` ({field: [values]}) asks Nimbus to return only resources whose top-level field has one of
+        the values, so callers that need a small subset don't pull the whole collection over the API.
+        """
         if not 1 <= page_size <= 1000:
             raise ValueError("page_size must be between 1 and 1000")
         cursor = None
         while True:
             params: dict[str, Any] = {"limit": page_size}
+            if match:
+                params["match"] = [f"{fld}:{'|'.join(values)}" for fld, values in match.items()]
             if cursor is not None:
                 params["afterCreatedAt"], params["afterId"] = cursor
             page = self.search(rtype, **params)

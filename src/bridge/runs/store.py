@@ -70,8 +70,12 @@ def now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
+# Same output as json.dumps(v, default=str), without constructing an encoder on every call.
+_encode = json.JSONEncoder(default=str).encode
+
+
 def _j(v: Any) -> str | None:
-    return None if v is None else json.dumps(v, default=str)
+    return None if v is None else _encode(v)
 
 
 def _l(v: str | None) -> Any:
@@ -177,13 +181,19 @@ class RunStore:
                    AND b.status IN ('loaded','superseded'))""", (now(), run_id))
         return cursor.rowcount
 
-    def work_queue(self, run_id: str, rtype: str, limit: int = -1) -> list[dict[str, Any]]:
-        """Ready records only; dependency transitions release blocked rows into pending."""
+    def work_queue(self, run_id: str, rtype: str, limit: int = -1, *, full: bool = True) -> list[dict[str, Any]]:
+        """Ready records only; dependency transitions release blocked rows into pending.
+
+        full=False returns just what mapping reads (rtype, source_key, status, note, decoded source).
+        """
+        cols = "*" if full else "rtype, source_key, status, note, source"
         rows = self.db.execute(
-            """SELECT * FROM records INDEXED BY ix_records_pending_seq
+            f"""SELECT {cols} FROM records INDEXED BY ix_records_pending_seq
                WHERE run_id=? AND rtype=? AND status='pending'
                ORDER BY seq LIMIT ?""", (run_id, rtype, limit))
-        return [self._rec(r) for r in rows]
+        if full:
+            return [self._rec(r) for r in rows]
+        return [{"rtype": r[0], "source_key": r[1], "status": r[2], "note": r[3], "source": _l(r[4])} for r in rows]
 
     def update_record(self, run_id: str, rtype: str, key: str, **fields: Any) -> None:
         for k in ("source", "mapped", "annotations", "issues"):

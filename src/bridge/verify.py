@@ -90,9 +90,10 @@ def _source_records(store: S.RunStore, run_id: str, rtype: str, where: str = "")
         yield {"source_key": r["source_key"], "status": r["status"], "source": json.loads(r["source"])}
 
 
-def _nimbus_all(client: NimbusClient, rtype: str) -> Iterator[dict[str, Any]]:
-    # Cursor-backed scan: bounded memory and no quadratic OFFSET walk.
-    yield from client.iter_search(rtype)
+def _nimbus_all(client: NimbusClient, rtype: str, match: dict[str, list[str]] | None = None) -> Iterator[dict[str, Any]]:
+    # Cursor-backed scan: bounded memory and no quadratic OFFSET walk. `match` narrows the scan in Nimbus;
+    # callers still apply their own predicate, so it can only save transfer, never change a count.
+    yield from (client.iter_search(rtype, match=match) if match else client.iter_search(rtype))
 
 
 def _sentinel(name: str, description: str, source: Iterable[dict[str, Any]], keep: Callable[[dict[str, Any]], bool],
@@ -138,16 +139,17 @@ def sentinels(store: S.RunStore, client: NimbusClient, run_id: str) -> dict[str,
     # Each target collection is traversed once, aggregating only the counts/IDs
     # required by clinical sentinels instead of retaining millions of payloads.
     active_anticoagulants = active_insulin = 0
-    for med in _nimbus_all(client, "MedicationRequest"):
+    for med in _nimbus_all(client, "MedicationRequest", {"status": ["active"]}):
         if med["status"] != "active":
             continue
         codes = {c["code"] for c in med["medication"].get("coding", [])}
         active_anticoagulants += bool(codes & ANTICOAG_RXNORM)
         active_insulin += bool(codes & INSULIN_RXNORM)
     allergy_patient_ids = {a["patient"]["id"] for a in _nimbus_all(client, "AllergyIntolerance")}
+    abnormal = ("high", "low", "abnormal")
     abnormal_observations = sum(
-        1 for o in _nimbus_all(client, "Observation")
-        if o.get("category") == "laboratory" and o.get("interpretation") in ("high", "low", "abnormal")
+        1 for o in _nimbus_all(client, "Observation", {"category": ["laboratory"], "interpretation": list(abnormal)})
+        if o.get("category") == "laboratory" and o.get("interpretation") in abnormal
     )
     labs = _source_records(store, run_id, "Observation", "AND json_extract(source, '$.kind')='lab' "
                            "AND trim(json_extract(source, '$.ABN_FLAG')) IN ('H','L','A')")

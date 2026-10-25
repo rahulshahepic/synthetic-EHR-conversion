@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sqlite3
 import threading
 import time
@@ -196,8 +197,10 @@ class NimbusService:
         if not sk or not isinstance(payload, dict):
             return {**out, "status": "rejected", "issues": [Issue("E_REQUIRED", "sourceKey and resource required").to_dict()]}
         model, issues = parse(rt, payload)
+        refs = None
         if model is not None:
-            issues += self._resolve_refs(rt, model, ref_cache)
+            refs = list(iter_refs(rt, model))  # resolved in place below, then reused for indexing
+            issues += self._resolve_refs(rt, model, ref_cache, refs)
         existing = self._row_by_sk(rt, sk)
         if model is not None and not any(i.severity == "error" for i in issues):
             issues += self._contextual_checks(rt, model, existing["id"] if existing else None)
@@ -227,7 +230,7 @@ class NimbusService:
                 " VALUES (?,?,?,?,?,?,?,?)",
                 (rt, rid, sk, 1, json.dumps(data), batch["batchId"], now, now),
             )
-        self._index(rt, rid, data, model=model, existing=existing is not None)
+        self._index(rt, rid, data, model=model, existing=existing is not None, refs=refs)
         if ref_cache is not None:
             ref_cache.pop((rt, "id", rid), None)
             ref_cache.pop((rt, "sk", sk), None)
@@ -242,11 +245,12 @@ class NimbusService:
         return self._db.execute("SELECT * FROM resources WHERE rtype=? AND id=?", (rt, rid)).fetchone()
 
     def _resolve_refs(self, rt: str, model: Any,
-                      cache: dict[tuple[str, str, str], Any] | None = None) -> list[Issue]:
+                      cache: dict[tuple[str, str, str], Any] | None = None,
+                      refs: list[tuple[str, Any, str]] | None = None) -> list[Issue]:
         issues = []
         if cache is None:
             cache = {}
-        for field, ref, target in iter_refs(rt, model):
+        for field, ref, target in (iter_refs(rt, model) if refs is None else refs):
             row = None
             if ref.id:
                 ck = (target, "id", ref.id)
@@ -341,12 +345,15 @@ class NimbusService:
             "INSERT INTO history (rtype, id, batch_id, op, prior_data, prior_version, prior_batch_id, prior_source_key, at)"
             " VALUES (?,?,?,?,?,?,?,?,?)", row)
 
-    def _index(self, rt: str, rid: str, data: dict[str, Any], *, model: Any = None, existing: bool = True) -> None:
+    def _index(self, rt: str, rid: str, data: dict[str, Any], *, model: Any = None, existing: bool = True,
+               refs: list[tuple[str, Any, str]] | None = None) -> None:
         if existing:
             self._unindex(rt, rid)
-        if model is None:
-            model = m.RESOURCE_MODELS[rt].model_validate(data)
-        rows = [(rt, rid, field, target, ref.id) for field, ref, target in iter_refs(rt, model) if ref.id]
+        if refs is None:
+            if model is None:
+                model = m.RESOURCE_MODELS[rt].model_validate(data)
+            refs = list(iter_refs(rt, model))
+        rows = [(rt, rid, field, target, ref.id) for field, ref, target in refs if ref.id]
         if self._pending_refs is not None:
             if rows:
                 self._pending_refs.setdefault((rt, rid), []).extend(rows)
@@ -500,7 +507,9 @@ class NimbusService:
 
     def search(self, rt: str, source_key: str | None = None, identifier: str | None = None,
                patient: str | None = None, limit: int = 100, offset: int = 0,
-               after_created_at: str | None = None, after_id: str | None = None) -> list[dict[str, Any]]:
+               after_created_at: str | None = None, after_id: str | None = None,
+               match: dict[str, list[str]] | None = None) -> list[dict[str, Any]]:
+        """`match` keeps resources whose top-level string field equals one of the given values."""
         if rt not in m.RESOURCE_MODELS:
             raise NimbusError("E_RESOURCE_TYPE", f"unknown resource type {rt!r}")
         sql, args = "SELECT r.* FROM resources r", []
@@ -516,6 +525,11 @@ class NimbusService:
         if patient:
             where.append("r.id IN (SELECT owner_id FROM refs WHERE owner_rtype=? AND target_rtype='Patient' AND target_id=?)")
             args += [rt, patient]
+        for fld, values in (match or {}).items():
+            if not re.fullmatch(r"[A-Za-z][A-Za-z0-9]*", fld) or not values:
+                raise NimbusError("E_MATCH", f"invalid match filter {fld!r}")
+            where.append(f"json_extract(r.data, ?) IN ({','.join('?' * len(values))})")
+            args += [f"$.{fld}", *values]
         if (after_created_at is None) != (after_id is None):
             raise NimbusError("E_CURSOR", "both cursor fields are required")
         if after_created_at is not None:

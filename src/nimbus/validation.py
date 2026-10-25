@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import re
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from datetime import date
 from typing import Any, Iterator
 
@@ -20,7 +20,8 @@ class Issue:
     severity: str = "error"  # error | warning
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        # Same as dataclasses.asdict(self) (all fields are str/None), without its recursive deep copy.
+        return {"code": self.code, "message": self.message, "field": self.field, "severity": self.severity}
 
 
 CODE_PATTERNS = {
