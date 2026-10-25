@@ -38,6 +38,12 @@ class Claim:
     # ("E000017"), or an analyst id.
     source_kind: str = ""
     evidence_refs: tuple[str, ...] = ()
+    # The subject-to-field binding, recorded on the claim itself (T-121):
+    # for a subject that is not a ``field:`` subject, the (file, field) a
+    # profiler observation must describe to confirm this claim. Previously
+    # the generator hard-coded these bindings per source system, so a
+    # subject from any other source could never be data-confirmed.
+    subject_field: tuple[str, str] | None = None
 
     def key(self) -> tuple[str, str]:
         return (self.subject, self.predicate)
@@ -56,6 +62,10 @@ class Dispute:
     resolution_claimed_by: str = ""
     resolution_source_kind: str = ""
     resolution_evidence_refs: tuple[str, ...] = ()
+    # The resolution's own subject-to-field binding (see Claim.subject_field):
+    # the (file, field) a cited observation must describe to confirm the
+    # resolved value.
+    resolution_subject_field: tuple[str, str] | None = None
 
     @property
     def resolved(self) -> bool:
@@ -94,6 +104,7 @@ class ClaimStore:
                 d.resolution_claimed_by = ""
                 d.resolution_source_kind = ""
                 d.resolution_evidence_refs = ()
+                d.resolution_subject_field = None
         self.claims.append(claim)
         existing = [c for c in self.claims if c.key() == key]
         distinct = {_canon(c.value) for c in existing}
@@ -113,7 +124,8 @@ class ClaimStore:
 
     def resolve(self, subject: str, predicate: str, value: Any, source: str,
                 claimed_by: str = "", source_kind: str = "",
-                evidence_refs: tuple[str, ...] = ()) -> Dispute:
+                evidence_refs: tuple[str, ...] = (),
+                subject_field: tuple[str, str] | None = None) -> Dispute:
         """Record a resolution for a dispute (the value need not be one of the
         claimed values, but the source must say why: an observation id, a
         ledger event, a named analyst).
@@ -134,6 +146,7 @@ class ClaimStore:
         d.resolution_claimed_by = claimed_by
         d.resolution_source_kind = source_kind
         d.resolution_evidence_refs = tuple(evidence_refs)
+        d.resolution_subject_field = tuple(subject_field) if subject_field else None
         return d
 
     def resolved_value(self, subject: str, predicate: str, default: Any = None) -> Any:
@@ -196,12 +209,16 @@ class ClaimStore:
                                 value=p.get("value"), source=p["source"],
                                 confidence=p.get("confidence", 1.0),
                                 source_kind=p.get("source_kind", ""),
-                                evidence_refs=tuple(p.get("evidence_refs", ()))))
+                                evidence_refs=tuple(p.get("evidence_refs", ())),
+                                subject_field=(tuple(p["subject_field"])
+                                               if p.get("subject_field") else None)))
             elif e.type == "resolve":
                 store.resolve(p["subject"], p["predicate"], p.get("value"), p["source"],
                               claimed_by=p.get("claimed_by", ""),
                               source_kind=p.get("source_kind", ""),
-                              evidence_refs=tuple(p.get("evidence_refs", ())))
+                              evidence_refs=tuple(p.get("evidence_refs", ())),
+                              subject_field=(tuple(p["subject_field"])
+                                             if p.get("subject_field") else None))
         return store
 
     def to_json(self) -> dict[str, Any]:
@@ -213,6 +230,8 @@ class ClaimStore:
                 out["source_kind"] = c.source_kind
             if c.evidence_refs:
                 out["evidence_refs"] = list(c.evidence_refs)
+            if c.subject_field:
+                out["subject_field"] = list(c.subject_field)
             return out
 
         def dispute_json(d: Dispute) -> dict[str, Any]:
@@ -226,6 +245,8 @@ class ClaimStore:
                 out["resolution_source_kind"] = d.resolution_source_kind
             if d.resolution_evidence_refs:
                 out["resolution_evidence_refs"] = list(d.resolution_evidence_refs)
+            if d.resolution_subject_field:
+                out["resolution_subject_field"] = list(d.resolution_subject_field)
             return out
 
         return {

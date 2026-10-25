@@ -2491,10 +2491,18 @@
    "predicate": "keying_story",
    "provenance": {
     "kind": "analyst",
-    "ref": "dispute resolved via ledger answers (Greg Holt, systems; Marla Denny, registration)"
+    "ref": "ledger:E000066 (Greg Holt, systems); dispute resolved via ledger answers (Greg Holt, systems; Marla Denny, registration)"
    },
    "subject": "identity",
-   "value": "No master index. Departmental accounts (registration, lab, radiology, pharmacy) are matched per person; registration also creates true duplicate charts for the same person."
+   "value": {
+    "key_fields": [
+     "REG.TXT.ACCT",
+     "LAB.TXT.ACCT",
+     "RAD.TXT.ACCT",
+     "PHA.TXT.ACCT"
+    ],
+    "master_index": false
+   }
   },
   {
    "data_confirmed": false,

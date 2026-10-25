@@ -87,6 +87,21 @@ def _caught_by(rule: dict[str, Any]) -> str:
     return "caught-by-profiling" if rule.get("data_confirmed") else "swallowed"
 
 
+def _keying_position(value: dict[str, Any]) -> str | None:
+    """The position a structured keying story takes (T-121: the keying
+    story is a structured value — key fields, no action verb — so the
+    text substring checks cannot grade it). The false family is a single
+    key: one department's account number, or a master index, treated as
+    identity itself. The true position is no master index, with charts
+    keyed per department. Anything else takes neither position."""
+    fields = value.get("key_fields") or []
+    if value.get("master_index") is False and len(fields) >= 2:
+        return "truth"
+    if value.get("master_index") is True or len(fields) == 1:
+        return "false"
+    return None
+
+
 def grade_entry(entry: dict[str, Any], spec: dict[str, Any]) -> dict[str, Any]:
     check = CHECKS.get(entry["id"])
     if check is None:
@@ -120,6 +135,19 @@ def grade_entry(entry: dict[str, Any], spec: dict[str, Any]) -> dict[str, Any]:
             continue
         value = rule.get("value")
         text = value if isinstance(value, str) else ""
+        if (subject, predicate) == ("identity", "keying_story") \
+                and isinstance(value, dict):
+            position = _keying_position(value)
+            if position == "false":
+                return {"id": entry["id"], "verdict": "swallowed",
+                        "detail": f"spec adopted the false position "
+                                  f"({check.get('false')!r})"}
+            if position == "truth":
+                return {"id": entry["id"], "verdict": _caught_by(rule),
+                        "detail": f"spec carries the true position via "
+                                  f"{rule['provenance']['kind']}"}
+            return {"id": entry["id"], "verdict": "swallowed",
+                    "detail": f"spec value {value!r} matches neither position"}
         if "truth_value" in check:
             if value == check["truth_value"]:
                 return {"id": entry["id"], "verdict": _caught_by(rule),

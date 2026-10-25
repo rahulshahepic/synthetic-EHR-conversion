@@ -98,7 +98,7 @@ def test_recorded_observation_confirms_the_claim_it_backs():
     store.add(Claim("profile", "pivot_year", 30, "ledger:E000001 (analyst)",
                     source_kind="analyst", evidence_refs=("E000001",)))
     store.resolve("profile", "pivot_year", 30, "OBS-0007 (DOB distribution)",
-                  evidence_refs=("OBS-0007",))
+                  evidence_refs=("OBS-0007",), subject_field=("REG.TXT", "DOB"))
     events = [ledger_mod.LedgerEvent(
         "E000100", "observation",
         {"obs_id": "OBS-0007", "file": "REG.TXT", "field": "DOB",
@@ -461,6 +461,47 @@ def test_keying_story_merge_language_is_flagged_as_policy_override():
     assert any(o["predicate"] == "keying_story" for o in pkg.spec["policy_overrides"])
     policy = next(r for r in pkg.spec["rules"] if r["id"] == "SAFETY-IDENTITY-MERGE")
     assert policy["value"] == "route_to_reconciliation"
+
+
+@pytest.mark.parametrize("text", [
+    "link any two charts sharing SSN4+DOB without review",
+    "collapse duplicates on SSN4+DOB automatically",
+])
+def test_keying_story_regex_evading_phrasings_are_flagged(text):
+    """T-121 acceptance: the two phrasings that evaded the old
+    merge-language regex are now structurally impossible as spec rules —
+    a keying story is a structured value (key fields, no action verb),
+    so free text is flagged and routed, never carried."""
+    store = ClaimStore()
+    store.add(Claim("identity", "keying_story", text, "ledger:E3"))
+    pkg = specgen.generate_spec([], store, "acceptance")
+    assert not any(r["predicate"] == "keying_story" for r in pkg.spec["rules"])
+    assert any(o["predicate"] == "keying_story" for o in pkg.spec["policy_overrides"])
+    assert ("identity", "keying_story") in {
+        (u["subject"], u["predicate"]) for u in pkg.spec["known_unknowns"]}
+
+
+def test_binding_recorded_in_the_ledger_confirms_a_non_field_subject():
+    """T-121 acceptance: the subject-to-field binding travels in the
+    ledger itself (on the claim event), so a Halcyon-shaped subject — a
+    file/field pair the generator has never heard of — is data-confirmed
+    purely from the recorded binding."""
+    events = [
+        ledger_mod.LedgerEvent(
+            "E000001", "observation",
+            {"obs_id": "OBS-0003", "file": "DEMOG.TXT", "field": "DOBYR",
+             "stats": {"shape_rates": {"YY": 1.0}}}),
+        ledger_mod.LedgerEvent(
+            "E000002", "claim",
+            {"subject": "profile", "predicate": "pivot_year", "value": 30,
+             "source": "ledger:E000001 (analyst)", "source_kind": "analyst",
+             "evidence_refs": ["OBS-0003"],
+             "subject_field": ["DEMOG.TXT", "DOBYR"]}),
+    ]
+    store = ClaimStore.from_ledger(events)
+    pkg = specgen.generate_spec(events, store, "acceptance")
+    rule = next(r for r in pkg.spec["rules"] if r["predicate"] == "pivot_year")
+    assert rule["data_confirmed"] is True
 
 
 # --------------------------------------------- round two: A40 evidence kept
