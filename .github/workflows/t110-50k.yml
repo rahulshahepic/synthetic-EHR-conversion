@@ -42,7 +42,7 @@ jobs:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
         with:
-          python-version: '3.12'
+          python-version: '3.13'
           cache: pip
       - name: Install package
         run: python -m pip install -e ".[dev]"
@@ -92,7 +92,7 @@ jobs:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
         with:
-          python-version: '3.12'
+          python-version: '3.13'
           cache: pip
       - run: python -m pip install -e ".[dev]"
       - name: Complete 2k, 5k, and 10k-patient conversions
@@ -128,7 +128,7 @@ jobs:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
         with:
-          python-version: '3.12'
+          python-version: '3.13'
           cache: pip
       - run: python -m pip install -e ".[dev]"
       - name: Short smoke and scaling measurements (live output)
