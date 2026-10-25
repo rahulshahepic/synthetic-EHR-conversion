@@ -9,7 +9,7 @@ import pytest
 from testbed.delphi import layouts
 from testbed.delphi.generator import generate
 
-DIGEST_7_25 = "e5ef7951571241bcf99d78eca0980ceccd7fbe22f24a3051a6abdf2192dd9061"
+DIGEST_7_25 = "deb1bbe7b4cd3c4d8a33a31c6b9393fae5e5abaa6ebf3d159fc9045d6b811703"  # re-pinned: grading ledger extended (PR #38 review)
 
 NEW_ISSUE_TYPES = {
     "century_window_dob", "cross_department_duplicate", "truncated_name",

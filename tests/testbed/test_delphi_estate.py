@@ -12,8 +12,8 @@ from testbed.delphi.dictionary import DISCREPANCIES
 from testbed.delphi.generator import PIVOT_YEAR, generate
 
 ANALYSTS_DIR = Path(__file__).resolve().parents[2] / "testbed" / "delphi" / "analysts"
-SECTIONS = ("## Role and tenure", "## What they know well", "## What they do not know",
-            "## What they believe that is wrong", "## How they answer")
+SECTIONS = ("## Role and tenure", "## What I know", "## What I do not know",
+            "## How I answer")
 
 
 @pytest.fixture(scope="module")
@@ -125,3 +125,22 @@ def test_analysts_disagree_on_pivot_and_duplicates():
     assert "same person" in reg and "different people" in pha
     # the lab account number as identity: lab asserts it, registration does not
     assert "is the patient" in lab
+
+
+def test_ledger_covers_analyst_beliefs_and_disagreements():
+    ids = {e["id"] for e in DISCREPANCIES}
+    for expected in ("belief_lab_account_is_identity", "belief_lab_nonnumeric_bench_error",
+                     "belief_registration_merges_routine", "belief_pharmacy_misc_meds_skippable",
+                     "belief_systems_dictionary_current",
+                     "disagreement_pivot_year", "disagreement_duplicate_charts"):
+        assert expected in ids, expected
+    for e in DISCREPANCIES:
+        if e["id"].startswith(("belief_", "disagreement_")):
+            assert "analysts/" in e["artifact"]
+
+
+def test_profiles_state_beliefs_without_flagging_them():
+    for f in sorted(ANALYSTS_DIR.glob("*.md")):
+        text = f.read_text()
+        assert "believe that is wrong" not in text
+        assert "## What I know" in text  # first-person voice throughout

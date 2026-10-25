@@ -233,4 +233,83 @@ DISCREPANCIES: list[dict[str, str]] = [
         "check": "The answer key's persons.json maps most persons to two or more account numbers, "
                  "including, for some, two R-prefixed registration accounts.",
     },
+    {
+        "id": "belief_lab_account_is_identity",
+        "artifact": "testbed/delphi/analysts/lab.md",
+        "claim": "The L number is the patient: the lab account number is the patient's "
+                 "identity across the whole hospital.",
+        "truth": "A lab account is one department's numbering. One person normally holds "
+                 "accounts in several departments (registration, lab, radiology, pharmacy), "
+                 "and proving they are one person is matching work, not a lookup.",
+        "check": "answer_key/persons.json maps most persons to two or more account numbers "
+                 "with different department prefixes.",
+    },
+    {
+        "id": "belief_lab_nonnumeric_bench_error",
+        "artifact": "testbed/delphi/analysts/lab.md",
+        "claim": "A result that is not a number is a bench error, to be cleaned up rather "
+                 "than converted.",
+        "truth": "Non-numeric results are real workflow: word results (NEG, POS, TRACE), "
+                 "comparators, and typed sentences such as 'FAXED TO MD' carry results. "
+                 "Deleting them loses results.",
+        "check": "LAB.TXT RESULT values include word results and sentences alongside "
+                 "numeric and comparator values.",
+    },
+    {
+        "id": "belief_registration_merges_routine",
+        "artifact": "testbed/delphi/analysts/registration.md",
+        "claim": "Duplicate charts are the same person, and merging them is routine, safe work.",
+        "truth": "Registration's own duplicate charts are the same person, but look-alike "
+                 "charts also belong to different people (households, name variants). A "
+                 "blanket auto-merge rule is unsafe; merges belong in reconciliation, "
+                 "decided case by case.",
+        "check": "answer_key/issues.jsonl contains both duplicate_registration (same "
+                 "person twice) and cross_department_duplicate / name_variant cases "
+                 "involving different charts that resemble each other.",
+    },
+    {
+        "id": "belief_pharmacy_misc_meds_skippable",
+        "artifact": "testbed/delphi/analysts/pharmacy.md",
+        "claim": "The misc-med orders can be left out of a conversion; the note holds the "
+                 "details anyway.",
+        "truth": "Misc-med orders are real active orders. Their details live partly in "
+                 "notes that are truncated at field width, so skipping the orders loses "
+                 "medications the notes do not reliably preserve.",
+        "check": "PHA.TXT carries misc-med orders and answer_key/issues.jsonl records "
+                 "truncated_note cases where the note text was cut.",
+    },
+    {
+        "id": "belief_systems_dictionary_current",
+        "artifact": "testbed/delphi/analysts/systems.md",
+        "claim": "The data dictionary is current and describes the system the extract "
+                 "comes from.",
+        "truth": "The dictionary is version 4.1 (2019) against layout version 5.0 and is "
+                 "wrong or incomplete in each of the dict_* entries in this ledger.",
+        "check": "Compare the DATADICT.TXT version line with LAYOUTS.DAT (see "
+                 "dict_version_skew) and work the remaining dict_* checks.",
+    },
+    {
+        "id": "disagreement_pivot_year",
+        "artifact": "testbed/delphi/analysts/registration.md + analysts/systems.md",
+        "claim": "Registration: the two-digit-year window starts at 1930. Systems: the "
+                 "pivot year is 50.",
+        "truth": "The window starts at 1930 (pivot 30). Registration is right; the "
+                 "systems analyst's release-note figure is wrong.",
+        "check": "The generator's PIVOT_YEAR is 30, and century_window_dob issues in "
+                 "answer_key/issues.jsonl are exactly the pre-1930 births the window "
+                 "would misread under a pivot of 50.",
+    },
+    {
+        "id": "disagreement_duplicate_charts",
+        "artifact": "testbed/delphi/analysts/registration.md + analysts/pharmacy.md",
+        "claim": "Registration: duplicate charts are the same person; merge routinely. "
+                 "Pharmacy: look-alike charts are usually different people; merging is "
+                 "how a conversion hurts someone.",
+        "truth": "Both occur. Registration creates true duplicate charts for one person, "
+                 "and different people share surnames, addresses, and birth months. "
+                 "Neither blanket rule is safe; matching is per-case work.",
+        "check": "answer_key/persons.json shows persons holding multiple accounts, while "
+                 "issues.jsonl records name_variant and dob_variant cases across "
+                 "different persons.",
+    },
 ]
