@@ -195,6 +195,26 @@ def test_duplicate_charts_also_requires_the_true_keying_position(value):
     assert verdict["verdict"] == "swallowed", verdict
 
 
+def test_duplicate_charts_grader_reads_its_truth_from_the_check(monkeypatch):
+    """PR #43 round-4 review: the duplicate-charts grader graded
+    against a hardcoded {'account_field': 'ACCT', 'min_departments': 2}
+    copy instead of the entry's own keying_truth in CHECKS, so the
+    hardcoded copy could drift from the data. A variant truth — a
+    different account field, a wider department span — must change
+    the grade."""
+    spec = _keying_spec({"key_fields": ["REG.TXT.CHART", "LAB.TXT.CHART",
+                                        "BILL.TXT.CHART"],
+                         "master_index": False, "true_duplicates": True})
+    verdict = scorecard.grade_entry({"id": "disagreement_duplicate_charts"}, spec)
+    assert verdict["verdict"] == "swallowed"  # default truth keys on ACCT
+    variant = dict(scorecard.CHECKS["disagreement_duplicate_charts"])
+    variant["keying_truth"] = {"account_field": "CHART", "min_departments": 3}
+    monkeypatch.setitem(scorecard.CHECKS, "disagreement_duplicate_charts",
+                        variant)
+    verdict = scorecard.grade_entry({"id": "disagreement_duplicate_charts"}, spec)
+    assert verdict["verdict"] == "routed-to-runtime-question"
+
+
 def test_keying_rule_keeps_its_analyst_provenance(pkg):
     """PR #43 round-2 review: the resolution adds true_duplicates on
     top of Greg Holt's claimed story, so exact-value matching found no

@@ -31,6 +31,19 @@ def _store() -> claims_mod.ClaimStore:
     return store
 
 
+def _seed_layout(store: claims_mod.ClaimStore, path: str,
+                 fields: tuple[str, ...] = ("ACCT",)):
+    """Record the estate layout evidence a real interview produces —
+    a dictionary-kind layout claim from the shipped layouts file —
+    so keying-story validation has the estate's fields on record
+    (PR #43 round-4 review: a key field validates only against estate
+    evidence for its file, never by shape alone)."""
+    store.add(claims_mod.Claim(
+        f"file:{path.split('.')[0]}", "layout_binding",
+        {"path": path, "layouts": {"S": [{"name": f} for f in fields]}},
+        "LAYOUTS.DAT v5.0 (estate document)", source_kind="dictionary"))
+
+
 def test_spec_is_deterministic_and_declarative_first():
     # The resolution cites OBS-0042: data confirmation requires that the
     # observation actually be recorded in the ledger events (validated
@@ -83,6 +96,8 @@ def test_identity_merges_route_to_human_despite_analyst_claim():
 
 def test_keying_story_structured_value_becomes_the_rule():
     store = _store()
+    _seed_layout(store, "REG.TXT")
+    _seed_layout(store, "LAB.TXT")
     story = {"key_fields": ["LAB.TXT.ACCT", "REG.TXT.ACCT"],
              "master_index": False}
     store.add(claims_mod.Claim("identity", "keying_story", story,
@@ -125,6 +140,10 @@ def test_keying_story_free_text_is_flagged_never_a_rule(text):
 ])
 def test_keying_story_malformed_structure_is_flagged(bad):
     store = _store()
+    # Seed REG.TXT's layout so REG.TXT.ACCT is a real field: the
+    # non-bool-flag cases must be rejected by the flag validation,
+    # not incidentally by a missing-evidence field rejection.
+    _seed_layout(store, "REG.TXT")
     store.add(claims_mod.Claim("identity", "keying_story", bad,
                                "ledger:E000012"))
     pkg = specgen.generate_spec([], store, "delphi")
@@ -162,6 +181,8 @@ def test_keying_story_field_order_is_canonical_not_a_dispute():
     review: _canon kept list order, so swapped fields read as two
     different values and the keying rule vanished into a known unknown)."""
     store = claims_mod.ClaimStore()
+    _seed_layout(store, "REG.TXT")
+    _seed_layout(store, "LAB.TXT")
     store.add(claims_mod.Claim(
         "identity", "keying_story",
         {"key_fields": ["REG.TXT.ACCT", "LAB.TXT.ACCT"], "master_index": False},
@@ -378,3 +399,256 @@ def test_delphi_export_stages_through_generated_spec(tmp_path):
     reg = [r for r in records if r["record_type"] == "REG"]
     assert reg and all(r["source_key"] for r in reg)
     assert {r["payload"]["DOB"] for r in reg if r["payload"].get("DOB")}
+
+
+# -- round-4 review: provenance of resolution-added facts ----------------------
+
+_KEY_FIELDS = ["LAB.TXT.ACCT", "REG.TXT.ACCT"]
+
+
+def _layout_event(event_id: str, stem: str, path: str) -> ledger_mod.LedgerEvent:
+    return ledger_mod.LedgerEvent(event_id, "claim", {
+        "subject": f"file:{stem}", "predicate": "layout_binding",
+        "value": {"path": path,
+                  "layouts": {"S": [{"name": "ACCT"}, {"name": "DOB"}]}},
+        "source": "LAYOUTS.DAT v5.0 (estate document)",
+        "source_kind": "dictionary"})
+
+
+def _keying_ledger(claim_value, resolution_value, resolution_refs=()):
+    """A minimal interview ledger for the keying story: a DOB
+    observation, the identity/keying_story binding backed by it, the
+    estate layouts, one keying claim citing the observation, and a
+    resolution."""
+    return [
+        ledger_mod.LedgerEvent("E000001", "observation",
+                               {"obs_id": "OBS-0001", "file": "REG.TXT",
+                                "field": "DOB",
+                                "stats": {"shape_rates": {"YYMMDD": 1.0}}}),
+        ledger_mod.LedgerEvent("E000002", "binding",
+                               {"subject": "identity",
+                                "predicate": "keying_story",
+                                "binding": ["REG.TXT", "DOB"],
+                                "evidence_refs": ["OBS-0001"]}),
+        _layout_event("E000003", "REG", "REG.TXT"),
+        _layout_event("E000004", "LAB", "LAB.TXT"),
+        ledger_mod.LedgerEvent("E000005", "claim",
+                               {"subject": "identity",
+                                "predicate": "keying_story",
+                                "value": claim_value,
+                                "source": "OBS-0001 (REG.TXT DOB distribution)",
+                                "source_kind": "profiler-data",
+                                "evidence_refs": ["OBS-0001"]}),
+        ledger_mod.LedgerEvent("E000006", "resolve",
+                               {"subject": "identity",
+                                "predicate": "keying_story",
+                                "value": resolution_value,
+                                "source": "ledger answers",
+                                "claimed_by": "Greg Holt, systems",
+                                "source_kind": "analyst",
+                                "evidence_refs": list(resolution_refs)}),
+    ]
+
+
+def _keying_rule(events):
+    store = claims_mod.ClaimStore.from_ledger(events)
+    pkg = specgen.generate_spec(events, store, "delphi")
+    return next(r for r in pkg.spec["rules"] if r["predicate"] == "keying_story")
+
+
+@pytest.mark.parametrize("claim_td,resolution_td", [(False, True), (True, False)])
+def test_contradicted_claim_lends_no_provenance(claim_td, resolution_td):
+    """PR #43 round-4 review (the reproduced P2): a profiler claim
+    stating true_duplicates one way was credited as winner of a
+    resolution recording the opposite, and the resolved rule came out
+    profiler-data + data_confirmed on the claim's evidence. A
+    contradicted claim is not the winner: the rule carries the
+    resolution's own provenance and no data confirmation."""
+    claim = {"key_fields": _KEY_FIELDS, "master_index": False,
+             "true_duplicates": claim_td}
+    resolved = {"key_fields": _KEY_FIELDS, "master_index": False,
+                "true_duplicates": resolution_td}
+    rule = _keying_rule(_keying_ledger(claim, resolved))
+    assert rule["value"]["true_duplicates"] is resolution_td
+    assert rule["provenance"]["kind"] == "analyst"
+    assert rule["data_confirmed"] is False
+
+
+def test_resolution_added_fact_is_not_confirmed_by_the_winner():
+    """The claim stated the keying core but never mentioned
+    true_duplicates; the resolution added it. The winner's profiler
+    evidence confirms the facts the winner stated — it cannot confirm
+    a fact it never mentioned, so the emitted value is not
+    data-confirmed and the unearned profiler-data kind is demoted to
+    the conservative reading of the claim's source."""
+    claim = {"key_fields": _KEY_FIELDS, "master_index": False}
+    resolved = {"key_fields": _KEY_FIELDS, "master_index": False,
+                "true_duplicates": True}
+    rule = _keying_rule(_keying_ledger(claim, resolved))
+    assert rule["data_confirmed"] is False
+    assert rule["provenance"]["kind"] == "analyst"
+
+
+def test_resolution_added_fact_confirmed_by_the_resolutions_own_evidence():
+    """Same shape, but the resolution cites the binding's observation
+    itself: both routes confirm — the winner's for the stated core,
+    the resolution's for the added fact — and the rule confirms."""
+    claim = {"key_fields": _KEY_FIELDS, "master_index": False}
+    resolved = {"key_fields": _KEY_FIELDS, "master_index": False,
+                "true_duplicates": True}
+    rule = _keying_rule(_keying_ledger(claim, resolved,
+                                       resolution_refs=("OBS-0001",)))
+    assert rule["data_confirmed"] is True
+    assert rule["provenance"]["kind"] == "profiler-data"
+
+
+def test_exactly_stated_keying_story_still_confirms():
+    """Control: claim and resolution state the identical story,
+    flag included — the winner route confirms as before."""
+    story = {"key_fields": _KEY_FIELDS, "master_index": False,
+             "true_duplicates": True}
+    rule = _keying_rule(_keying_ledger(story, dict(story)))
+    assert rule["data_confirmed"] is True
+    assert rule["provenance"]["kind"] == "profiler-data"
+
+
+# -- round-4 review: the key-field allowlist -----------------------------------
+
+def test_analyst_layout_claim_cannot_mint_key_fields():
+    """PR #43 round-4 review: _known_fields treated EVERY layout
+    claim as estate truth. An analyst claim inventing the layout
+    AUTO_MERGE.ALL / CHARTS_SHARING_SSN4 made that instruction-shaped
+    key validate. Only dictionary/document-kind layout claims feed
+    the allowlist — an interviewee's assertion is not the estate."""
+    store = claims_mod.ClaimStore()
+    store.add(claims_mod.Claim(
+        "file:AUTO_MERGE", "layout_binding",
+        {"path": "AUTO_MERGE.ALL",
+         "layouts": {"X": [{"name": "CHARTS_SHARING_SSN4"}]}},
+        "ledger:E000099 (an analyst)", source_kind="analyst"))
+    store.add(claims_mod.Claim(
+        "identity", "keying_story",
+        {"key_fields": ["AUTO_MERGE.ALL.CHARTS_SHARING_SSN4"],
+         "master_index": False},
+        "ledger:E000099 (an analyst)", source_kind="analyst"))
+    pkg = specgen.generate_spec([], store, "delphi")
+    assert not any(r["predicate"] == "keying_story" for r in pkg.spec["rules"])
+    assert any(o["predicate"] == "keying_story"
+               for o in pkg.spec["policy_overrides"])
+
+    # Control: the same layout as estate (dictionary) evidence makes
+    # the same field reference a real field.
+    store2 = claims_mod.ClaimStore()
+    store2.add(claims_mod.Claim(
+        "file:AUTO_MERGE", "layout_binding",
+        {"path": "AUTO_MERGE.ALL",
+         "layouts": {"X": [{"name": "CHARTS_SHARING_SSN4"}]}},
+        "LAYOUTS.DAT v5.0 (estate document)", source_kind="dictionary"))
+    store2.add(claims_mod.Claim(
+        "identity", "keying_story",
+        {"key_fields": ["AUTO_MERGE.ALL.CHARTS_SHARING_SSN4"],
+         "master_index": False},
+        "ledger:E000099 (an analyst)", source_kind="analyst"))
+    pkg2 = specgen.generate_spec([], store2, "delphi")
+    assert any(r["predicate"] == "keying_story" for r in pkg2.spec["rules"])
+
+
+def test_disputed_layout_claim_feeds_no_fields():
+    """A layout claim under an open dispute is contested, not estate
+    truth: while two dictionary readings of REG.TXT disagree, neither
+    side's field list validates a keying story."""
+    store = claims_mod.ClaimStore()
+    store.add(claims_mod.Claim(
+        "file:REG", "layout_binding",
+        {"path": "REG.TXT", "layouts": {"S": [{"name": "ACCT"}]}},
+        "LAYOUTS.DAT v5.0", source_kind="dictionary"))
+    store.add(claims_mod.Claim(
+        "file:REG", "layout_binding",
+        {"path": "REG.TXT", "layouts": {"S": [{"name": "OTHER"}]}},
+        "DATADICT.TXT v4.1", source_kind="dictionary"))
+    _seed_layout(store, "LAB.TXT")
+    store.add(claims_mod.Claim(
+        "identity", "keying_story",
+        {"key_fields": ["REG.TXT.ACCT", "LAB.TXT.ACCT"],
+         "master_index": False},
+        "ledger:E000012 (Greg Holt, systems)", source_kind="analyst"))
+    pkg = specgen.generate_spec([], store, "delphi")
+    assert not any(r["predicate"] == "keying_story" for r in pkg.spec["rules"])
+    assert any(o["predicate"] == "keying_story"
+               for o in pkg.spec["policy_overrides"])
+
+
+def test_one_observed_field_does_not_validate_its_whole_file():
+    """PR #43 round-4 review: strictness used to flip on globally —
+    observing REG.TXT.DOB put the generator in allowlist mode for
+    every file, and REG.TXT.ACCT was judged against a set that never
+    contained it for the wrong reason while other files' tokens were
+    judged against nothing relevant. Strictness is per file: DOB
+    observed says nothing about ACCT, so the true story is not yet
+    validated — it waits for the estate's layout evidence."""
+    events = [ledger_mod.LedgerEvent(
+        "E000001", "observation",
+        {"obs_id": "OBS-0001", "file": "REG.TXT", "field": "DOB",
+         "stats": {"shape_rates": {"YYMMDD": 1.0}}})]
+    store = claims_mod.ClaimStore()
+    store.add(claims_mod.Claim(
+        "identity", "keying_story",
+        {"key_fields": ["REG.TXT.ACCT", "LAB.TXT.ACCT"],
+         "master_index": False},
+        "ledger:E000012 (Greg Holt, systems)", source_kind="analyst"))
+    pkg = specgen.generate_spec(events, store, "delphi")
+    assert not any(r["predicate"] == "keying_story" for r in pkg.spec["rules"])
+    assert any(o["predicate"] == "keying_story"
+               for o in pkg.spec["policy_overrides"])
+
+
+@pytest.mark.parametrize("token", [
+    "MERGE.ALL.CHARTS",
+    "AUTO_MERGE.ALL.CHARTS_SHARING_SSN4_WITHOUT_REVIEW",
+])
+def test_keying_token_without_estate_evidence_never_validates(token):
+    """PR #43 round-4 review: with no estate fields on record at all,
+    a shape-only fallback grammar used to accept any three-segment
+    uppercase token — MERGE.ALL.CHARTS validated and the instruction
+    became a rule. There is no fallback: no estate evidence for the
+    token's file, no validation; the story is flagged instead."""
+    store = claims_mod.ClaimStore()
+    store.add(claims_mod.Claim(
+        "identity", "keying_story",
+        {"key_fields": [token], "master_index": False},
+        "ledger:E000012 (Greg Holt, systems)", source_kind="analyst"))
+    pkg = specgen.generate_spec([], store, "delphi")
+    assert not any(r["predicate"] == "keying_story" for r in pkg.spec["rules"])
+    assert any(o["predicate"] == "keying_story"
+               for o in pkg.spec["policy_overrides"])
+    assert ("identity", "keying_story") in {
+        (u["subject"], u["predicate"]) for u in pkg.spec["known_unknowns"]}
+
+
+def test_non_string_claim_refs_do_not_crash_generation():
+    """PR #43 round-4 review, defense in depth: claim evidence refs
+    replayed from a hand-edited ledger can still carry non-strings
+    (claims are not the binding boundary). The confirmation matchers
+    must ignore them, not crash on a regex match against an int —
+    and the valid ref alongside still confirms."""
+    events = [
+        ledger_mod.LedgerEvent("E000001", "observation",
+                               {"obs_id": "OBS-0001", "file": "REG.TXT",
+                                "field": "DOB",
+                                "stats": {"shape_rates": {"YYMMDD": 1.0}}}),
+        ledger_mod.LedgerEvent("E000002", "binding",
+                               {"subject": "profile",
+                                "predicate": "pivot_year",
+                                "binding": ["REG.TXT", "DOB"],
+                                "evidence_refs": ["OBS-0001"]}),
+        ledger_mod.LedgerEvent("E000003", "claim",
+                               {"subject": "profile",
+                                "predicate": "pivot_year", "value": 30,
+                                "source": "ledger:E000004 (Marla Denny)",
+                                "source_kind": "analyst",
+                                "evidence_refs": [7, ["OBS-0001"], "OBS-0001"]}),
+    ]
+    store = claims_mod.ClaimStore.from_ledger(events)
+    pkg = specgen.generate_spec(events, store, "delphi")
+    rule = next(r for r in pkg.spec["rules"] if r["predicate"] == "pivot_year")
+    assert rule["data_confirmed"] is True

@@ -38,31 +38,71 @@ def _canon_for(subject: str, predicate: str, value: Any) -> str:
     return _canon(value, keying_story=(subject, predicate) == ("identity", "keying_story"))
 
 
-def _keying_core(value: Any) -> tuple[tuple[str, ...], Any] | None:
+def _keying_core(value: Any) -> tuple[tuple[str, ...], dict[str, Any]] | None:
     """The identity-bearing core of a keying story: its key fields
-    (order-insensitive) and its master-index flag. A resolution may add
-    further recorded facts on top of the winning claim's story (the
-    Delphi resolution adds ``true_duplicates``); the claim that stated
-    the core is still the story's provenance."""
+    (order-insensitive) and the flags it states. ``master_index`` is
+    normalized — absent reads as False, exactly as the keying
+    validator and the scorecard treat it — so a claim that omits the
+    flag states the same story as one that spells out False. Any other
+    flag (``true_duplicates``) is recorded only when present: a
+    resolution may add a fact the winning claim never mentioned, and
+    that absence is not a contradiction."""
     if not isinstance(value, dict):
         return None
     fields = value.get("key_fields")
     if not isinstance(fields, list) or not all(isinstance(f, str) for f in fields):
         return None
-    return (tuple(sorted(set(fields))), value.get("master_index"))
+    flags: dict[str, Any] = {"master_index": value.get("master_index", False)}
+    if "true_duplicates" in value:
+        flags["true_duplicates"] = value["true_duplicates"]
+    return (tuple(sorted(set(fields))), flags)
+
+
+def _keying_match(a: Any, b: Any) -> bool:
+    """Whether two keying stories state the same story. The key fields
+    must agree, and every flag stated on BOTH sides must agree: a claim
+    stating ``true_duplicates: false`` does NOT state the story a
+    resolution recorded as ``true_duplicates: true``, however the key
+    fields line up — crediting it as the winner would lend the
+    resolution the claim's provenance (and, on the profiler-data route,
+    its data confirmation) for a fact the claim explicitly denied.
+    A flag absent on one side contradicts nothing."""
+    core_a, core_b = _keying_core(a), _keying_core(b)
+    if core_a is None or core_b is None:
+        return False
+    if core_a[0] != core_b[0]:
+        return False
+    shared = set(core_a[1]) & set(core_b[1])
+    return all(core_a[1][flag] == core_b[1][flag] for flag in shared)
 
 
 def values_match(subject: str, predicate: str, a: Any, b: Any) -> bool:
     """Whether two values on (subject, predicate) are the same value.
     For the keying story, a value also matches a claim that stated its
-    core (same key fields, same master-index flag) even when a
+    core (same key fields, no contradictory flag) even when a
     resolution added further facts (e.g. ``true_duplicates``) on top."""
     if _canon_for(subject, predicate, a) == _canon_for(subject, predicate, b):
         return True
     if (subject, predicate) == ("identity", "keying_story"):
-        core_a, core_b = _keying_core(a), _keying_core(b)
-        return core_a is not None and core_a == core_b
+        return _keying_match(a, b)
     return False
+
+
+def resolution_added_facts(subject: str, predicate: str,
+                           claim_value: Any, resolved_value: Any) -> bool:
+    """Whether the resolved value records facts the claim never stated
+    (keying story: a flag present in the resolution but absent from
+    the claim — ``true_duplicates`` is the current case). Such facts
+    carry the resolution's provenance, not the claim's: the claim's
+    evidence cannot data-confirm a fact it never mentioned, so a
+    partially-matching winner's confirmation is not enough on its own
+    (see specgen._rule_provenance)."""
+    if (subject, predicate) != ("identity", "keying_story"):
+        return False
+    if not isinstance(claim_value, dict) or not isinstance(resolved_value, dict):
+        return False
+    return any(flag not in claim_value for flag in resolved_value
+               if flag not in ("key_fields", "master_index"))
 
 
 def validate_binding(value: Any) -> tuple[str, str]:
@@ -74,7 +114,15 @@ def validate_binding(value: Any) -> tuple[str, str]:
     once per (subject, predicate) (a ledger ``binding`` event, or
     ``ClaimStore.bind``), never carried on an individual claim or
     resolution, so no claim can bind itself to whatever observation it
-    happens to cite."""
+    happens to cite.
+
+    The returned pair is case-normalized (upper) — the case estate
+    files, fields and observations are recorded in. The evidence and
+    confirmation checks have always matched case-insensitively, so
+    without normalization the same binding re-recorded in a different
+    case (``labdict.txt``/``unit`` after ``LABDICT.TXT``/``UNIT``)
+    registered as a *conflicting* binding and silently cost the rule
+    its data confirmation."""
     if isinstance(value, (str, bytes)) or not isinstance(value, (list, tuple)):
         raise ValueError(
             f"binding must be a (file, field) pair, got {value!r}")
@@ -87,7 +135,7 @@ def validate_binding(value: Any) -> tuple[str, str]:
             or not file.strip() or not field.strip():
         raise ValueError(
             f"binding elements must be non-empty strings, got {value!r}")
-    return file, field
+    return file.upper(), field.upper()
 
 
 @dataclass(frozen=True)
@@ -257,6 +305,19 @@ class ClaimStore:
                 f"a field: subject names its own binding in the subject "
                 f"itself; refusing a recorded binding for {subject!r}")
         parsed = validate_binding(binding)
+        # Every evidence ref must be a string. The stored refs are
+        # consumed later by the generator's confirmation checks, which
+        # match them against observation ids; a non-string ref stored
+        # here (an int from a hand-edited ledger, a nested list) used
+        # to sail past the evidence check — which skips what it cannot
+        # match — and then crash spec generation when the matcher was
+        # handed the int. Direct callers get the raise; ledger replay
+        # filters before calling (see from_ledger).
+        refs = tuple(evidence_refs)
+        for ref in refs:
+            if not isinstance(ref, str):
+                raise ValueError(
+                    f"binding evidence refs must be strings, got {ref!r}")
         key = (subject, predicate)
         existing = self.bindings.get(key)
         if existing is not None and existing != parsed:
@@ -264,7 +325,7 @@ class ClaimStore:
             return
         self.bindings[key] = parsed
         merged = list(self.binding_refs.get(key, ()))
-        for ref in evidence_refs:
+        for ref in refs:
             if ref not in merged:
                 merged.append(ref)
         self.binding_refs[key] = tuple(merged)
@@ -386,7 +447,13 @@ class ClaimStore:
                 subject = p.get("subject")
                 predicate = p.get("predicate")
                 refs_raw = p.get("evidence_refs", ())
-                refs = tuple(refs_raw) if isinstance(refs_raw, (list, tuple)) else ()
+                # Non-string refs are unusable — filter them here, at
+                # the replay boundary, so what bind() stores can never
+                # crash the generator's matchers later. A binding left
+                # with no usable ref fails the evidence check below
+                # and is skipped + flagged like any other bad event.
+                refs = tuple(r for r in refs_raw if isinstance(r, str)) \
+                    if isinstance(refs_raw, (list, tuple)) else ()
                 reason: str | None = None
                 parsed: tuple[str, str] | None = None
                 try:

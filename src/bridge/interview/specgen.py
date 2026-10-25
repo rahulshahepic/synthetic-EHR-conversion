@@ -57,7 +57,8 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
-from .claims import Claim, ClaimStore, Dispute, values_match
+from .claims import (Claim, ClaimStore, Dispute, resolution_added_facts,
+                     values_match)
 from .coverage import Inventory, build_checklist, uncovered
 from .ledger import LedgerEvent
 
@@ -91,30 +92,51 @@ _OBS_DATA_ID = re.compile(r"^OBS-\d+$")
 # ``+`` composite of field references (``REG.TXT.SSN4+REG.TXT.DOB``).
 # A bare grammar cannot keep an instruction out on its own — an
 # uppercase token like ``AUTO_MERGE.ALL_CHARTS`` is shaped exactly like
-# a field reference — so when the estate's fields are on record (the
-# layout bindings in the claim store, the coverage inventory, the
-# ledger's observations) every reference must name a field that
-# actually exists in the estate. When no estate fields are on record at
-# all, the fallback is the strict three-segment grammar
-# (``FILE.EXT.FIELD``): a two-segment token (``MERGE.ALL``,
-# ``AUTO_MERGE.ALL_CHARTS_SHARING_SSN4_WITHOUT_REVIEW``) or a bare word
-# (``SSN4+DOB``) is not a field reference either way. Lowercase,
-# hyphens and free words fail both routes, so an instruction
+# a field reference — so a reference validates only when the estate
+# itself establishes that the field exists in that file: the layouts
+# on record, the coverage inventory, or the profiler's observations.
+# The check is per file: a token naming a file with no estate evidence
+# behind it does not validate, however it is shaped (``MERGE.ALL``,
+# ``AUTO_MERGE.ALL.CHARTS_SHARING_SSN4_WITHOUT_REVIEW``), and an
+# interview that has observed REG.TXT.DOB has NOT thereby established
+# that REG.TXT.ACCT exists. Until the evidence exists the story stays
+# flagged as a known unknown instead of becoming a rule. Lowercase,
+# hyphens and free words fail too, so an instruction
 # ("auto-merge-any-two-charts-...") cannot hide inside a single token
 # the way it could when only whitespace was banned.
-_KEY_FIELD_PART = re.compile(r"^[A-Z0-9_]+\.[A-Z0-9_]+\.[A-Z0-9_]+$")
 
 
 def _known_fields(store: ClaimStore, observations: dict[str, dict[str, Any]],
-                  inventory: Inventory | None) -> set[str]:
-    """The estate's real ``FILE.EXT.FIELD`` references, from every
-    record available at generation time: layout-binding claims (the
-    layouts' field lists and the file's path), the coverage inventory,
-    and the profiler observations recorded in the ledger."""
-    known: set[str] = set()
+                  inventory: Inventory | None) -> dict[str, set[str]]:
+    """The estate's real fields, keyed by file: ``FILE -> {FIELD}``,
+    from the records that speak for the estate itself, available at
+    generation time: undisputed dictionary/document-kind layout claims
+    (the layouts' field lists and the file's path), the coverage
+    inventory, and the profiler observations recorded in the ledger.
+
+    Only those records feed the allowlist. An analyst-kind layout
+    claim is an assertion by an interviewee, not estate truth: feeding
+    it in would let any claim mint the fields its own keying story
+    needs (an invented ``AUTO_MERGE.ALL`` layout makes the instruction
+    "valid"). A disputed layout claim feeds nothing while the dispute
+    is open, and only the winning value once it is resolved."""
+    by_file: dict[str, set[str]] = {}
+
+    def feed(file: Any, field: Any) -> None:
+        if isinstance(file, str) and file and isinstance(field, str) and field:
+            by_file.setdefault(file, set()).add(field)
+
     for claim in store.claims:
         if claim.predicate != "layout_binding" or not isinstance(claim.value, dict):
             continue
+        if claim.source_kind not in ("dictionary", "document"):
+            continue
+        dispute = store.dispute(claim.subject, claim.predicate)
+        if dispute is not None and len(dispute.values) > 1 and not (
+                dispute.resolved and values_match(
+                    claim.subject, claim.predicate,
+                    claim.value, dispute.resolved_value)):
+            continue  # contested layout: not estate truth (yet)
         path = claim.value.get("path")
         if not isinstance(path, str) or not path:
             continue
@@ -122,33 +144,32 @@ def _known_fields(store: ClaimStore, observations: dict[str, dict[str, Any]],
             if not isinstance(fields, list):
                 continue
             for f in fields:
-                if isinstance(f, dict) and isinstance(f.get("name"), str):
-                    known.add(f"{path}.{f['name']}")
+                if isinstance(f, dict):
+                    feed(path, f.get("name"))
     if inventory is not None:
         for fname, field_names in inventory.files.items():
             for name in field_names:
-                known.add(f"{fname}.{name}")
+                feed(fname, name)
     for payload in observations.values():
-        file, field = payload.get("file"), payload.get("field")
-        if isinstance(file, str) and file and isinstance(field, str) and field:
-            known.add(f"{file}.{field}")
-    return known
+        feed(payload.get("file"), payload.get("field"))
+    return by_file
 
 
-def _valid_key_field(token: Any, known_fields: set[str]) -> bool:
+def _valid_key_field(token: Any, known_by_file: dict[str, set[str]]) -> bool:
     if not isinstance(token, str) or not token:
         return False
     for part in token.split("+"):
-        if known_fields:
-            if part not in known_fields:
-                return False
-        elif not _KEY_FIELD_PART.match(part):
+        file, dot, field = part.rpartition(".")
+        if not dot or not file or not field:
+            return False
+        fields = known_by_file.get(file)
+        if fields is None or field not in fields:
             return False
     return True
 
 
 def _valid_keying_story(value: Any,
-                        known_fields: set[str] | None = None) -> dict[str, Any] | None:
+                        known_by_file: dict[str, set[str]] | None = None) -> dict[str, Any] | None:
     """The keying story as a structured value, or None if it is not one.
 
     A keying story states which fields key a chart, whether a master
@@ -167,7 +188,7 @@ def _valid_keying_story(value: Any,
     fields = value.get("key_fields")
     if not isinstance(fields, list) or not fields:
         return None
-    if any(not _valid_key_field(f, known_fields or set()) for f in fields):
+    if any(not _valid_key_field(f, known_by_file or {}) for f in fields):
         return None
     for flag in ("master_index", "true_duplicates"):
         if flag in value and not isinstance(value[flag], bool):
@@ -190,13 +211,17 @@ def _observation_payloads(events: list[LedgerEvent]) -> dict[str, dict[str, Any]
     return out
 
 
-def _is_data_observation(ref: str, observations: dict[str, dict[str, Any]]) -> bool:
+def _is_data_observation(ref: Any, observations: dict[str, dict[str, Any]]) -> bool:
     """A reference is profiler *data* evidence only if it names an actual
     profiler observation recorded in the ledger: an ``OBS-<digits>`` id
     whose event carries non-empty stats. Document quotes filed under
     observation-like ids (``OBS-ESTATE-1``, ``OBS-VERSION``) fail this —
-    deliberately."""
-    return bool(_OBS_DATA_ID.match(ref or "")) and bool(
+    deliberately. A non-string ref (an int or a nested list out of a
+    hand-edited ledger) is not evidence either — it is ignored, never
+    handed to the matcher to crash on."""
+    if not isinstance(ref, str):
+        return False
+    return bool(_OBS_DATA_ID.match(ref)) and bool(
         observations.get(ref, {}).get("stats"))
 
 
@@ -308,6 +333,15 @@ def _rule_provenance(store: ClaimStore, subject: str, predicate: str, value: Any
                 store.binding_refs.get((subject, predicate), ()),
                 recorded, observations):
             subject_binding = recorded
+    winner_confirmed = False
+    # Whether every winner matched only partially — the emitted value
+    # records facts (a keying flag) that no winning claim stated,
+    # because the resolution added them. Those facts carry the
+    # resolution's provenance, not the winner's: the winner's evidence
+    # cannot data-confirm a fact it never mentioned.
+    partial = bool(winners) and all(
+        resolution_added_facts(subject, predicate, c.value, value)
+        for c in winners)
     if winners:
         kind = _claim_kind(winners[0], observations)
         winning_src = winners[0].source or ""
@@ -319,7 +353,8 @@ def _rule_provenance(store: ClaimStore, subject: str, predicate: str, value: Any
             if c.source and c.source.split():
                 refs.append(c.source.split()[0].rstrip("(:"))
             if _evidence_confirmed(refs, expected, observations):
-                confirmed = True
+                winner_confirmed = True
+    res_confirmed = False
     if dispute is not None and dispute.resolved:
         # Structured evidence refs only. The resolution's free-text source
         # is a label for humans: an OBS id mentioned there — including in
@@ -329,12 +364,18 @@ def _rule_provenance(store: ClaimStore, subject: str, predicate: str, value: Any
         expected = subject_binding
         res_confirmed = expected is not None and _evidence_confirmed(
             refs, expected, observations)
-        if res_confirmed:
-            confirmed = True
         if kind is None:
             winning_src = dispute.resolution_source or ""
             kind = dispute.resolution_source_kind or (
                 "profiler-data" if res_confirmed else "analyst")
+    if partial:
+        # The winner's confirmation covers the facts it stated; the
+        # resolution-added facts confirm only through the resolution's
+        # own evidence. Both must hold for the value as emitted to
+        # count as data-confirmed.
+        confirmed = winner_confirmed and res_confirmed
+    else:
+        confirmed = winner_confirmed or res_confirmed
     kind = kind or "analyst"
     if kind == "profiler-data" and not confirmed:
         # The meeting point of the claim and resolution routes: the

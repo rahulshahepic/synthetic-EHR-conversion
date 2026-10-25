@@ -54,7 +54,9 @@ CHECKS: dict[str, dict[str, Any]] = {
                                           "truth": "stale", "false": "current"},
     "disagreement_pivot_year": {"subjects": [("profile", "pivot_year")],
                                 "truth_value": 30, "false_value": 50},
-    "disagreement_duplicate_charts": {"special": "duplicate_charts"},
+    "disagreement_duplicate_charts": {"special": "duplicate_charts",
+                                      "keying_truth": {"account_field": "ACCT",
+                                                       "min_departments": 2}},
 }
 
 
@@ -156,10 +158,8 @@ def grade_entry(entry: dict[str, Any], spec: dict[str, Any]) -> dict[str, Any]:
             # recorded on top of a false keying story (a demographic
             # match key, a master index) resolves nothing — the story
             # itself is the false position wearing the fact as a badge.
-            truth_check = {"keying_truth": {"account_field": "ACCT",
-                                            "min_departments": 2}}
             if isinstance(value, dict) and value.get("true_duplicates") is True \
-                    and _keying_position(value, truth_check) == "truth":
+                    and _keying_position(value, check) == "truth":
                 return {"id": entry["id"], "verdict": "routed-to-runtime-question",
                         "detail": "the disagreement resolves into per-person matching "
                                   "(keying story, true duplicate charts recorded) "
