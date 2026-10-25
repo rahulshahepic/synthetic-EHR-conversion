@@ -107,8 +107,7 @@ def _is_data_observation(ref: str, observations: dict[str, dict[str, Any]]) -> b
     """A reference is profiler *data* evidence only if it names an actual
     profiler observation recorded in the ledger: an ``OBS-<digits>`` id
     whose event carries non-empty stats. Document quotes filed under
-    observation-like ids (``OBS-ESTATE-1``, ``OBS-VERSION``) fail this —
-    deliberately."""
+    observation-like ids (``OBS-ESTATE-1``) fail this — deliberately."""
     return bool(_OBS_DATA_ID.match(ref or "")) and bool(
         observations.get(ref, {}).get("stats"))
 
@@ -157,8 +156,9 @@ def _claim_kind(claim: Claim, observations: dict[str, dict[str, Any]]) -> str:
     if claim.source_kind:
         if claim.source_kind != "profiler-data":
             return claim.source_kind
-        tied = any(r in observations for r in claim.evidence_refs) \
-            or first in observations
+        tied = any(_is_data_observation(r, observations)
+                   for r in claim.evidence_refs) \
+            or _is_data_observation(first, observations)
         if tied:
             return "profiler-data"
         # Demote: fall through to the conservative source reading below.

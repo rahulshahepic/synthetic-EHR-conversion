@@ -547,8 +547,65 @@ def test_broad_roots_are_refused_at_construction():
     for root in (ROOT, ROOT / "src", ROOT / "docs"):
         with pytest.raises(ValueError, match="not an estate root"):
             EstateReader([root])
-    svc = AnalystService({}, EstateReader([SPECS / "delphi"]))
+    svc = AnalystService({}, EstateReader([ROOT / "testbed" / "halcyon" / "estate"]))
     assert "error" in svc.read_estate("stub_analysts.json")
+
+
+# ------------------------------------------ round three: kind + root parts
+
+def test_document_quote_observation_does_not_earn_profiler_kind():
+    """Round three: presence is not data. A self-declared profiler-data
+    claim whose only citation is a document-quote observation
+    (OBS-ESTATE-*, empty stats) is demoted like any other unearned kind:
+    the tie must run through _ref_confirms, not map membership."""
+    events = [ledger_mod.LedgerEvent(
+        "E000901", "observation",
+        {"obs_id": "OBS-ESTATE-1", "file": "interface_notes.md",
+         "field": "", "stats": {}})]
+    store = ClaimStore()
+    store.add(Claim("profile", "facility_tz", "America/Chicago",
+                    "interface notes", source_kind="profiler-data",
+                    evidence_refs=("OBS-ESTATE-1",)))
+    rule = specgen.generate_spec(events, store, "acceptance").spec["rules"][0]
+    assert rule["provenance"]["kind"] == "dictionary"
+    assert rule["data_confirmed"] is False
+
+
+def test_numbered_data_observation_earns_profiler_kind():
+    """The other half of the round-three rule: a self-declared
+    profiler-data claim citing a real profiler observation (numbered id,
+    non-empty stats) keeps its kind — the kind is earned by the data,
+    not by the label."""
+    events = [_obs("OBS-0007", "REG.TXT", "DOB", {"parse_rate": 1.0})]
+    store = ClaimStore()
+    store.add(Claim("field:REG.TXT.DOB", "convention", "YYMMDD",
+                    "profiler observation", source_kind="profiler-data",
+                    evidence_refs=("OBS-0007",)))
+    rule = specgen.generate_spec(events, store, "acceptance").spec["rules"][0]
+    assert rule["provenance"]["kind"] == "profiler-data"
+
+
+def test_roots_inside_repository_trees_are_refused():
+    """Round three: the root check reads every part of the resolved root
+    path, ancestors included — a root inside src/ would otherwise serve
+    the generated specs, the prior interview's answer sheet."""
+    for root in (ROOT / "src" / "bridge",
+                 ROOT / "src" / "bridge" / "interview",
+                 SPECS, SPECS / "delphi"):
+        with pytest.raises(ValueError, match="not an estate root"):
+            EstateReader([root])
+
+
+def test_generated_spec_files_are_denied_under_any_root(tmp_path):
+    """A specs/ part is denied on read, like grading/: even under a
+    legitimate estate root, generated specs are never estate documents."""
+    estate = tmp_path / "estate"
+    (estate / "specs").mkdir(parents=True)
+    (estate / "specs" / "spec.json").write_text("{}")
+    (estate / "manual.md").write_text("estate manual")
+    svc = AnalystService({}, EstateReader([estate]))
+    assert "error" in svc.read_estate("specs/spec.json")
+    assert "estate manual" in svc.read_estate("manual.md")["text"]
 
 
 # ------------------------------------------------------------------- ledger

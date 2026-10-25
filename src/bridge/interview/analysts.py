@@ -24,7 +24,7 @@ from typing import Any
 # for "ESTATE_DISCREPANCIES.JSON" or an "Answer_Key" part names the same
 # file, so the deny checks must fold case on both the requested path and
 # the resolved candidate.
-DENY_PARTS = {"answer" + "_key", "analysts", "grading"}
+DENY_PARTS = {"answer" + "_key", "analysts", "grading", "specs"}
 DENY_NAMES = {"estate_discrepancies.json", "stub_analysts.json"}
 ALLOW_SUFFIXES = {".md", ".txt", ".json", ".dat", ".csv"}
 
@@ -32,13 +32,14 @@ ALLOW_SUFFIXES = {".md", ".txt", ".json", ".dat", ".csv"}
 # wherever they appear in the path *as requested under a root*: source
 # trees, documentation trees and test trees are never estate documents.
 STRUCTURE_PARTS = {"src", "docs", "tests"}
-# A root that IS one of those trees, or a checkout root containing them,
-# is refused at construction: the firewall must not depend on the caller
-# choosing a narrow root. An estate root is an estate directory (manuals,
-# dictionaries, layouts, extracts), never a repository. (A root may
-# legitimately *contain* denied subtrees — analysts/, grading/ — because
-# read() refuses those parts; what it may not be is a code/docs/test
-# tree, whose documents are not denied by name and must never serve.)
+# A root that IS one of those trees, sits *inside* one, or is a checkout
+# root containing them, is refused at construction: the firewall must not
+# depend on the caller choosing a narrow root. An estate root is an
+# estate directory (manuals, dictionaries, layouts, extracts), never a
+# repository. (A root may legitimately *contain* denied subtrees —
+# analysts/, grading/ — because read() refuses those parts; what it may
+# not be is a code/docs/test tree, whose documents are not denied by
+# name and must never serve.)
 FORBIDDEN_ROOT_NAMES = STRUCTURE_PARTS
 
 
@@ -49,7 +50,7 @@ def _denied(parts: Any) -> bool:
 
 
 def _check_root(root: Path) -> None:
-    if root.name.lower() in FORBIDDEN_ROOT_NAMES:
+    if any(part.lower() in FORBIDDEN_ROOT_NAMES for part in root.parts):
         raise ValueError(f"not an estate root: {root}")
     if root.is_dir():
         children = {p.name.lower() for p in root.iterdir() if p.is_dir()}
