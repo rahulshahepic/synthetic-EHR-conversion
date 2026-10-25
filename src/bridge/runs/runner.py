@@ -7,7 +7,7 @@ from time import perf_counter
 from datetime import date
 from typing import Any
 
-from ..extract.halcyon import HalcyonExport, stage_all
+from ..extract.registry import get_reader
 from ..load.client import NimbusClient
 from ..mapping import clinical, core  # noqa: F401  (registers mappers)
 from ..mapping.base import MAPPERS, MapContext, run_mapper
@@ -38,13 +38,14 @@ class Runner:
     def start(self, source: str, target_label: str = "nimbus", batch_size: int = DEFAULT_BATCH_SIZE,
               types: list[str] | None = None, auto_execute: bool = True,
               rules: list[dict[str, Any]] | None = None, prior_run_db: str | None = None) -> str:
-        export = HalcyonExport(source)
+        reader_name = getattr(self.profile, "READER", "halcyon")
+        export, stage_fn = get_reader(reader_name)(source)
         as_of = export.manifest.get("asOf") or date.today().isoformat()
         cfg = {"batch_size": batch_size, "as_of": as_of, "types": types or [t for t in LOAD_ORDER if t in MAPPERS]}
         run_id = self.store.create_run(str(source), target_label, cfg)
         self.store.set_status(run_id, "extracting")
         staging_started = perf_counter()
-        stage_all(self.store, run_id, export, self.profile)
+        stage_fn(self.store, run_id, export, self.profile)
         self.store.event(run_id, "staging_timing", {"seconds": perf_counter() - staging_started})
         if prior_run_db:
             from ..reconcile.rules_io import load_rules
