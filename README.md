@@ -36,7 +36,7 @@ plain language, records your answer under your name, resumes, and explains the r
 | **Muse / any agent with a shell** | Same prompt as Codex; `AGENTS.md` has the full playbook. |
 
 ## See the runs on GitHub (no local setup)
-**Demo site:** https://rahulshahepic.github.io/synthetic-EHR-conversion/ (rebuilt after every merge to `main`).
+**Demo site:** https://rahulshahepic.github.io/synthetic-EHR-conversion/ lists up to 20 successful demo runs, preserving the newest `main` run. Each report has a stable URL under `runs/<branch-slug>/<actions-run-id>-<attempt>/`; the index links to the newest `main` run. `branches/<branch-slug>/` redirects to the latest retained run for that branch. Reports outside the retained 20 are removed from Pages, though Actions artifacts follow their own retention period. The first publication creates an archival `gh-pages` branch; keep **Settings → Pages → Build and deployment → Source** set to **GitHub Actions**. GitHub Actions needs permission to write repository contents so the workflow can update that branch (in **Settings → Actions → General → Workflow permissions**, choose **Read and write permissions** if the archive job receives a 403). If the `github-pages` environment restricts deployment branches, allow the branches from which you manually run this workflow.
 
 Every merge to `main` runs the **Conversion demo** workflow. Open the repo's **Actions** tab → *Conversion demo* → latest run:
 the **Summary** page shows the narrated transcript (pauses, questions answered, per-resource results, fidelity loss,

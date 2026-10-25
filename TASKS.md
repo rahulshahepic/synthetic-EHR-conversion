@@ -27,8 +27,8 @@ For `ready` helper tasks, Claude may have committed a small **v0** implementatio
 
 ## Helper tasks
 
-### T-114 · Keep distinct GitHub Pages demo runs · `in-progress (Codex)`
-Files: `.github/workflows/demo.yml`, `tools/publish_site.py`, `tests/test_publish_site.py`, `README.md`.
+### T-114 · Keep distinct GitHub Pages demo runs · `review`
+Files: `.github/workflows/demo.yml`, `tools/archive_pages.sh`, `tools/publish_site.py`, `tests/test_publish_site.py`, `README.md`.
 Publish each successful demo under a branch and Actions run/attempt path. Show retained runs at the site root and link each branch's latest run. Keep at most 20 reports, preserving the newest main run. Persist the archive across Pages deployments and handle simultaneous workflow runs safely.
 
 ### T-101 · HL7 v2 parser · `done`
