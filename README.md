@@ -19,6 +19,7 @@ tests/                pytest suites
 - [Architecture](docs/ARCHITECTURE.md)
 - [Plan & milestones](docs/PLAN.md)
 - [Source: Halcyon](docs/source-halcyon.md)
+- [Source: Delphi](docs/delphi.md)
 - [Target: Nimbus & import API](docs/target-nimbus.md)
 - [Mapping & fidelity](docs/mapping-and-fidelity.md)
 - [Metrics, monitoring, pause & revert](docs/metrics-and-monitoring.md)
