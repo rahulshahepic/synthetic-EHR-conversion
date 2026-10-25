@@ -15,6 +15,10 @@ import json
 import pstats
 import tempfile
 import time
+import sys
+import threading
+import sqlite3
+import resource
 from pathlib import Path
 
 from bridge.load.client import connect
@@ -25,6 +29,48 @@ from testbed.simulated_user import SimulatedAnalyst
 from bridge.reconcile.answers import answer
 
 
+def progress(stage: str, started: float, **details: object) -> None:
+    elapsed = round(time.perf_counter() - started, 1)
+    rss_mb = round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024, 1)
+    print(json.dumps({"stage": stage, "elapsed_seconds": elapsed, "peak_rss_mb": rss_mb, **details}),
+          file=sys.stderr, flush=True)
+
+
+def monitor_database(path: Path, stop: threading.Event, started: float) -> None:
+    """Observe committed progress via a separate connection without blocking converter writes."""
+    staged_total = None
+    last_status = None
+    while not stop.wait(15):
+        try:
+            db = sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=1)
+            try:
+                run = db.execute("SELECT id,status,pass_count FROM runs ORDER BY rowid DESC LIMIT 1").fetchone()
+                if run:
+                    batches = db.execute("SELECT COUNT(*), COALESCE(SUM(json_extract(counts,'$.attempted')),0) FROM batches WHERE run_id=? AND counts IS NOT NULL", (run[0],)).fetchone()
+                    if staged_total is None or run[1] == "extracting" or last_status == "extracting":
+                        staged_total = db.execute("SELECT COUNT(*) FROM records WHERE run_id=?", (run[0],)).fetchone()[0]
+                    last_status = run[1]
+                    total = staged_total
+                    assessed = db.execute(
+                        "SELECT COUNT(*) FROM records WHERE run_id=?"
+                        " AND status IN ('loaded','dropped','superseded','rejected')", (run[0],)
+                    ).fetchone()[0]
+                    latest = db.execute("SELECT rtype, metrics FROM batches WHERE run_id=? AND metrics IS NOT NULL ORDER BY seq DESC LIMIT 1", (run[0],)).fetchone()
+                    last_type = latest[0] if latest else None
+                    last_timings = json.loads(latest[1]).get("timings", {}) if latest else {}
+                    progress("heartbeat", started, run_status=run[1], passes=run[2],
+                             last_resource_type=last_type, last_batch_timings=last_timings,
+                             staged_records=total, assessed_records=assessed,
+                             assessed_percent=round(100 * assessed / total, 1) if total else None,
+                             completed_batches=batches[0], attempted_records=batches[1])
+                else:
+                    progress("heartbeat", started, state="generating_or_preparing")
+            finally:
+                db.close()
+        except (sqlite3.Error, OSError) as exc:
+            progress("heartbeat", started, note=type(exc).__name__)
+
+
 def benchmark(patients: int = 5000, seed: int = 42, profile_out: str | None = None, *, without_index: bool = False, first_pass_only: bool = False) -> dict:
     if patients < 1:
         raise ValueError("patients must be positive")
@@ -32,7 +78,9 @@ def benchmark(patients: int = 5000, seed: int = 42, profile_out: str | None = No
         root = Path(scratch)
         export = root / "export"
         began = time.perf_counter()
+        progress("generation_started", began, patients=patients)
         generate(export, seed=seed, patients=patients)
+        progress("generation_completed", began, patients=patients)
         generation_seconds = time.perf_counter() - began
         db = root / "run.db"
         target = f"embedded:{root / 'nimbus.db'}"
@@ -42,6 +90,10 @@ def benchmark(patients: int = 5000, seed: int = 42, profile_out: str | None = No
         runner = Runner(store, connect(target))
         profiler = cProfile.Profile() if profile_out else None
         began = time.perf_counter()
+        stopped = threading.Event()
+        watcher = threading.Thread(target=monitor_database, args=(db, stopped, began), daemon=True)
+        watcher.start()
+        progress("conversion_started", began, patients=patients)
         if profiler:
             profiler.enable()
         try:
@@ -69,17 +121,57 @@ def benchmark(patients: int = 5000, seed: int = 42, profile_out: str | None = No
                 else:
                     raise RuntimeError("benchmark did not resolve pauses within 100 rounds")
         finally:
+            stopped.set()
+            watcher.join(timeout=2)
             if profiler:
                 profiler.disable()
         conversion_seconds = time.perf_counter() - began
+        progress("conversion_completed", began, patients=patients, duration=round(conversion_seconds, 2))
         if profiler:
             profiler.dump_stats(profile_out)
-            pstats.Stats(profiler).strip_dirs().sort_stats("cumulative").print_stats(30)
+            pstats.Stats(profiler, stream=sys.stderr).strip_dirs().sort_stats("cumulative").print_stats(30)
         counts = store.status_counts(run_id)
         status = store.run(run_id)["status"]
         if not first_pass_only and status not in ("completed", "completed_with_exceptions"):
             raise RuntimeError(f"benchmark did not finish: {status}")
+        total_records = sum(sum(by_status.values()) for by_status in counts.values())
+        loaded_records = sum(by_status.get("loaded", 0) for by_status in counts.values())
+        terminal_records = sum(
+            sum(by_status.get(k, 0) for k in ("loaded", "dropped", "superseded"))
+            for by_status in counts.values()
+        )
+        fidelity_mean = store.db.execute(
+            "SELECT AVG(fidelity) FROM records WHERE run_id=? AND status='loaded'", (run_id,)
+        ).fetchone()[0]
+        verification = next(
+            (e["detail"] for e in store.events(run_id, limit=50) if e["kind"] == "verification"),
+            None,
+        )
+        # Timings are persisted per batch, so this summary is cheap and reproducible.
+        batch_timings: dict[str, float] = {}
+        for (metrics_json,) in store.db.execute(
+            "SELECT metrics FROM batches WHERE run_id=? AND metrics IS NOT NULL", (run_id,)
+        ):
+            for name, seconds in json.loads(metrics_json).get("timings", {}).items():
+                batch_timings[name] = batch_timings.get(name, 0.0) + float(seconds)
+        stage_row = store.db.execute(
+            "SELECT json_extract(detail, '$.seconds') FROM events"
+            " WHERE run_id=? AND kind='staging_timing' ORDER BY id DESC LIMIT 1", (run_id,)
+        ).fetchone()
+        verify_row = store.db.execute(
+            "SELECT json_extract(detail, '$.seconds') FROM events"
+            " WHERE run_id=? AND kind='verification_timing' ORDER BY id DESC LIMIT 1", (run_id,)
+        ).fetchone()
         return {
+            "staging_seconds": round(stage_row[0], 3) if stage_row else None,
+            "verification_seconds": round(verify_row[0], 3) if verify_row else None,
+            "batch_timing_seconds": {k: round(v, 3) for k, v in batch_timings.items()},
+            "records_total": total_records,
+            "loaded_records": loaded_records,
+            "terminal_records": terminal_records,
+            "fidelity_mean_loaded": round(fidelity_mean, 4) if fidelity_mean is not None else None,
+            "verification": verification,
+            "peak_rss_mb": round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024, 1),
             "seed": seed, "patients": patients, "without_index": without_index, "first_pass_only": first_pass_only,
             "generation_seconds": round(generation_seconds, 3),
             "conversion_seconds": round(conversion_seconds, 3),

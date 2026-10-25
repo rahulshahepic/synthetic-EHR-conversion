@@ -1,8 +1,12 @@
 """Monitor rules evaluated after every batch. A PAUSE-severity breach pauses the run."""
 from __future__ import annotations
 
+import json
+import math
 import statistics
-from dataclasses import dataclass
+import weakref
+from dataclasses import dataclass, field
+from fractions import Fraction
 from typing import Any
 
 from ..runs.store import RunStore
@@ -64,6 +68,94 @@ def _baseline(store: RunStore, run_id: str, rtype: str, metric: str, exclude: st
     return vals
 
 
+@dataclass
+class _Baseline:
+    """Drift-baseline values for one (run, rtype), kept up to date incrementally.
+
+    _baseline() rescans every earlier batch, which is quadratic over a run (thousands of batches per
+    type at 50k patients). This holds the same eligible values plus exact rational sums, so the mean and
+    population standard deviation come out bit-for-bit equal to statistics.mean/pstdev on that list.
+    """
+    version: tuple[int, int]
+    cursor: int = 0                                                   # highest batch seq scanned
+    open: set[str] = field(default_factory=set)                       # scanned while still unfinished
+    values: dict[str, dict[str, float]] = field(default_factory=dict)  # metric -> batch id -> value
+    sums: dict[str, list[Any] | None] = field(default_factory=dict)    # metric -> [n, sum x, sum x^2]
+    seen: dict[str, dict[str, Any]] = field(default_factory=dict)      # eligible batch id -> metrics
+
+    def add(self, batch_id: str, metrics_json: str | None, status: str) -> None:
+        if status != "loaded" or not metrics_json:
+            return
+        m = json.loads(metrics_json)
+        if not m or m.get("released_share", 0) > 0.5 or m.get("attempted", 0) < 10:
+            return
+        for metric, by_batch in self.values.items():
+            if m.get(metric) is not None:
+                self._put(metric, by_batch, batch_id, float(m[metric]))
+        self.seen[batch_id] = m
+
+    def _put(self, metric: str, by_batch: dict[str, float], batch_id: str, v: float) -> None:
+        by_batch[batch_id] = v
+        sums = self.sums[metric]
+        if sums is not None and math.isfinite(v):
+            x = Fraction(v)
+            sums[0] += 1
+            sums[1] += x
+            sums[2] += x * x
+        else:
+            self.sums[metric] = None  # inf/nan: fall back to the statistics module
+
+    def track(self, metric: str) -> dict[str, float]:
+        if metric not in self.values:
+            self.values[metric], self.sums[metric] = {}, [0, Fraction(0), Fraction(0)]
+            for batch_id, m in self.seen.items():
+                if m.get(metric) is not None:
+                    self._put(metric, self.values[metric], batch_id, float(m[metric]))
+        return self.values[metric]
+
+
+_BASELINES: "weakref.WeakKeyDictionary[RunStore, dict[tuple[str, str], _Baseline]]" = weakref.WeakKeyDictionary()
+
+
+def _baseline_stats(store: RunStore, run_id: str, rtype: str, metric: str, exclude: str) -> tuple[int, float, float] | None:
+    """(n, mean, pstdev) of _baseline(...), computed incrementally; None if there is no history."""
+    # Our own status rewrites (revert) bump batch_epoch; commits by other connections bump data_version.
+    version = (store.batch_epoch, store.db.execute("PRAGMA data_version").fetchone()[0])
+    per_store = _BASELINES.setdefault(store, {})
+    b = per_store.get((run_id, rtype))
+    if b is None or b.version != version:
+        b = per_store[(run_id, rtype)] = _Baseline(version)
+    for batch_id in list(b.open):
+        row = store.db.execute("SELECT status, metrics FROM batches WHERE id=?", (batch_id,)).fetchone()
+        if row is None or row["status"] != "open":
+            b.open.discard(batch_id)
+            if row is not None:
+                b.add(batch_id, row["metrics"], row["status"])
+    for row in store.db.execute("SELECT id, seq, status, metrics FROM batches WHERE run_id=? AND rtype=? AND seq>?"
+                                " ORDER BY seq", (run_id, rtype, b.cursor)):
+        b.cursor = row["seq"]
+        if row["status"] == "open":
+            b.open.add(row["id"])
+        else:
+            b.add(row["id"], row["metrics"], row["status"])
+    values = b.track(metric)
+    excluded = values.get(exclude)
+    n = len(values) - (excluded is not None)
+    if n < 1:
+        return None
+    sums = b.sums[metric]
+    if sums is None or (excluded is not None and not math.isfinite(excluded)):
+        hist = [v for k, v in values.items() if k != exclude]
+        return n, statistics.mean(hist), statistics.pstdev(hist)
+    count, sx, sxx = sums
+    if excluded is not None:
+        x = Fraction(excluded)
+        count, sx, sxx = count - 1, sx - x, sxx - x * x
+    # Same exact formulas as statistics.mean / statistics.pstdev (statistics._ss) for float data.
+    mss = (count * sxx - sx * sx) / count / count
+    return n, float(sx / count), statistics._float_sqrt_of_frac(mss.numerator, mss.denominator)
+
+
 def evaluate(store: RunStore, run_id: str, batch_id: str, rtype: str, m: dict[str, Any],
              samples: dict[str, list[Any]], rules: list[Rule] = DEFAULT_RULES) -> list[dict[str, Any]]:
     overrides = store.overrides(run_id)
@@ -83,9 +175,9 @@ def evaluate(store: RunStore, run_id: str, batch_id: str, rtype: str, m: dict[st
         elif m.get("released_share", 0) > 0.5:
             continue
         else:
-            hist = _baseline(store, run_id, rtype, rule.metric, batch_id)
-            if len(hist) >= DRIFT_MIN_HISTORY:
-                mu, sd = statistics.mean(hist), statistics.pstdev(hist)
+            stats = _baseline_stats(store, run_id, rtype, rule.metric, batch_id)
+            if stats is not None and stats[0] >= DRIFT_MIN_HISTORY:
+                _, mu, sd = stats
                 delta = (value - mu) if rule.op == "drift_up" else (mu - value)
                 z = delta / sd if sd > 0 else (float("inf") if delta > 0 else 0)
                 breached = z > threshold and delta > DRIFT_MIN_DELTA.get(rule.metric, 0)
