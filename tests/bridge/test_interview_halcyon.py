@@ -71,6 +71,20 @@ def test_diff_against_handwritten_control(pkg):
     assert report["counts"] == {"matched": 9, "disputed": 1}
 
 
+def test_diff_reports_generated_only_facilities_as_extra():
+    """A facility the generated profile invents (absent from the control)
+    must be counted, as `extra` — not silently ignored because the diff
+    only walked the control's facilities."""
+    gen = {"FACILITY_TZ": {"FAC1": "America/Chicago", "FAC4": "UTC"},
+           "VITAL_UNITS": {"FAC1": "imperial"}}
+    control = {"FACILITY_TZ": {"FAC1": "America/Chicago"},
+               "VITAL_UNITS": {"FAC1": "imperial"}}
+    report = diff_mod.diff_profiles(gen, control, {"known_unknowns": []})
+    by_fact = {e["fact"]: e["status"] for e in report["entries"]}
+    assert by_fact["FACILITY_TZ[FAC4]"] == "extra"
+    assert report["counts"].get("extra") == 1
+
+
 def test_crosswalk_coverage_compared(pkg, events):
     store = claims_mod.ClaimStore.from_ledger(events)
     gaps = {c.subject[len("codeset:"):] for c in store.claims

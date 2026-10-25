@@ -123,6 +123,8 @@ class EstateReader:
             _check_root(root)
 
     def read(self, document: str) -> str:
+        if "\x00" in document:
+            raise PermissionError(f"not an estate document: {document!r}")
         rel = Path(document)
         if rel.is_absolute() or _denied(rel.parts) \
                 or any(p.lower() in STRUCTURE_PARTS for p in rel.parts):

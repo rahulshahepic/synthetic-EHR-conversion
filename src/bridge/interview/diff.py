@@ -50,6 +50,12 @@ def diff_profiles(generated_ns: dict[str, Any], control_ns: dict[str, Any],
                           else "missed")
                 entries.append({"fact": f"{const}[{fac}]", "status": status,
                                 "generated": g, "control": control_val[fac]})
+            if isinstance(gen_val, dict):
+                for fac in sorted(set(gen_val) - set(control_val)):
+                    entries.append({"fact": f"{const}[{fac}]",
+                                    "status": "extra",
+                                    "generated": gen_val[fac],
+                                    "control": None})
             continue
         if gen_val is not None and gen_val == control_val:
             status = "matched"

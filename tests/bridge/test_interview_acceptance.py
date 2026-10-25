@@ -551,6 +551,19 @@ def test_broad_roots_are_refused_at_construction():
     assert "error" in svc.read_estate("stub_analysts.json")
 
 
+def test_estate_readme_not_served_and_nul_names_refused():
+    """Final-pass review: the estate README was meta-commentary (which
+    source wins the graded disputes) sitting inside the served root. It
+    moved out (testbed/halcyon/ESTATE.md), so the door must now refuse
+    it; and a document name containing a NUL byte must come back as the
+    usual refusal dict, not an unhandled ValueError from lstat."""
+    svc = AnalystService({}, EstateReader([ROOT / "testbed" / "halcyon" / "estate"]))
+    assert "error" in svc.read_estate("README.md")
+    assert "error" in svc.read_estate("dictionary_excerpts\x00.md")
+    with pytest.raises(PermissionError):
+        svc.estate.read("dictionary_excerpts\x00.md")
+
+
 # ------------------------------------------ round three: kind + root parts
 
 def test_document_quote_observation_does_not_earn_profiler_kind():

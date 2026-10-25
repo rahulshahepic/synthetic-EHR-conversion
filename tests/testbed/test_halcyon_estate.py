@@ -15,7 +15,32 @@ SECTIONS = ("## Role and tenure", "## What I know", "## What I do not know",
 def test_estate_documents_exist():
     assert (ESTATE / "dictionary_excerpts.md").exists()
     assert (ESTATE / "interface_notes.md").exists()
-    assert (ESTATE / "README.md").exists()
+    # The estate README is meta-commentary about the estate itself (which
+    # source wins the disputes, where grading lives). It must NOT live in
+    # the estate root, where the estate reader would serve it to a live
+    # interviewer; it sits one level up instead.
+    assert not (ESTATE / "README.md").exists()
+    assert (ROOT / "testbed/halcyon/ESTATE.md").exists()
+
+
+# Phrases that only appear in meta-commentary about the estate: which
+# documents are stale, which source is correct, who the analysts are and
+# where grading lives. A real conversion team never receives a document
+# like that, so no servable estate document may contain any of them.
+META_MARKERS = ("stale", "correct where", "which are wrong", "grading",
+                "answer key", "analyst")
+
+
+def test_served_estate_documents_have_no_meta_commentary():
+    served = [f for f in sorted(ESTATE.rglob("*"))
+              if f.is_file() and f.suffix.lower()
+              in {".md", ".txt", ".json", ".dat", ".csv"}]
+    assert served, "estate root unexpectedly empty"
+    for f in served:
+        text = f.read_bytes().decode("latin-1").lower()
+        for marker in META_MARKERS:
+            assert marker not in text, \
+                f"{f.name} contains meta-commentary marker {marker!r}"
 
 
 def test_analyst_profiles_complete():
