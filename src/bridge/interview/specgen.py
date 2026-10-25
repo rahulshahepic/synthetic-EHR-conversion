@@ -12,10 +12,17 @@ matching on free-text source strings. A rule is ``profiler-data`` only
 when the claim that stated its value (or the resolution that settled it)
 carries structured profiler evidence, and ``data_confirmed`` is true only
 when a cited observation id resolves to an actual profiler observation
-recorded in the ledger — an ``OBS-<digits>`` event with non-empty stats.
-A document quote recorded under an observation-like id (an estate note,
-a dictionary excerpt) is document evidence: it can inform a resolution,
-but it never confirms anything and never earns the profiler-data kind.
+recorded in the ledger — an ``OBS-<digits>`` event with non-empty stats —
+*and* that observation is about this rule's subject: a ``field:`` subject
+must match the observation's file and field exactly, and subjects that
+are not fields carry an explicit subject-to-field mapping
+(:data:`OBSERVATION_SUBJECT_FIELDS`). An observation about some other
+field confirms nothing here, however real it is. A document quote
+recorded under an observation-like id (an estate note, a dictionary
+excerpt) is document evidence: it can inform a resolution, but it never
+confirms anything and never earns the profiler-data kind. Resolutions
+confirm only through their structured ``evidence_refs``; observation
+ids mentioned in a resolution's free-text source string earn nothing.
 
 Pure function: same ledger + claims in, byte-identical spec out.
 
@@ -24,7 +31,10 @@ route to a human reconciliation question, never an auto-merge rule — even
 when an analyst describes merging as routine. The override applies to
 every identity claim other than the keying story, whatever predicate it
 arrives under. The overridden claim stays visible in the spec's
-``policy_overrides``.
+``policy_overrides``. The keying story itself is a fact (how charts are
+keyed), but if its text prescribes auto-merging, that language is flagged
+in ``policy_overrides`` too — the spec never carries an unflagged
+auto-merge instruction, whatever predicate it arrived under.
 """
 from __future__ import annotations
 
@@ -64,17 +74,32 @@ MERGE_POLICY_RULE = {
 
 
 _OBS_DATA_ID = re.compile(r"^OBS-\d+$")
-_OBS_TOKEN = re.compile(r"OBS-[A-Za-z0-9_-]+")
+
+# Subjects that are not ``field:`` subjects, mapped to the (file, field)
+# an observation must be about to confirm a rule on that subject. The
+# pivot year is a claim about two-digit years in registration DOBs; the
+# potassium unit is a claim about the UNIT column of the lab dictionary.
+OBSERVATION_SUBJECT_FIELDS: dict[tuple[str, str], tuple[str, str]] = {
+    ("profile", "pivot_year"): ("REG.TXT", "DOB"),
+    ("unit:POT", "unit"): ("LABDICT.TXT", "UNIT"),
+}
+
+# Merge-action language: an instruction to merge without a human. The
+# keying story may describe how charts are keyed, but it may not carry
+# this into the spec unflagged.
+_MERGE_ACTION = re.compile(
+    r"auto[-\s]?merge|automatically\s+merge|merge\s+any\b|"
+    r"merges?\s+(are|is)\s+routine|routine\s+merges?", re.IGNORECASE)
 
 
-def _observation_stats(events: list[LedgerEvent]) -> dict[str, dict[str, Any]]:
-    """Observation id -> stats, for every observation recorded in the ledger."""
+def _observation_payloads(events: list[LedgerEvent]) -> dict[str, dict[str, Any]]:
+    """Observation id -> payload, for every observation in the ledger."""
     out: dict[str, dict[str, Any]] = {}
     for e in events:
         if e.type == "observation":
             oid = e.payload.get("obs_id")
             if oid:
-                out[oid] = e.payload.get("stats") or {}
+                out[oid] = e.payload
     return out
 
 
@@ -84,7 +109,37 @@ def _is_data_observation(ref: str, observations: dict[str, dict[str, Any]]) -> b
     whose event carries non-empty stats. Document quotes filed under
     observation-like ids (``OBS-ESTATE-1``, ``OBS-VERSION``) fail this —
     deliberately."""
-    return bool(_OBS_DATA_ID.match(ref or "")) and bool(observations.get(ref))
+    return bool(_OBS_DATA_ID.match(ref or "")) and bool(
+        observations.get(ref, {}).get("stats"))
+
+
+def _expected_observation_subject(subject: str, predicate: str) -> tuple[str, str] | None:
+    """The (file, field) an observation must describe to confirm a rule on
+    (subject, predicate): exact for ``field:`` subjects, the explicit
+    mapping for the rest. No binding, no confirmation."""
+    if subject.startswith("field:"):
+        rest = subject[len("field:"):]
+        if "." in rest:
+            file, field = rest.rsplit(".", 1)
+            return file, field
+        return None
+    return OBSERVATION_SUBJECT_FIELDS.get((subject, predicate))
+
+
+def _ref_confirms(ref: str, subject: str, predicate: str,
+                  observations: dict[str, dict[str, Any]]) -> bool:
+    """A reference confirms a rule only if it is a real profiler data
+    observation *about this rule's subject*. Existence is not enough:
+    an observation of NOTE.TXT.TEXT says nothing about the pivot year."""
+    if not _is_data_observation(ref, observations):
+        return False
+    expected = _expected_observation_subject(subject, predicate)
+    if expected is None:
+        return False
+    payload = observations[ref]
+    actual = (str(payload.get("file", "")), str(payload.get("field", "")))
+    return (actual[0].lower(), actual[1].lower()) == \
+        (expected[0].lower(), expected[1].lower())
 
 
 def _claim_kind(claim: Claim, observations: dict[str, dict[str, Any]]) -> str:
@@ -93,26 +148,34 @@ def _claim_kind(claim: Claim, observations: dict[str, dict[str, Any]]) -> str:
     data-observation source is profiler-data, a ledger answer is an
     analyst, an estate document (dictionary, layouts, interface notes) is
     dictionary evidence. Free text merely *mentioning* an observation or
-    the profiler earns nothing."""
-    if claim.source_kind:
-        return claim.source_kind
+    the profiler earns nothing — a source string that says "profiler" is
+    a label, not evidence. A self-declared ``profiler-data`` kind with no
+    evidence tying it to any recorded observation is demoted the same
+    way: the kind must be earned, not asserted."""
     src = claim.source or ""
     first = src.split()[0].rstrip("(:") if src.split() else ""
-    if _is_data_observation(first, observations):
+    if claim.source_kind:
+        if claim.source_kind != "profiler-data":
+            return claim.source_kind
+        tied = any(r in observations for r in claim.evidence_refs) \
+            or first in observations
+        if tied:
+            return "profiler-data"
+        # Demote: fall through to the conservative source reading below.
+    elif _is_data_observation(first, observations):
         return "profiler-data"
     if src.startswith("ledger:"):
         return "analyst"
     low = src.lower()
-    if low.startswith("profiler"):
-        return "profiler-data"
     if any(mark in low for mark in ("dictionary", "datadict", "estate",
                                     "layouts", "interface notes")):
         return "dictionary"
     return "analyst"
 
 
-def _evidence_confirmed(refs: Any, observations: dict[str, dict[str, Any]]) -> bool:
-    return any(_is_data_observation(r, observations) for r in refs)
+def _evidence_confirmed(refs: Any, subject: str, predicate: str,
+                        observations: dict[str, dict[str, Any]]) -> bool:
+    return any(_ref_confirms(r, subject, predicate, observations) for r in refs)
 
 
 def _rule_provenance(store: ClaimStore, subject: str, predicate: str, value: Any,
@@ -137,17 +200,20 @@ def _rule_provenance(store: ClaimStore, subject: str, predicate: str, value: Any
             refs = list(c.evidence_refs)
             if c.source and c.source.split():
                 refs.append(c.source.split()[0].rstrip("(:"))
-            if _evidence_confirmed(refs, observations):
+            if _evidence_confirmed(refs, subject, predicate, observations):
                 confirmed = True
     if dispute is not None and dispute.resolved:
+        # Structured evidence refs only. The resolution's free-text source
+        # is a label for humans: an OBS id mentioned there — including in
+        # a sentence saying it does NOT support the resolution — confirms
+        # nothing.
         refs = list(dispute.resolution_evidence_refs)
-        if not refs and dispute.resolution_source:
-            refs = _OBS_TOKEN.findall(dispute.resolution_source)
-        if _evidence_confirmed(refs, observations):
+        if _evidence_confirmed(refs, subject, predicate, observations):
             confirmed = True
         if kind is None:
             kind = dispute.resolution_source_kind or (
-                "profiler-data" if _evidence_confirmed(refs, observations) else "analyst")
+                "profiler-data" if _evidence_confirmed(
+                    refs, subject, predicate, observations) else "analyst")
     return kind or "analyst", confirmed, store.provenance(subject, predicate)
 
 
@@ -199,7 +265,7 @@ def generate_spec(events: list[LedgerEvent], store: ClaimStore, source: str,
         extra = value_shape_claims(profile_report)
         if extra:
             store = _with_extra_claims(store, extra)
-    observations = _observation_stats(events)
+    observations = _observation_payloads(events)
     rules: list[dict[str, Any]] = []
     overrides: list[dict[str, Any]] = []
     keys = sorted({c.key() for c in store.claims})
@@ -217,6 +283,15 @@ def generate_spec(events: list[LedgerEvent], store: ClaimStore, source: str,
         value = store.resolved_value(subject, predicate)
         if value is None:
             continue  # unresolved / null-resolved dispute -> known unknown
+        if subject == "identity" and predicate == "keying_story" \
+                and isinstance(value, str) and _MERGE_ACTION.search(value):
+            # The keying story is a fact about how charts are keyed, not
+            # a merge instruction. If its text prescribes auto-merging,
+            # the prescription is overridden by policy and flagged here,
+            # exactly like a merge claim under any other predicate.
+            overrides.append({"subject": subject, "predicate": predicate,
+                              "claimed_values": [value],
+                              "policy": "route_to_reconciliation"})
         kind, confirmed, prov_str = _rule_provenance(
             store, subject, predicate, value, observations)
         n += 1

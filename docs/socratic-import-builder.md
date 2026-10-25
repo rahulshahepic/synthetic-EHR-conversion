@@ -135,8 +135,12 @@ A pure function from ledger + claims to the import spec package. The
 **primary output is a declarative spec (JSON)**: a list of rules, each
 carrying its provenance — `dictionary`, `analyst`, or `profiler-data`,
 with a reference — and a `data_confirmed` flag that is true only when
-the profiler's observations (or a dispute resolution citing them) back
-the rule. The JSON spec is the artifact of record. On top of it:
+the profiler's observations (or a dispute resolution citing them through
+structured evidence refs) back the rule *and are about the rule's
+subject*: a `field:` subject must match the observation's file and field
+exactly, and other subjects carry an explicit subject-to-field mapping.
+An observation about some other field confirms nothing. The JSON spec
+is the artifact of record. On top of it:
 
 - A profile module in the existing profile shape (compare
   `src/bridge/profiles/halcyon.py`), rendered thinly from the JSON spec,

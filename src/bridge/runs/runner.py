@@ -87,8 +87,21 @@ class Runner:
 
     def execute(self, run_id: str) -> str:
         run = self.store.run(run_id)
-        if run["status"] in ("reverting", "reverted", "aborted"):
+        if run["status"] in ("reverting", "reverted", "aborted", "failed"):
             raise RuntimeError(f"run is {run['status']}")
+        # Execution preconditions live here, not only in start(): a caller
+        # holding a run id (execute, resume) must not be able to turn a
+        # run that staged nothing — or that staged source records only,
+        # with no mapper pass to run — into a "completed" conversion.
+        # Raising before any status change preserves the run's state.
+        counts = self.store.status_counts(run_id)
+        if sum(sum(c.values()) for c in counts.values()) == 0:
+            raise RuntimeError("run has no staged records to execute")
+        types = run["config"]["types"]
+        if not (set(counts) & set(types)):
+            raise RuntimeError(
+                "run stages source records only, not mapped types; "
+                "there is no execution pass for it yet")
         self.store.set_status(run_id, "running")
         self.store.bump_pass(run_id)
         self.store.release_ready_blocked(run_id)

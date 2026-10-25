@@ -25,13 +25,38 @@ from typing import Any
 # file, so the deny checks must fold case on both the requested path and
 # the resolved candidate.
 DENY_PARTS = {"answer" + "_key", "analysts", "grading"}
-DENY_NAMES = {"estate_discrepancies.json"}
+DENY_NAMES = {"estate_discrepancies.json", "stub_analysts.json"}
 ALLOW_SUFFIXES = {".md", ".txt", ".json", ".dat", ".csv"}
+
+# Parts that mark a path as repository structure, not an estate document,
+# wherever they appear in the path *as requested under a root*: source
+# trees, documentation trees and test trees are never estate documents.
+STRUCTURE_PARTS = {"src", "docs", "tests"}
+# A root that IS one of those trees, or a checkout root containing them,
+# is refused at construction: the firewall must not depend on the caller
+# choosing a narrow root. An estate root is an estate directory (manuals,
+# dictionaries, layouts, extracts), never a repository. (A root may
+# legitimately *contain* denied subtrees — analysts/, grading/ — because
+# read() refuses those parts; what it may not be is a code/docs/test
+# tree, whose documents are not denied by name and must never serve.)
+FORBIDDEN_ROOT_NAMES = STRUCTURE_PARTS
 
 
 def _denied(parts: Any) -> bool:
     return any(part.lower() in DENY_PARTS or part.lower() in DENY_NAMES
+               or "analyst" in part.lower()
                for part in parts)
+
+
+def _check_root(root: Path) -> None:
+    if root.name.lower() in FORBIDDEN_ROOT_NAMES:
+        raise ValueError(f"not an estate root: {root}")
+    if root.is_dir():
+        children = {p.name.lower() for p in root.iterdir() if p.is_dir()}
+        if children & FORBIDDEN_ROOT_NAMES:
+            raise ValueError(
+                f"not an estate root: {root} contains repository "
+                f"structure {sorted(children & FORBIDDEN_ROOT_NAMES)}")
 
 
 def _norm(question: str) -> str:
@@ -74,10 +99,13 @@ class EstateReader:
 
     def __init__(self, roots: list[str | Path]):
         self.roots = [Path(r).resolve() for r in roots]
+        for root in self.roots:
+            _check_root(root)
 
     def read(self, document: str) -> str:
         rel = Path(document)
-        if rel.is_absolute() or _denied(rel.parts):
+        if rel.is_absolute() or _denied(rel.parts) \
+                or any(p.lower() in STRUCTURE_PARTS for p in rel.parts):
             raise PermissionError(f"not an estate document: {document}")
         if rel.suffix.lower() not in ALLOW_SUFFIXES:
             raise PermissionError(f"not an estate document type: {document}")

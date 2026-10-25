@@ -94,6 +94,25 @@ def resolve(pats: list[dict[str, str]], merges: list[tuple[str, str]],
     uf = UnionFind(ids)
     reason: dict[str, str] = {}
     review: dict[tuple[str, str], Match] = {}
+
+    def add_review(m: Match) -> None:
+        """Record a review candidate, merging with any candidate already
+        held for the pair: keep the higher score and the union of reasons.
+        An A40 merge is the strongest evidence a pair carries — a plain
+        score match for the same pair must never overwrite it before the
+        human reconciler sees it."""
+        key = tuple(sorted((m.a, m.b)))
+        held = review.get(key)
+        if held is None:
+            review[key] = m
+            return
+        reasons = list(held.reasons)
+        for r in m.reasons:
+            if r not in reasons:
+                reasons.append(r)
+        review[key] = Match(a=held.a, b=held.b,
+                            score=max(held.score, m.score), reasons=reasons)
+
     by_id = {p["PAT_ID"]: p for p in pats}
     for keep, retire in merges:
         if keep in uf.parent and retire in uf.parent:
@@ -102,9 +121,8 @@ def resolve(pats: list[dict[str, str]], merges: list[tuple[str, str]],
                 reason[retire] = "adt_a40"
             else:
                 m = score_pair(by_id[keep], by_id[retire])
-                review[tuple(sorted((keep, retire)))] = Match(
-                    a=m.a, b=m.b, score=max(m.score, 1.0),
-                    reasons=[*m.reasons, "adt_a40"])
+                add_review(Match(a=m.a, b=m.b, score=max(m.score, 1.0),
+                                 reasons=[*m.reasons, "adt_a40"]))
     blocks: dict[str, list[dict[str, str]]] = {}
     for p in pats:
         blocks.setdefault(p["SSN4"] or p["PAT_ID"], []).append(p)
@@ -119,7 +137,7 @@ def resolve(pats: list[dict[str, str]], merges: list[tuple[str, str]],
                 uf.union(p["PAT_ID"], q["PAT_ID"])
                 reason.setdefault(max(m.a, m.b), "deterministic")
             elif m.score >= REVIEW_THRESHOLD:
-                review[tuple(sorted((m.a, m.b)))] = m
+                add_review(m)
     clusters: dict[str, list[str]] = {}
     for i in ids:
         clusters.setdefault(uf.find(i), []).append(i)

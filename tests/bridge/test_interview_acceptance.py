@@ -394,6 +394,163 @@ def test_generate_spec_with_profile_report_opens_the_same_dispute(delphi_export)
     assert store.dispute("field:LAB.TXT.RESULT", "convention") is None
 
 
+# -------------------------------------------- round two: subject-bound data
+
+def _obs(obs_id, file, field, stats=None):
+    return ledger_mod.LedgerEvent(
+        "E000900", "observation",
+        {"obs_id": obs_id, "file": file, "field": field,
+         "stats": stats or {"count": 5}})
+
+
+def test_unrelated_observation_does_not_confirm_a_rule():
+    """data_confirmed is subject-bound: a real observation of a different
+    field confirms nothing about this rule, however it is cited."""
+    events = [_obs("OBS-0001", "NOTE.TXT", "TEXT", {"blank_rate": 0.5})]
+    store = ClaimStore()
+    store.add(Claim("profile", "pivot_year", 30, "ledger:E000009 (analyst guess)",
+                    source_kind="analyst", evidence_refs=("OBS-0001",)))
+    rule = next(r for r in specgen.generate_spec(events, store, "acceptance").spec["rules"]
+                if r["predicate"] == "pivot_year")
+    assert rule["data_confirmed"] is False
+
+
+def test_resolution_freetext_observation_mention_does_not_confirm():
+    """The resolution path validates structured evidence_refs only: an
+    OBS id appearing in the resolution's free-text source — even in a
+    sentence saying it does not support the resolution — confirms nothing."""
+    events = [_obs("OBS-0001", "REG.TXT", "DOB")]
+    store = ClaimStore()
+    store.add(Claim("profile", "pivot_year", 50, "DATADICT.TXT v4.1",
+                    source_kind="dictionary"))
+    store.add(Claim("profile", "pivot_year", 30, "ledger:E000001 (analyst)",
+                    source_kind="analyst", evidence_refs=("E000001",)))
+    store.resolve("profile", "pivot_year", 30,
+                  "analyst insists; OBS-0001 does not support this")
+    rule = next(r for r in specgen.generate_spec(events, store, "acceptance").spec["rules"]
+                if r["predicate"] == "pivot_year")
+    assert rule["data_confirmed"] is False
+
+
+def test_no_profiler_evidence_cannot_earn_caught_by_profiling():
+    """A claim whose only profiler tie is its free-text source label
+    ('profiler unavailable') earns neither the profiler-data kind nor a
+    caught-by-profiling grade."""
+    store = ClaimStore()
+    store.add(Claim("profile", "pivot_year", 30, "profiler unavailable"))
+    spec = specgen.generate_spec([], store, "acceptance").spec
+    assert spec["rules"][0]["data_confirmed"] is False
+    assert grade_entry({"id": "dict_pivot_year"}, spec)["verdict"] != "caught-by-profiling"
+
+
+def test_self_declared_profiler_kind_without_evidence_is_demoted():
+    store = ClaimStore()
+    store.add(Claim("profile", "pivot_year", 30, "interface_notes.md",
+                    source_kind="profiler-data"))
+    rule = specgen.generate_spec([], store, "acceptance").spec["rules"][0]
+    assert rule["provenance"]["kind"] != "profiler-data"
+
+
+def test_keying_story_merge_language_is_flagged_as_policy_override():
+    """The keying story may describe keying, but auto-merge language in it
+    is overridden and flagged like a merge claim under any predicate."""
+    store = ClaimStore()
+    store.add(Claim("identity", "keying_story",
+                    "auto-merge any two charts sharing SSN4+DOB", "ledger:E3"))
+    pkg = specgen.generate_spec([], store, "acceptance")
+    assert any(o["predicate"] == "keying_story" for o in pkg.spec["policy_overrides"])
+    policy = next(r for r in pkg.spec["rules"] if r["id"] == "SAFETY-IDENTITY-MERGE")
+    assert policy["value"] == "route_to_reconciliation"
+
+
+# --------------------------------------------- round two: A40 evidence kept
+
+def test_a40_evidence_survives_in_review_candidates():
+    """Under auto_merge=False an A40 pair that also score-matches keeps
+    its adt_a40 reason and its 1.0 score: the human reconciler must see
+    that the source system already merged those charts."""
+    from bridge.mapping.identity import resolve
+    pats = [{"PAT_ID": "1", "SSN4": "1234", "PAT_NAME": "SMITH^JOHN",
+             "DOB": "19600101", "MRN": "1", "FAC_ID": "F", "SEX": "M", "ADDR": ""},
+            {"PAT_ID": "2", "SSN4": "1234", "PAT_NAME": "SMITH^JON",
+             "DOB": "19600101", "MRN": "2", "FAC_ID": "F", "SEX": "M", "ADDR": ""}]
+    clusters, review, _reasons = resolve(pats, [("1", "2")], auto_merge=False)
+    assert clusters == {"1": ["1"], "2": ["2"]}
+    assert len(review) == 1
+    assert review[0].score == 1.0 and "adt_a40" in review[0].reasons
+
+
+def test_staged_patient_review_payload_keeps_adt_a40(tmp_path):
+    """End to end on the generated Halcyon profile (seed 42, 200 patients):
+    at least one staged Patient review candidate carries adt_a40."""
+    from testbed.halcyon.generator import generate
+    out = tmp_path / "halcyon"
+    generate(out, patients=200, seed=42)
+    ns: dict = {}
+    exec((SPECS / "halcyon/profile.py").read_text(), ns)
+    profile = SimpleNamespace(**{k: v for k, v in ns.items() if k.isupper()})
+    store = RunStore(str(tmp_path / "runs.db"))
+    runner = Runner(store, connect(f"embedded:{tmp_path / 'nimbus.db'}"),
+                    profile=profile)
+    run_id = runner.start(str(out), auto_execute=False)
+    review_items = []
+    for rec in store.records_by_status(run_id, "pending", "Patient", limit=100000):
+        review_items.extend(rec["source"].get("review", []))
+    assert review_items, "no review candidates staged"
+    assert any("adt_a40" in item["reasons"] for item in review_items)
+
+
+# ------------------------------------------ round two: execution preconditions
+
+def test_failed_zero_record_run_cannot_be_executed_to_completion(tmp_path):
+    def factory(source):
+        return SimpleNamespace(manifest={}), lambda *args: {"REG": 9678}
+    register_reader("acceptance_no_persistence", factory)
+    store = RunStore(str(tmp_path / "run.db"))
+    runner = Runner(store, connect("embedded::memory:"),
+                    SimpleNamespace(READER="acceptance_no_persistence"))
+    with pytest.raises(RuntimeError, match="zero records"):
+        runner.start(str(tmp_path))
+    run_id = store.run()["id"]
+    assert store.run(run_id)["status"] == "failed"
+    with pytest.raises(RuntimeError):
+        runner.execute(run_id)
+    assert store.run(run_id)["status"] == "failed"
+    with pytest.raises(RuntimeError):
+        runner.resume(run_id)
+    assert store.run(run_id)["status"] == "failed"
+
+
+def test_staged_source_only_run_refuses_execution_and_stays_staged(
+        delphi_export, tmp_path):
+    """Executing a generated-profile run that staged source records only
+    must refuse and preserve the staged state, not die mid-run leaving
+    the run 'running'."""
+    ns: dict = {}
+    exec((SPECS / "delphi/profile.py").read_text(), ns)
+    profile = SimpleNamespace(**{k: v for k, v in ns.items() if k.isupper()})
+    store = RunStore(str(tmp_path / "runs.db"))
+    runner = Runner(store, connect(f"embedded:{tmp_path / 'nimbus.db'}"), profile=profile)
+    run_id = runner.start(str(delphi_export))
+    assert store.run(run_id)["status"] == "staged"
+    with pytest.raises(RuntimeError, match="source records only"):
+        runner.execute(run_id)
+    assert store.run(run_id)["status"] == "staged"
+
+
+# --------------------------------------------- round two: firewall by root
+
+def test_broad_roots_are_refused_at_construction():
+    """The firewall must not depend on the caller choosing a narrow root:
+    a repository checkout, or the src/docs trees themselves, are refused
+    as estate roots, and recorded analyst answers are not estate data."""
+    for root in (ROOT, ROOT / "src", ROOT / "docs"):
+        with pytest.raises(ValueError, match="not an estate root"):
+            EstateReader([root])
+    svc = AnalystService({}, EstateReader([SPECS / "delphi"]))
+    assert "error" in svc.read_estate("stub_analysts.json")
+
+
 # ------------------------------------------------------------------- ledger
 
 def test_ledger_appends_are_unique_under_concurrent_writers(tmp_path):
