@@ -1,0 +1,1113 @@
+{
+ "files": {
+  "APPT": {
+   "discriminator": {
+    "field": "RT",
+    "start": 0,
+    "width": 2
+   },
+   "key_fields": {
+    "S": "APPT"
+   },
+   "layouts": {
+    "S": [
+     {
+      "name": "RT",
+      "start": 0,
+      "type": "T",
+      "width": 2
+     },
+     {
+      "name": "APPT",
+      "start": 2,
+      "type": "T",
+      "width": 8
+     },
+     {
+      "name": "ACCT",
+      "start": 10,
+      "type": "T",
+      "width": 7
+     },
+     {
+      "name": "DATE",
+      "start": 17,
+      "type": "T",
+      "width": 6
+     },
+     {
+      "name": "TIME",
+      "start": 23,
+      "type": "N",
+      "width": 4
+     },
+     {
+      "name": "UNIT",
+      "start": 27,
+      "type": "T",
+      "width": 3
+     },
+     {
+      "name": "PROV",
+      "start": 30,
+      "type": "T",
+      "width": 6
+     },
+     {
+      "name": "STATUS",
+      "start": 36,
+      "type": "T",
+      "width": 1
+     },
+     {
+      "name": "REASON",
+      "start": 37,
+      "type": "T",
+      "width": 16
+     }
+    ]
+   },
+   "path": "APPT.TXT"
+  },
+  "BILL": {
+   "discriminator": {
+    "field": "RT",
+    "start": 0,
+    "width": 2
+   },
+   "key_fields": {
+    "B": "CHG"
+   },
+   "layouts": {
+    "B": [
+     {
+      "name": "RT",
+      "start": 0,
+      "type": "T",
+      "width": 2
+     },
+     {
+      "name": "CHG",
+      "start": 2,
+      "type": "T",
+      "width": 8
+     },
+     {
+      "name": "ACCT",
+      "start": 10,
+      "type": "T",
+      "width": 7
+     },
+     {
+      "name": "VISIT",
+      "start": 17,
+      "type": "T",
+      "width": 8
+     },
+     {
+      "name": "CODE",
+      "start": 25,
+      "type": "T",
+      "width": 6
+     },
+     {
+      "name": "QTY",
+      "start": 31,
+      "type": "N",
+      "width": 3
+     },
+     {
+      "name": "AMOUNT",
+      "start": 34,
+      "type": "N",
+      "width": 9
+     },
+     {
+      "name": "POST",
+      "start": 43,
+      "type": "T",
+      "width": 6
+     }
+    ]
+   },
+   "path": "BILL.TXT"
+  },
+  "CHGDICT": {
+   "discriminator": {
+    "field": "RT",
+    "start": 0,
+    "width": 2
+   },
+   "key_fields": {
+    "C": "CODE"
+   },
+   "layouts": {
+    "C": [
+     {
+      "name": "RT",
+      "start": 0,
+      "type": "T",
+      "width": 2
+     },
+     {
+      "name": "CODE",
+      "start": 2,
+      "type": "T",
+      "width": 6
+     },
+     {
+      "name": "DESC",
+      "start": 8,
+      "type": "T",
+      "width": 30
+     },
+     {
+      "name": "CPT",
+      "start": 38,
+      "type": "T",
+      "width": 6
+     }
+    ]
+   },
+   "path": "CHGDICT.TXT"
+  },
+  "DX": {
+   "discriminator": {
+    "field": "RT",
+    "start": 0,
+    "width": 2
+   },
+   "key_fields": {
+    "P": "DXID"
+   },
+   "layouts": {
+    "P": [
+     {
+      "name": "RT",
+      "start": 0,
+      "type": "T",
+      "width": 2
+     },
+     {
+      "name": "DXID",
+      "start": 2,
+      "type": "T",
+      "width": 8
+     },
+     {
+      "name": "ACCT",
+      "start": 10,
+      "type": "T",
+      "width": 7
+     },
+     {
+      "name": "VISIT",
+      "start": 17,
+      "type": "T",
+      "width": 8
+     },
+     {
+      "name": "CODE",
+      "start": 25,
+      "type": "T",
+      "width": 6
+     },
+     {
+      "name": "TEXT",
+      "start": 31,
+      "type": "T",
+      "width": 50
+     },
+     {
+      "name": "STATUS",
+      "start": 81,
+      "type": "T",
+      "width": 1
+     },
+     {
+      "name": "ONSET",
+      "start": 82,
+      "type": "T",
+      "width": 6
+     },
+     {
+      "name": "RESOLV",
+      "start": 88,
+      "type": "T",
+      "width": 6
+     }
+    ]
+   },
+   "path": "DX.TXT"
+  },
+  "DXDICT": {
+   "discriminator": {
+    "field": "RT",
+    "start": 0,
+    "width": 2
+   },
+   "key_fields": {
+    "D": "CODE"
+   },
+   "layouts": {
+    "D": [
+     {
+      "name": "RT",
+      "start": 0,
+      "type": "T",
+      "width": 2
+     },
+     {
+      "name": "CODE",
+      "start": 2,
+      "type": "T",
+      "width": 6
+     },
+     {
+      "name": "EXPAND",
+      "start": 8,
+      "type": "T",
+      "width": 50
+     }
+    ]
+   },
+   "path": "DXDICT.TXT"
+  },
+  "ENC": {
+   "discriminator": {
+    "field": "RT",
+    "start": 0,
+    "width": 2
+   },
+   "key_fields": {
+    "V": "VISIT"
+   },
+   "layouts": {
+    "V": [
+     {
+      "name": "RT",
+      "start": 0,
+      "type": "T",
+      "width": 2
+     },
+     {
+      "name": "VISIT",
+      "start": 2,
+      "type": "T",
+      "width": 8
+     },
+     {
+      "name": "ACCT",
+      "start": 10,
+      "type": "T",
+      "width": 7
+     },
+     {
+      "name": "UNIT",
+      "start": 17,
+      "type": "T",
+      "width": 3
+     },
+     {
+      "name": "CLASS",
+      "start": 20,
+      "type": "T",
+      "width": 3
+     },
+     {
+      "name": "ADMITD",
+      "start": 23,
+      "type": "T",
+      "width": 6
+     },
+     {
+      "name": "ADMITT",
+      "start": 29,
+      "type": "N",
+      "width": 4
+     },
+     {
+      "name": "DISD",
+      "start": 33,
+      "type": "T",
+      "width": 6
+     },
+     {
+      "name": "DIST",
+      "start": 39,
+      "type": "N",
+      "width": 4
+     },
+     {
+      "name": "PROV",
+      "start": 43,
+      "type": "T",
+      "width": 6
+     },
+     {
+      "name": "STATUS",
+      "start": 49,
+      "type": "T",
+      "width": 1
+     },
+     {
+      "name": "REASON",
+      "start": 50,
+      "type": "T",
+      "width": 20
+     }
+    ]
+   },
+   "path": "ENC.TXT"
+  },
+  "JOURNAL": {
+   "discriminator": {
+    "field": "RT",
+    "start": 0,
+    "width": 2
+   },
+   "key_fields": {
+    "J": "SEQ"
+   },
+   "layouts": {
+    "J": [
+     {
+      "name": "RT",
+      "start": 0,
+      "type": "T",
+      "width": 2
+     },
+     {
+      "name": "SEQ",
+      "start": 2,
+      "type": "N",
+      "width": 6
+     },
+     {
+      "name": "OP",
+      "start": 8,
+      "type": "T",
+      "width": 1
+     },
+     {
+      "name": "FILE",
+      "start": 9,
+      "type": "T",
+      "width": 4
+     },
+     {
+      "name": "KEY",
+      "start": 13,
+      "type": "T",
+      "width": 12
+     },
+     {
+      "name": "DATE",
+      "start": 25,
+      "type": "T",
+      "width": 6
+     },
+     {
+      "name": "TIME",
+      "start": 31,
+      "type": "N",
+      "width": 4
+     },
+     {
+      "name": "FIELD",
+      "start": 35,
+      "type": "T",
+      "width": 6
+     },
+     {
+      "name": "VALUE",
+      "start": 41,
+      "type": "T",
+      "width": 60
+     }
+    ]
+   },
+   "path": "JOURNAL.TXT"
+  },
+  "LAB": {
+   "discriminator": {
+    "field": "RT",
+    "start": 0,
+    "width": 2
+   },
+   "key_fields": {
+    "A": "ACCT",
+    "R": [
+     "ACC",
+     "TEST"
+    ]
+   },
+   "layouts": {
+    "A": [
+     {
+      "name": "RT",
+      "start": 0,
+      "type": "T",
+      "width": 2
+     },
+     {
+      "name": "ACCT",
+      "start": 2,
+      "type": "T",
+      "width": 7
+     },
+     {
+      "name": "NAME",
+      "start": 9,
+      "type": "T",
+      "width": 30
+     },
+     {
+      "name": "DOB",
+      "start": 39,
+      "type": "T",
+      "width": 6
+     },
+     {
+      "name": "SEX",
+      "start": 45,
+      "type": "T",
+      "width": 1
+     },
+     {
+      "name": "SSN4",
+      "start": 46,
+      "type": "N",
+      "width": 4
+     },
+     {
+      "name": "OPEN",
+      "start": 50,
+      "type": "T",
+      "width": 6
+     }
+    ],
+    "R": [
+     {
+      "name": "RT",
+      "start": 0,
+      "type": "T",
+      "width": 2
+     },
+     {
+      "name": "ACCT",
+      "start": 2,
+      "type": "T",
+      "width": 7
+     },
+     {
+      "name": "ACC",
+      "start": 9,
+      "type": "T",
+      "width": 9
+     },
+     {
+      "name": "TEST",
+      "start": 18,
+      "type": "T",
+      "width": 5
+     },
+     {
+      "name": "RESULT",
+      "start": 23,
+      "type": "T",
+      "width": 10
+     },
+     {
+      "name": "YEAR",
+      "start": 33,
+      "type": "N",
+      "width": 2
+     },
+     {
+      "name": "YDAY",
+      "start": 35,
+      "type": "N",
+      "width": 3
+     },
+     {
+      "name": "TIME",
+      "start": 38,
+      "type": "N",
+      "width": 4
+     }
+    ]
+   },
+   "path": "LAB.TXT"
+  },
+  "LABDICT": {
+   "discriminator": {
+    "field": "RT",
+    "start": 0,
+    "width": 2
+   },
+   "key_fields": {
+    "T": "TEST"
+   },
+   "layouts": {
+    "T": [
+     {
+      "name": "RT",
+      "start": 0,
+      "type": "T",
+      "width": 2
+     },
+     {
+      "name": "TEST",
+      "start": 2,
+      "type": "T",
+      "width": 5
+     },
+     {
+      "name": "DESC",
+      "start": 7,
+      "type": "T",
+      "width": 24
+     },
+     {
+      "name": "UNIT",
+      "start": 31,
+      "type": "T",
+      "width": 8
+     },
+     {
+      "name": "LOW",
+      "start": 39,
+      "type": "T",
+      "width": 6
+     },
+     {
+      "name": "HIGH",
+      "start": 45,
+      "type": "T",
+      "width": 6
+     }
+    ]
+   },
+   "path": "LABDICT.TXT"
+  },
+  "NOTE": {
+   "discriminator": {
+    "field": "RT",
+    "start": 0,
+    "width": 2
+   },
+   "key_fields": {
+    "C": [
+     "NOTE",
+     "SEQ"
+    ],
+    "N": "NOTE"
+   },
+   "layouts": {
+    "C": [
+     {
+      "name": "RT",
+      "start": 0,
+      "type": "T",
+      "width": 2
+     },
+     {
+      "name": "NOTE",
+      "start": 2,
+      "type": "T",
+      "width": 8
+     },
+     {
+      "name": "SEQ",
+      "start": 10,
+      "type": "N",
+      "width": 2
+     },
+     {
+      "name": "TEXT",
+      "start": 12,
+      "type": "T",
+      "width": 72
+     }
+    ],
+    "N": [
+     {
+      "name": "RT",
+      "start": 0,
+      "type": "T",
+      "width": 2
+     },
+     {
+      "name": "NOTE",
+      "start": 2,
+      "type": "T",
+      "width": 8
+     },
+     {
+      "name": "ACCT",
+      "start": 10,
+      "type": "T",
+      "width": 7
+     },
+     {
+      "name": "VISIT",
+      "start": 17,
+      "type": "T",
+      "width": 8
+     },
+     {
+      "name": "TYPE",
+      "start": 25,
+      "type": "T",
+      "width": 3
+     },
+     {
+      "name": "DATE",
+      "start": 28,
+      "type": "T",
+      "width": 6
+     },
+     {
+      "name": "TIME",
+      "start": 34,
+      "type": "N",
+      "width": 4
+     },
+     {
+      "name": "PROV",
+      "start": 38,
+      "type": "T",
+      "width": 6
+     },
+     {
+      "name": "NLINES",
+      "start": 44,
+      "type": "N",
+      "width": 2
+     }
+    ]
+   },
+   "path": "NOTE.TXT"
+  },
+  "PHA": {
+   "discriminator": {
+    "field": "RT",
+    "start": 0,
+    "width": 2
+   },
+   "key_fields": {
+    "A": "ACCT",
+    "M": "ORD"
+   },
+   "layouts": {
+    "A": [
+     {
+      "name": "RT",
+      "start": 0,
+      "type": "T",
+      "width": 2
+     },
+     {
+      "name": "ACCT",
+      "start": 2,
+      "type": "T",
+      "width": 7
+     },
+     {
+      "name": "NAME",
+      "start": 9,
+      "type": "T",
+      "width": 30
+     },
+     {
+      "name": "DOB",
+      "start": 39,
+      "type": "T",
+      "width": 6
+     },
+     {
+      "name": "SEX",
+      "start": 45,
+      "type": "T",
+      "width": 1
+     },
+     {
+      "name": "SSN4",
+      "start": 46,
+      "type": "N",
+      "width": 4
+     },
+     {
+      "name": "OPEN",
+      "start": 50,
+      "type": "T",
+      "width": 6
+     }
+    ],
+    "M": [
+     {
+      "name": "RT",
+      "start": 0,
+      "type": "T",
+      "width": 2
+     },
+     {
+      "name": "ACCT",
+      "start": 2,
+      "type": "T",
+      "width": 7
+     },
+     {
+      "name": "ORD",
+      "start": 9,
+      "type": "T",
+      "width": 8
+     },
+     {
+      "name": "NDC",
+      "start": 17,
+      "type": "N",
+      "width": 11
+     },
+     {
+      "name": "DRUG",
+      "start": 28,
+      "type": "T",
+      "width": 30
+     },
+     {
+      "name": "DOSE",
+      "start": 58,
+      "type": "T",
+      "width": 16
+     },
+     {
+      "name": "SIG",
+      "start": 74,
+      "type": "T",
+      "width": 44
+     },
+     {
+      "name": "START",
+      "start": 118,
+      "type": "T",
+      "width": 6
+     },
+     {
+      "name": "STOP",
+      "start": 124,
+      "type": "T",
+      "width": 6
+     },
+     {
+      "name": "STATUS",
+      "start": 130,
+      "type": "T",
+      "width": 1
+     },
+     {
+      "name": "PROV",
+      "start": 131,
+      "type": "T",
+      "width": 6
+     }
+    ]
+   },
+   "path": "PHA.TXT"
+  },
+  "PROV": {
+   "discriminator": {
+    "field": "RT",
+    "start": 0,
+    "width": 2
+   },
+   "key_fields": {
+    "D": "CODE"
+   },
+   "layouts": {
+    "D": [
+     {
+      "name": "RT",
+      "start": 0,
+      "type": "T",
+      "width": 2
+     },
+     {
+      "name": "CODE",
+      "start": 2,
+      "type": "T",
+      "width": 6
+     },
+     {
+      "name": "NAME",
+      "start": 8,
+      "type": "T",
+      "width": 30
+     },
+     {
+      "name": "SPEC",
+      "start": 38,
+      "type": "T",
+      "width": 18
+     },
+     {
+      "name": "NPI",
+      "start": 56,
+      "type": "N",
+      "width": 10
+     },
+     {
+      "name": "ACT",
+      "start": 66,
+      "type": "T",
+      "width": 1
+     },
+     {
+      "name": "BILL",
+      "start": 67,
+      "type": "T",
+      "width": 1
+     }
+    ]
+   },
+   "path": "PROV.TXT"
+  },
+  "RAD": {
+   "discriminator": {
+    "field": "RT",
+    "start": 0,
+    "width": 2
+   },
+   "key_fields": {
+    "A": "ACCT",
+    "X": [
+     "ACCT",
+     "EXAM"
+    ]
+   },
+   "layouts": {
+    "A": [
+     {
+      "name": "RT",
+      "start": 0,
+      "type": "T",
+      "width": 2
+     },
+     {
+      "name": "ACCT",
+      "start": 2,
+      "type": "T",
+      "width": 7
+     },
+     {
+      "name": "NAME",
+      "start": 9,
+      "type": "T",
+      "width": 30
+     },
+     {
+      "name": "DOB",
+      "start": 39,
+      "type": "T",
+      "width": 6
+     },
+     {
+      "name": "SEX",
+      "start": 45,
+      "type": "T",
+      "width": 1
+     },
+     {
+      "name": "SSN4",
+      "start": 46,
+      "type": "N",
+      "width": 4
+     },
+     {
+      "name": "OPEN",
+      "start": 50,
+      "type": "T",
+      "width": 6
+     }
+    ],
+    "X": [
+     {
+      "name": "RT",
+      "start": 0,
+      "type": "T",
+      "width": 2
+     },
+     {
+      "name": "ACCT",
+      "start": 2,
+      "type": "T",
+      "width": 7
+     },
+     {
+      "name": "EXAM",
+      "start": 9,
+      "type": "T",
+      "width": 8
+     },
+     {
+      "name": "XCODE",
+      "start": 17,
+      "type": "T",
+      "width": 6
+     },
+     {
+      "name": "DATE",
+      "start": 23,
+      "type": "T",
+      "width": 6
+     },
+     {
+      "name": "TIME",
+      "start": 29,
+      "type": "N",
+      "width": 4
+     },
+     {
+      "name": "REPORT",
+      "start": 33,
+      "type": "T",
+      "width": 200
+     }
+    ]
+   },
+   "path": "RAD.TXT"
+  },
+  "REG": {
+   "discriminator": {
+    "field": "RT",
+    "start": 0,
+    "width": 2
+   },
+   "key_fields": {
+    "A": "ACCT"
+   },
+   "layouts": {
+    "A": [
+     {
+      "name": "RT",
+      "start": 0,
+      "type": "T",
+      "width": 2
+     },
+     {
+      "name": "ACCT",
+      "start": 2,
+      "type": "T",
+      "width": 7
+     },
+     {
+      "name": "NAME",
+      "start": 9,
+      "type": "T",
+      "width": 30
+     },
+     {
+      "name": "DOB",
+      "start": 39,
+      "type": "T",
+      "width": 6
+     },
+     {
+      "name": "SEX",
+      "start": 45,
+      "type": "T",
+      "width": 1
+     },
+     {
+      "name": "SSN4",
+      "start": 46,
+      "type": "N",
+      "width": 4
+     },
+     {
+      "name": "ADDR1",
+      "start": 50,
+      "type": "T",
+      "width": 30
+     },
+     {
+      "name": "ADDR2",
+      "start": 80,
+      "type": "T",
+      "width": 20
+     },
+     {
+      "name": "CITY",
+      "start": 100,
+      "type": "T",
+      "width": 16
+     },
+     {
+      "name": "STATE",
+      "start": 116,
+      "type": "T",
+      "width": 2
+     },
+     {
+      "name": "ZIP",
+      "start": 118,
+      "type": "N",
+      "width": 5
+     },
+     {
+      "name": "PHONE",
+      "start": 123,
+      "type": "T",
+      "width": 14
+     },
+     {
+      "name": "REGDATE",
+      "start": 137,
+      "type": "T",
+      "width": 6
+     },
+     {
+      "name": "DEATH",
+      "start": 143,
+      "type": "T",
+      "width": 6
+     },
+     {
+      "name": "RACE",
+      "start": 149,
+      "type": "T",
+      "width": 10
+     },
+     {
+      "name": "PAYER",
+      "start": 159,
+      "type": "T",
+      "width": 3
+     },
+     {
+      "name": "MEMBER",
+      "start": 162,
+      "type": "T",
+      "width": 12
+     },
+     {
+      "name": "REL",
+      "start": 174,
+      "type": "T",
+      "width": 1
+     },
+     {
+      "name": "ALGY",
+      "start": 175,
+      "type": "T",
+      "width": 40
+     }
+    ]
+   },
+   "path": "REG.TXT"
+  }
+ },
+ "reader": "fixed_width",
+ "source": "delphi"
+}

@@ -78,34 +78,66 @@ class UnionFind:
         self.parent[rb] = ra
 
 
-def resolve(pats: list[dict[str, str]], merges: list[tuple[str, str]]) -> tuple[dict[str, list[str]], list[Match], dict[str, str]]:
+def resolve(pats: list[dict[str, str]], merges: list[tuple[str, str]],
+            auto_merge: bool = True) -> tuple[dict[str, list[str]], list[Match], dict[str, str]]:
     """Return (clusters root->members, review candidates, link reason per non-root member).
 
     `merges` are (surviving PAT_ID, retired PAT_ID) pairs from ADT A40.
+
+    With ``auto_merge=False`` (the generated profile's merge policy,
+    ``route_to_reconciliation``), nothing is unioned automatically: every
+    chart stays its own cluster, and every would-be automatic link —
+    deterministic matches and A40 merges alike — is returned as a review
+    candidate so a human decides it in reconciliation.
     """
     ids = [p["PAT_ID"] for p in pats]
     uf = UnionFind(ids)
     reason: dict[str, str] = {}
+    review: dict[tuple[str, str], Match] = {}
+
+    def add_review(m: Match) -> None:
+        """Record a review candidate, merging with any candidate already
+        held for the pair: keep the higher score and the union of reasons.
+        An A40 merge is the strongest evidence a pair carries — a plain
+        score match for the same pair must never overwrite it before the
+        human reconciler sees it."""
+        key = tuple(sorted((m.a, m.b)))
+        held = review.get(key)
+        if held is None:
+            review[key] = m
+            return
+        reasons = list(held.reasons)
+        for r in m.reasons:
+            if r not in reasons:
+                reasons.append(r)
+        review[key] = Match(a=held.a, b=held.b,
+                            score=max(held.score, m.score), reasons=reasons)
+
+    by_id = {p["PAT_ID"]: p for p in pats}
     for keep, retire in merges:
         if keep in uf.parent and retire in uf.parent:
-            uf.union(keep, retire)
-            reason[retire] = "adt_a40"
+            if auto_merge:
+                uf.union(keep, retire)
+                reason[retire] = "adt_a40"
+            else:
+                m = score_pair(by_id[keep], by_id[retire])
+                add_review(Match(a=m.a, b=m.b, score=max(m.score, 1.0),
+                                 reasons=[*m.reasons, "adt_a40"]))
     blocks: dict[str, list[dict[str, str]]] = {}
     for p in pats:
         blocks.setdefault(p["SSN4"] or p["PAT_ID"], []).append(p)
         last, _ = _norm_name(p["PAT_NAME"])
         blocks.setdefault(f"N:{last[:4]}:{p['DOB'][:4]}", []).append(p)
-    review: dict[tuple[str, str], Match] = {}
     for group in blocks.values():
         for p, q in combinations(group, 2):
             if uf.find(p["PAT_ID"]) == uf.find(q["PAT_ID"]):
                 continue
             m = score_pair(p, q)
-            if m.score >= AUTO_THRESHOLD:
+            if auto_merge and m.score >= AUTO_THRESHOLD:
                 uf.union(p["PAT_ID"], q["PAT_ID"])
                 reason.setdefault(max(m.a, m.b), "deterministic")
             elif m.score >= REVIEW_THRESHOLD:
-                review[tuple(sorted((m.a, m.b)))] = m
+                add_review(m)
     clusters: dict[str, list[str]] = {}
     for i in ids:
         clusters.setdefault(uf.find(i), []).append(i)

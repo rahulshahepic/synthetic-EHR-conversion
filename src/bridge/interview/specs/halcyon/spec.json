@@ -1,0 +1,162 @@
+{
+ "generator": "bridge.interview.specgen",
+ "known_unknowns": [
+  {
+   "claimed_values": [
+    0,
+    30
+   ],
+   "disposition": "runtime_question",
+   "predicate": "lab_feed_only_days",
+   "subject": "profile"
+  },
+  {
+   "disposition": "runtime_question",
+   "note": "Every proposed identity merge is decided by a human in reconciliation; the spec contains no auto-merge rule.",
+   "predicate": "merge_decisions",
+   "subject": "identity"
+  }
+ ],
+ "ledger_events": 47,
+ "policy_overrides": [],
+ "reader_binding": {
+  "files": {},
+  "reader": "halcyon",
+  "source": "halcyon"
+ },
+ "rules": [
+  {
+   "data_confirmed": false,
+   "id": "R001",
+   "kind": "fact",
+   "predicate": "documented_gap",
+   "provenance": {
+    "kind": "analyst",
+    "ref": "ledger:E000036 (June Park, pharmacy)"
+   },
+   "subject": "codeset:formulary_rxnorm",
+   "value": "local formulary; mapping requires pharmacy review per code - no shortcut"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R002",
+   "kind": "fact",
+   "predicate": "charge_cents_from",
+   "provenance": {
+    "kind": "analyst",
+    "ref": "dispute resolved via OBS-ESTATE-2 + ledger answer (Tom Okafor, interface engineering)"
+   },
+   "subject": "profile",
+   "value": "2012-01-01"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R003",
+   "kind": "fact",
+   "predicate": "facility_tz",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "Halcyon interface notes (estate); dispute resolved via OBS-ESTATE-1 + ledger answer (Tom Okafor, interface engineering)"
+   },
+   "subject": "profile",
+   "value": {
+    "FAC1": "America/Chicago",
+    "FAC2": "America/Chicago",
+    "FAC3": "America/Denver"
+   }
+  },
+  {
+   "data_confirmed": false,
+   "id": "R004",
+   "kind": "fact",
+   "predicate": "lab_extract",
+   "provenance": {
+    "kind": "analyst",
+    "ref": "ledger:E000026 (Marcus Bell, laboratory); dispute resolved via ledger:E000026 (Marcus Bell, laboratory)"
+   },
+   "subject": "profile",
+   "value": "recent results (about the last month) are feed-only; the extract holds history"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R005",
+   "kind": "fact",
+   "predicate": "mrn_system",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "Halcyon dictionary excerpts (estate)"
+   },
+   "subject": "profile",
+   "value": "urn:halcyon:mrn:{fac}"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R006",
+   "kind": "fact",
+   "predicate": "reader",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "Halcyon interface notes (estate)"
+   },
+   "subject": "profile",
+   "value": "halcyon"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R007",
+   "kind": "fact",
+   "predicate": "system_org",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "Halcyon dictionary excerpts (estate)"
+   },
+   "subject": "profile",
+   "value": {
+    "key": "SYS-RIVERBEND",
+    "name": "Riverbend Health"
+   }
+  },
+  {
+   "data_confirmed": false,
+   "id": "R008",
+   "kind": "fact",
+   "predicate": "vital_units",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "Halcyon interface notes (estate); dispute resolved via OBS-ESTATE-1 + ledger answer (Tom Okafor, interface engineering)"
+   },
+   "subject": "profile",
+   "value": {
+    "FAC1": {
+     "HT": "[in_i]",
+     "TEMP": "[degF]",
+     "WT": "[lb_av]"
+    },
+    "FAC2": {
+     "HT": "[in_i]",
+     "TEMP": "[degF]",
+     "WT": "[lb_av]"
+    },
+    "FAC3": {
+     "HT": "cm",
+     "TEMP": "Cel",
+     "WT": "kg"
+    }
+   }
+  },
+  {
+   "data_confirmed": false,
+   "id": "SAFETY-IDENTITY-MERGE",
+   "kind": "identity_policy",
+   "note": "Identity merges always require a human reconciliation decision. No claim, from any source, can turn this into an auto-merge rule.",
+   "predicate": "merge_policy",
+   "provenance": {
+    "kind": "policy",
+    "ref": "docs/socratic-import-builder.md"
+   },
+   "subject": "identity",
+   "value": "route_to_reconciliation"
+  }
+ ],
+ "source": "halcyon"
+}

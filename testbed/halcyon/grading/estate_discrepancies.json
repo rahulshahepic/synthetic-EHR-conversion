@@ -1,0 +1,51 @@
+[
+  {
+    "id": "estate_fac3_timezone",
+    "artifact": "testbed/halcyon/estate/dictionary_excerpts.md",
+    "claim": "All facilities run on America/Chicago time.",
+    "truth": "FAC3 runs America/Denver; FAC1 and FAC2 are America/Chicago.",
+    "check": "Compare the hand-written profile (FACILITY_TZ) or watch FAC3 message timestamps against FAC1."
+  },
+  {
+    "id": "estate_vital_units_uniform",
+    "artifact": "testbed/halcyon/estate/dictionary_excerpts.md",
+    "claim": "Vital units are uniform across Riverbend: pounds, Fahrenheit, inches.",
+    "truth": "FAC3 charts metric (kg, Cel, cm); FAC1 and FAC2 are imperial.",
+    "check": "Compare the hand-written profile (VITAL_UNITS) per facility."
+  },
+  {
+    "id": "estate_charge_cents_always",
+    "artifact": "testbed/halcyon/estate/dictionary_excerpts.md",
+    "claim": "AMOUNT on a charge line is an integer number of cents; it has always been cents.",
+    "truth": "AMOUNT is dollars before 2012-01-01 and integer cents on/after it (the 2012 billing upgrade).",
+    "check": "Compare the hand-written profile (CHARGE_CENTS_FROM) and charge amounts across the 2012 boundary."
+  },
+  {
+    "id": "estate_lab_extract_complete",
+    "artifact": "testbed/halcyon/estate/dictionary_excerpts.md",
+    "claim": "The CSV extract is the complete lab record; feed and extract carry the same results.",
+    "truth": "Labs collected in the last 30 days before the export arrive only over the HL7 ORU feed and are absent from the LAB_RESULT extract.",
+    "check": "Compare feed ORU results against the LAB_RESULT table for the 30 days before the export's as-of date."
+  },
+  {
+    "id": "belief_him_dictionary_current",
+    "artifact": "testbed/halcyon/analysts/him.md",
+    "claim": "The dictionary excerpts IT circulates are current; when behaviour changed, the excerpt changed with it.",
+    "truth": "The excerpts are stale on timezone, vital units, charges, and lab completeness (the estate_* entries above).",
+    "check": "Work the estate_* checks."
+  },
+  {
+    "id": "disagreement_fac3_timezone",
+    "artifact": "testbed/halcyon/analysts/him.md + analysts/interface.md",
+    "claim": "HIM: all three facilities are on Central time. Interface engineering: FAC3 runs Mountain Time (America/Denver).",
+    "truth": "FAC3 is America/Denver. The interface engineer is right; HIM is repeating the stale dictionary.",
+    "check": "FAC3 message timestamps sit two hours behind the Central facilities."
+  },
+  {
+    "id": "disagreement_charge_cents",
+    "artifact": "testbed/halcyon/estate/dictionary_excerpts.md + analysts/interface.md",
+    "claim": "Dictionary: AMOUNT has always been cents. Interface engineering: the 2012 billing upgrade moved amounts to cents; before it, dollars.",
+    "truth": "The cutover is 2012-01-01: dollars before, integer cents on/after.",
+    "check": "Charge amount magnitudes across the 2012 boundary in a long export."
+  }
+]

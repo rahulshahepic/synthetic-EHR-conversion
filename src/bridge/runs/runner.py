@@ -7,7 +7,7 @@ from time import perf_counter
 from datetime import date
 from typing import Any
 
-from ..extract.halcyon import HalcyonExport, stage_all
+from ..extract.registry import get_reader_for
 from ..load.client import NimbusClient
 from ..mapping import clinical, core  # noqa: F401  (registers mappers)
 from ..mapping.base import MAPPERS, MapContext, run_mapper
@@ -38,14 +38,31 @@ class Runner:
     def start(self, source: str, target_label: str = "nimbus", batch_size: int = DEFAULT_BATCH_SIZE,
               types: list[str] | None = None, auto_execute: bool = True,
               rules: list[dict[str, Any]] | None = None, prior_run_db: str | None = None) -> str:
-        export = HalcyonExport(source)
+        reader_name = getattr(self.profile, "READER", "halcyon")
+        merge_policy = getattr(self.profile, "MERGE_POLICY", None)
+        if merge_policy is not None and merge_policy != "route_to_reconciliation":
+            raise ValueError(
+                f"unsupported MERGE_POLICY {merge_policy!r} in profile: identity "
+                "merges route to a human reconciliation question, or the profile "
+                "must not state a merge policy at all")
+        export, stage_fn = get_reader_for(reader_name, self.profile)(source)
         as_of = export.manifest.get("asOf") or date.today().isoformat()
         cfg = {"batch_size": batch_size, "as_of": as_of, "types": types or [t for t in LOAD_ORDER if t in MAPPERS]}
         run_id = self.store.create_run(str(source), target_label, cfg)
         self.store.set_status(run_id, "extracting")
         staging_started = perf_counter()
-        stage_all(self.store, run_id, export, self.profile)
+        try:
+            stage_fn(self.store, run_id, export, self.profile)
+        except Exception as exc:
+            self.store.set_status(run_id, "failed", f"staging failed: {exc}")
+            raise
         self.store.event(run_id, "staging_timing", {"seconds": perf_counter() - staging_started})
+        staged_counts = self.store.status_counts(run_id)
+        if sum(sum(c.values()) for c in staged_counts.values()) == 0:
+            self.store.set_status(run_id, "failed", "staging produced zero records")
+            raise RuntimeError(
+                "staging produced zero records; a run that parsed input but "
+                "persisted nothing must fail loudly, not complete")
         if prior_run_db:
             from ..reconcile.rules_io import load_rules
             from .delta import stage_source_deletions
@@ -56,13 +73,35 @@ class Runner:
             import_rules(self.store, run_id, rules)
         self.store.set_status(run_id, "staged")
         if auto_execute:
+            if not (set(staged_counts) & set(cfg["types"])):
+                # The reader staged source records (a generated fixed-width
+                # binding), not mapped Nimbus resource types: there is no
+                # mapper pass to execute yet. Leave the run staged rather
+                # than "completing" a conversion that never happened.
+                self.store.event(run_id, "execution_skipped", {
+                    "reason": "staged types are source records, not mapped types",
+                    "staged_types": sorted(staged_counts)})
+                return run_id
             self.execute(run_id)
         return run_id
 
     def execute(self, run_id: str) -> str:
         run = self.store.run(run_id)
-        if run["status"] in ("reverting", "reverted", "aborted"):
+        if run["status"] in ("reverting", "reverted", "aborted", "failed"):
             raise RuntimeError(f"run is {run['status']}")
+        # Execution preconditions live here, not only in start(): a caller
+        # holding a run id (execute, resume) must not be able to turn a
+        # run that staged nothing — or that staged source records only,
+        # with no mapper pass to run — into a "completed" conversion.
+        # Raising before any status change preserves the run's state.
+        counts = self.store.status_counts(run_id)
+        if sum(sum(c.values()) for c in counts.values()) == 0:
+            raise RuntimeError("run has no staged records to execute")
+        types = run["config"]["types"]
+        if not (set(counts) & set(types)):
+            raise RuntimeError(
+                "run stages source records only, not mapped types; "
+                "there is no execution pass for it yet")
         self.store.set_status(run_id, "running")
         self.store.bump_pass(run_id)
         self.store.release_ready_blocked(run_id)

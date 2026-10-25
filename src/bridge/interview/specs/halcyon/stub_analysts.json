@@ -1,0 +1,56 @@
+{
+ "him": {
+  "name": "Dana Whitaker",
+  "answers": {
+   "What are the organisation and MRN conventions?": "The organisation is Riverbend Health, key SYS-RIVERBEND. The MRN is namespaced per facility: urn:halcyon:mrn:{fac}. A person with charts at two facilities has two MRNs, and both have to be accounted for.",
+   "Are all facilities on the same timezone?": "All three facilities are on Central time, America/Chicago. The dictionary says so, and every schedule I have printed agrees.",
+   "Is the lab extract the complete lab record?": "The lab extract is the complete lab record. If a result exists, it is in the extract.",
+   "How long is the lab feed-only window?": "There is no feed-only window. The extract is complete."
+  },
+  "blind_spots": [
+   "interface",
+   "channel",
+   "formulary"
+  ],
+  "outside_response": "Outside my area."
+ },
+ "lab": {
+  "name": "Marcus Bell",
+  "answers": {
+   "How do recent lab results reach the chart?": "Two ways, and they are not the same set. Recent results - anything collected in about the last month - come over the HL7 ORU feed only. The extract table holds the history; a result from last week is in the feed and not yet in the table.",
+   "How long is the lab feed-only window?": "About the last 30 days. Recent results are feed-only for roughly a month before the table catches up.",
+   "What units are vitals charted in?": "Pounds, Fahrenheit, and inches - on every ward I have rounded on, which is FAC1 and FAC2."
+  },
+  "blind_spots": [
+   "charge",
+   "timezone",
+   "registration"
+  ],
+  "outside_response": "Outside my area."
+ },
+ "pharmacy": {
+  "name": "June Park",
+  "answers": {
+   "How are formulary codes mapped for a conversion?": "The formulary is local. Codes mean what Riverbend's dictionary says, and a handful retire every year while the orders written under them stay in the chart. There is no honest shortcut: pharmacy has to review the mapping code by code."
+  },
+  "blind_spots": [
+   "charge",
+   "timezone",
+   "lab"
+  ],
+  "outside_response": "Not mine - outside my area."
+ },
+ "interface": {
+  "name": "Tom Okafor",
+  "answers": {
+   "What timezone does FAC3 run, and how are its vitals charted?": "FAC3 runs Mountain Time, America/Denver, and its charting is metric: kilograms, Celsius, centimetres. FAC1 and FAC2 are Central and imperial. Anyone who tells you the whole system is Central has not watched the FAC3 channel at midnight.",
+   "How did charge amounts change with the 2012 billing upgrade?": "Before the upgrade, AMOUNT is dollars. From the upgrade on, integer cents. The extract carries both eras, and the date is how you tell them apart."
+  },
+  "blind_spots": [
+   "sig",
+   "merge decision",
+   "clinical"
+  ],
+  "outside_response": "Outside my area. I move the messages."
+ }
+}

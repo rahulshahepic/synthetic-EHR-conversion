@@ -1,0 +1,59 @@
+{
+ "registration": {
+  "name": "Marla Denny",
+  "answers": {
+   "How are registration accounts opened, and can one patient end up with two?": "Registration opens the account at the desk. A returning patient gets a second account by mistake - misspelled search, busy night. Duplicate charts are the same person; merging them is routine, safe work.",
+   "What pivot year does the system use for two-digit years?": "The window starts at 1930. 30 and up is 19-something, under 30 is 20-something. A woman born in 1929 shows up as a small child.",
+   "Tell me about the allergy field on the registration account.": "It is free text the registrar types on the account. NKA when the patient reports none. It occasionally says NKA and lists an allergy anyway, when an old chart is copied forward.",
+   "Does the lab re-issue its account numbers?": "The lab re-issues its account numbers every year or so, the way the old card files were purged."
+  },
+  "blind_spots": [
+   "lab file",
+   "radiology report"
+  ],
+  "outside_response": "Outside my area. That is another department - ask them."
+ },
+ "lab": {
+  "name": "Tom Reyes",
+  "answers": {
+   "How are lab collection dates encoded?": "Collection dates are Julian: a two-digit year and the day of the year. Day 100 of 2026 is April 10, 2026. The day-of-year field sits next to the year on the result record.",
+   "What unit is potassium reported in?": "MEQ/L. The range on the test dictionary, 3.5 to 5.1, is the giveaway.",
+   "What happens to a lab result that is not a number?": "A result that is not a number is a bench error. The bench cleans those up; you do not convert them.",
+   "Is the lab account number the patient's identity across the hospital?": "The L number is the patient. An L number, once opened, is never reused or re-issued."
+  },
+  "blind_spots": [
+   "registration",
+   "coverage",
+   "payer"
+  ],
+  "outside_response": "Outside my area. Ask the owning department."
+ },
+ "pharmacy": {
+  "name": "Priya Nair",
+  "answers": {
+   "What are the misc-med orders, and can they be left out of a conversion?": "A misc-med order means the real order is written in the patient's notes, and pharmacy works from the note. They are real orders for real patients. You can leave the misc-med orders out of a conversion; the note holds the details anyway.",
+   "When two charts look alike, are they the same person?": "Most charts that look like duplicates are different people - spouses, parents and children at one address. Merging on name and birth date alone is how a conversion hurts someone."
+  },
+  "blind_spots": [
+   "julian",
+   "lab dates",
+   "export"
+  ],
+  "outside_response": "Outside my area."
+ },
+ "systems": {
+  "name": "Greg Holt",
+  "answers": {
+   "What pivot year does the system use for two-digit years?": "The pivot year of 50: 00-49 are 20xx, 50-99 are 19xx. I set it from the vendor release note.",
+   "Is the data dictionary current?": "The dictionary is current. I maintain it, and it describes the system the extract comes from.",
+   "Does the hospital have a master patient index?": "There is no master index and never was. Each department assigns its own account numbers; the vendor sells an index as a separate module the hospital did not buy.",
+   "What does appointment status R mean?": "R is not a status in the dictionary. The documented statuses are B, C, N, A, X."
+  },
+  "blind_spots": [
+   "diagnosis",
+   "shorthand",
+   "medication order"
+  ],
+  "outside_response": "Outside my area. The departments own that."
+ }
+}
