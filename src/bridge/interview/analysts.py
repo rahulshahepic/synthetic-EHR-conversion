@@ -49,8 +49,27 @@ def _denied(parts: Any) -> bool:
                for part in parts)
 
 
+def _repo_ancestor(path: Path) -> Path | None:
+    """The nearest ancestor of ``path`` (itself included) that looks like
+    a repository root: it holds a ``.git`` entry or a ``pyproject.toml``."""
+    for anc in (path, *path.parents):
+        if (anc / ".git").exists() or (anc / "pyproject.toml").exists():
+            return anc
+    return None
+
+
 def _check_root(root: Path) -> None:
-    if any(part.lower() in FORBIDDEN_ROOT_NAMES for part in root.parts):
+    # The structure check is scoped to the repository the root belongs
+    # to: only the parts of the root *relative to its repo root* count.
+    # A checkout living under an unrelated src/, docs/ or tests/
+    # directory (~/src/<project> is the common case) must not refuse the
+    # project's own estates for its parent directories' names.
+    repo = _repo_ancestor(root)
+    if repo is not None and root != repo:
+        rel_parts = root.relative_to(repo).parts
+        if any(part.lower() in FORBIDDEN_ROOT_NAMES for part in rel_parts):
+            raise ValueError(f"not an estate root: {root}")
+    elif root.name.lower() in FORBIDDEN_ROOT_NAMES:
         raise ValueError(f"not an estate root: {root}")
     if root.is_dir():
         children = {p.name.lower() for p in root.iterdir() if p.is_dir()}

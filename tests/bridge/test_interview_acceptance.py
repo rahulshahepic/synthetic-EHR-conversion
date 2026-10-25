@@ -608,6 +608,80 @@ def test_generated_spec_files_are_denied_under_any_root(tmp_path):
     assert "estate manual" in svc.read_estate("manual.md")["text"]
 
 
+# ------------------------------ round four: resolution route + root scoping
+
+def test_resolution_declaring_profiler_kind_without_data_is_demoted():
+    """Round four, route 2: a dispute resolution that merely declares
+    source_kind='profiler-data', with no data observation behind it,
+    earns neither the kind nor a caught-by-profiling grade. The
+    invariant sits where the claim and resolution routes meet:
+    profiler-data requires subject-bound data confirmation."""
+    store = ClaimStore()
+    store.add(Claim("profile", "pivot_year", 50, "DATADICT.TXT v4.1",
+                    source_kind="dictionary"))
+    store.resolve("profile", "pivot_year", 30, "analyst guess",
+                  source_kind="profiler-data")
+    spec = specgen.generate_spec([], store, "acceptance").spec
+    rule = next(r for r in spec["rules"] if r["predicate"] == "pivot_year")
+    assert rule["provenance"]["kind"] != "profiler-data"
+    assert rule["data_confirmed"] is False
+    assert grade_entry({"id": "dict_pivot_year"}, spec)["verdict"] != \
+        "caught-by-profiling"
+
+
+def test_unconfirmed_profiler_kind_rule_earns_no_profiling_credit():
+    """The grader's half of the same invariant: even a spec that somehow
+    carries a profiler-data rule with data_confirmed False grades no
+    profiling credit for it."""
+    spec = {"rules": [{"subject": "profile", "predicate": "pivot_year",
+                       "value": 30, "data_confirmed": False,
+                       "provenance": {"kind": "profiler-data"}}],
+            "known_unknowns": []}
+    assert grade_entry({"id": "dict_pivot_year"}, spec)["verdict"] == "swallowed"
+
+
+def test_estate_under_unrelated_src_directory_is_allowed(tmp_path):
+    """Round four: the root check is scoped to the root's own repository.
+    A project checked out under an unrelated src/ directory (the
+    ~/src/<project> layout) is judged by the parts inside its own repo,
+    not by its parent directories' names."""
+    clone = tmp_path / "src" / "someclone"
+    estate = clone / "halcyon" / "estate"
+    estate.mkdir(parents=True)
+    (clone / "pyproject.toml").write_text("[project]\nname='x'\n")
+    (estate / "manual.md").write_text("estate manual")
+    svc = AnalystService({}, EstateReader([estate]))
+    assert "estate manual" in svc.read_estate("manual.md")["text"]
+
+
+def test_copied_estate_tree_without_repo_marker_is_allowed():
+    """The reviewer's literal repro: an estate tree copied under a src/
+    directory with no repository marker anywhere above it falls back to
+    the root's own name and children, and is allowed."""
+    import tempfile
+    with tempfile.TemporaryDirectory(dir="/tmp") as td:
+        estate = Path(td) / "src" / "clone" / "halcyon" / "estate"
+        estate.mkdir(parents=True)
+        (estate / "manual.md").write_text("estate manual")
+        svc = AnalystService({}, EstateReader([estate]))
+        assert "estate manual" in svc.read_estate("manual.md")["text"]
+
+
+def test_repo_scoped_roots_still_refuse_structure(tmp_path):
+    """With a repo marker present, structure inside that repo is still
+    refused, and an estate inside the same repo is still allowed."""
+    repo = tmp_path / "repo"
+    (repo / "src" / "bridge").mkdir(parents=True)
+    (repo / "pyproject.toml").write_text("[project]\nname='x'\n")
+    with pytest.raises(ValueError, match="not an estate root"):
+        EstateReader([repo / "src" / "bridge"])
+    estate = repo / "testbed" / "estate"
+    estate.mkdir(parents=True)
+    (estate / "manual.md").write_text("estate manual")
+    svc = AnalystService({}, EstateReader([estate]))
+    assert "estate manual" in svc.read_estate("manual.md")["text"]
+
+
 # ------------------------------------------------------------------- ledger
 
 def test_ledger_appends_are_unique_under_concurrent_writers(tmp_path):

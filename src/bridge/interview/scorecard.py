@@ -69,7 +69,10 @@ def _unknown_for(spec: dict[str, Any], subject: str, predicate: str) -> bool:
 def _caught_by(rule: dict[str, Any]) -> str:
     kind = rule.get("provenance", {}).get("kind")
     if kind == "profiler-data":
-        return "caught-by-profiling"
+        # Profiling credit requires data confirmation, not just the
+        # kind label: an unconfirmed profiler-data rule proves nothing
+        # was measured about this subject.
+        return "caught-by-profiling" if rule.get("data_confirmed") else "swallowed"
     if kind == "analyst":
         return "caught-by-analyst"
     # A dictionary-sourced rule that happens to match truth was not caught

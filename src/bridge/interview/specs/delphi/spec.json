@@ -1169,7 +1169,7 @@
    "kind": "fact",
    "predicate": "dictionary_status",
    "provenance": {
-    "kind": "profiler-data",
+    "kind": "dictionary",
     "ref": "profiler: version lines of DATADICT.TXT and LAYOUTS.DAT; dispute resolved via profiler: version lines of DATADICT.TXT and LAYOUTS.DAT"
    },
    "subject": "estate",
@@ -1217,7 +1217,7 @@
    "kind": "fact",
    "predicate": "convention",
    "provenance": {
-    "kind": "profiler-data",
+    "kind": "dictionary",
     "ref": "dispute resolved via profiler: LAYOUTS.DAT v5.0 field list"
    },
    "subject": "field:REG.TXT.FAX",

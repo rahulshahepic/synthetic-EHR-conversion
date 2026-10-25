@@ -107,7 +107,8 @@ def _is_data_observation(ref: str, observations: dict[str, dict[str, Any]]) -> b
     """A reference is profiler *data* evidence only if it names an actual
     profiler observation recorded in the ledger: an ``OBS-<digits>`` id
     whose event carries non-empty stats. Document quotes filed under
-    observation-like ids (``OBS-ESTATE-1``) fail this — deliberately."""
+    observation-like ids (``OBS-ESTATE-1``, ``OBS-VERSION``) fail this —
+    deliberately."""
     return bool(_OBS_DATA_ID.match(ref or "")) and bool(
         observations.get(ref, {}).get("stats"))
 
@@ -141,6 +142,21 @@ def _ref_confirms(ref: str, subject: str, predicate: str,
         (expected[0].lower(), expected[1].lower())
 
 
+def _conservative_kind(src: str) -> str:
+    """The kind a source earns with no profiler data behind it: a ledger
+    answer is an analyst; an estate document (dictionary, layouts,
+    interface notes) is dictionary evidence; anything else is an analyst
+    assertion. A source string that says "profiler" is a label, not
+    evidence, and earns nothing here."""
+    if src.startswith("ledger:"):
+        return "analyst"
+    low = src.lower()
+    if any(mark in low for mark in ("dictionary", "datadict", "estate",
+                                    "layouts", "interface notes")):
+        return "dictionary"
+    return "analyst"
+
+
 def _claim_kind(claim: Claim, observations: dict[str, dict[str, Any]]) -> str:
     """The provenance kind of one claim, from its structured provenance
     when recorded, else from a conservative reading of its source: an exact
@@ -164,13 +180,7 @@ def _claim_kind(claim: Claim, observations: dict[str, dict[str, Any]]) -> str:
         # Demote: fall through to the conservative source reading below.
     elif _is_data_observation(first, observations):
         return "profiler-data"
-    if src.startswith("ledger:"):
-        return "analyst"
-    low = src.lower()
-    if any(mark in low for mark in ("dictionary", "datadict", "estate",
-                                    "layouts", "interface notes")):
-        return "dictionary"
-    return "analyst"
+    return _conservative_kind(src)
 
 
 def _evidence_confirmed(refs: Any, subject: str, predicate: str,
@@ -194,8 +204,10 @@ def _rule_provenance(store: ClaimStore, subject: str, predicate: str, value: Any
                if _canon(c.value) == _canon(value)]
     kind: str | None = None
     confirmed = False
+    winning_src = ""
     if winners:
         kind = _claim_kind(winners[0], observations)
+        winning_src = winners[0].source or ""
         for c in winners:
             refs = list(c.evidence_refs)
             if c.source and c.source.split():
@@ -211,10 +223,19 @@ def _rule_provenance(store: ClaimStore, subject: str, predicate: str, value: Any
         if _evidence_confirmed(refs, subject, predicate, observations):
             confirmed = True
         if kind is None:
+            winning_src = dispute.resolution_source or ""
             kind = dispute.resolution_source_kind or (
                 "profiler-data" if _evidence_confirmed(
                     refs, subject, predicate, observations) else "analyst")
-    return kind or "analyst", confirmed, store.provenance(subject, predicate)
+    kind = kind or "analyst"
+    if kind == "profiler-data" and not confirmed:
+        # The meeting point of the claim and resolution routes: the
+        # profiler-data kind is earned only by subject-bound data
+        # confirmation. A claim tied to data about some other subject,
+        # or a resolution merely declaring the kind, demotes to the
+        # conservative reading of the winning source.
+        kind = _conservative_kind(winning_src)
+    return kind, confirmed, store.provenance(subject, predicate)
 
 
 def _with_extra_claims(store: ClaimStore, extra: list[Claim]) -> ClaimStore:
