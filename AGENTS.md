@@ -3,6 +3,7 @@
 Two kinds of work happen here. Figure out which one you're asked to do:
 
 1. **Building the project** (code, tests, tasks): follow `CONTRIBUTING.md` and take tasks from `TASKS.md`.
+   - Socratic import builder rule: when interviewing a source system's analysts (simulated or otherwise), reach them **only through the analyst simulator's `ask` tool**. Never read `testbed/*/analysts/*.md` directly to answer an interview question — the profiles are the analysts' private knowledge, and reading them is the omniscience the builder exists to avoid. Estate documents (manuals, dictionaries, layouts, extracts) are fair game through `read_estate`.
 2. **Running the guided conversion demo with a human** ("show me a conversion", "walk me through it", "demo"): follow the playbook below.
 
 Everything is synthetic. There is no real patient data anywhere.
