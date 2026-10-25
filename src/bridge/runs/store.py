@@ -27,6 +27,9 @@ CREATE INDEX IF NOT EXISTS ix_records_batch ON records(run_id, batch_id);
 CREATE INDEX IF NOT EXISTS ix_records_blocker_key
   ON records(run_id, (rtype || '/' || source_key), status);
 CREATE INDEX IF NOT EXISTS ix_records_waiting_on ON records(run_id, blocked_by) WHERE status='blocked';
+-- Deterministic duplicate resolution: find a patient's earlier records of a type that are still unresolved.
+CREATE INDEX IF NOT EXISTS ix_records_unresolved_pat
+  ON records(run_id, rtype, json_extract(source, '$.PAT_ID'), seq) WHERE status IN ('held','blocked');
 CREATE TABLE IF NOT EXISTS xref (run_id TEXT, kind TEXT, key TEXT, value TEXT, PRIMARY KEY (run_id, kind, key));
 CREATE TABLE IF NOT EXISTS batches (
   id TEXT PRIMARY KEY, run_id TEXT, rtype TEXT, seq INTEGER, nimbus_batch_id TEXT, status TEXT,
@@ -95,6 +98,7 @@ class RunStore:
         self.db.executescript(SCHEMA)
         # Bumped whenever this connection rewrites an existing batch's status (see monitor baselines).
         self.batch_epoch = 0
+        self._pat_ids: dict[tuple[str, str], list[str]] = {}  # patient_pat_ids cache; cleared on Patient merges
 
     def tx(self):
         return _Tx(self.db)
@@ -178,22 +182,52 @@ class RunStore:
                    -- first '/' lets SQLite use the primary key instead of scanning the run per blocked row.
                    AND b.rtype=substr(records.blocked_by, 1, instr(records.blocked_by, '/') - 1)
                    AND b.source_key=substr(records.blocked_by, instr(records.blocked_by, '/') + 1)
-                   AND b.status IN ('loaded','superseded'))""", (now(), run_id))
+                   AND (b.status IN ('loaded','superseded')
+                        OR (b.status IN ('dropped','rejected') AND b.rtype=records.rtype)))""", (now(), run_id))
         return cursor.rowcount
+
+    def earliest_unresolved(self, run_id: str, rtype: str, pat_ids: list[str], before_seq: int) -> str | None:
+        """Earliest held/blocked record of `rtype` for any of these source PAT_IDs, staged before `before_seq`."""
+        if not pat_ids:
+            return None
+        row = self.db.execute(
+            f"""SELECT source_key FROM records INDEXED BY ix_records_unresolved_pat
+                WHERE run_id=? AND rtype=? AND status IN ('held','blocked')
+                  AND json_extract(source, '$.PAT_ID') IN ({','.join('?' * len(pat_ids))}) AND seq<?
+                ORDER BY seq LIMIT 1""", (run_id, rtype, *pat_ids, before_seq)).fetchone()
+        return row[0] if row else None
+
+    def patient_pat_ids(self, run_id: str, pkey: str) -> list[str]:
+        """Source PAT_IDs that resolve to Nimbus patient `pkey` (its own charts plus patients merged into it)."""
+        cached = self._pat_ids.get((run_id, pkey))
+        if cached is not None:
+            return cached
+        keys, out = [pkey], []
+        keys += [k.split("/", 1)[1] for (k,) in self.db.execute(
+            "SELECT key FROM xref WHERE run_id=? AND kind='superseded' AND key LIKE 'Patient/%' AND value=?",
+            (run_id, _j(pkey)))]
+        for k in keys:
+            src = self.db.execute("SELECT source FROM records WHERE run_id=? AND rtype='Patient' AND source_key=?",
+                                  (run_id, k)).fetchone()
+            if src and src[0]:
+                out += [m["PAT_ID"] for m in json.loads(src[0]).get("members", [])]
+        self._pat_ids[(run_id, pkey)] = out
+        return out
 
     def work_queue(self, run_id: str, rtype: str, limit: int = -1, *, full: bool = True) -> list[dict[str, Any]]:
         """Ready records only; dependency transitions release blocked rows into pending.
 
         full=False returns just what mapping reads (rtype, source_key, status, note, decoded source).
         """
-        cols = "*" if full else "rtype, source_key, status, note, source"
+        cols = "*" if full else "rtype, source_key, status, note, source, seq"
         rows = self.db.execute(
             f"""SELECT {cols} FROM records INDEXED BY ix_records_pending_seq
                WHERE run_id=? AND rtype=? AND status='pending'
                ORDER BY seq LIMIT ?""", (run_id, rtype, limit))
         if full:
             return [self._rec(r) for r in rows]
-        return [{"rtype": r[0], "source_key": r[1], "status": r[2], "note": r[3], "source": _l(r[4])} for r in rows]
+        return [{"rtype": r[0], "source_key": r[1], "status": r[2], "note": r[3], "source": _l(r[4]), "seq": r[5]}
+                for r in rows]
 
     def update_record(self, run_id: str, rtype: str, key: str, **fields: Any) -> None:
         for k in ("source", "mapped", "annotations", "issues"):
@@ -209,12 +243,19 @@ class RunStore:
                 """UPDATE records SET status='pending', blocked_by=NULL, note=?, updated_at=?
                    WHERE run_id=? AND blocked_by=? AND status='blocked'""",
                 (f"released by {rtype}/{key}", now(), run_id, f"{rtype}/{key}"))
+        elif fields.get("status") in (DROPPED, REJECTED):
+            # Same-type waiters (duplicate ordering) must not wait forever on a record that will never load.
+            self.db.execute(
+                """UPDATE records SET status='pending', blocked_by=NULL, note=?, updated_at=?
+                   WHERE run_id=? AND rtype=? AND blocked_by=? AND status='blocked'""",
+                (f"released by {rtype}/{key}", now(), run_id, rtype, f"{rtype}/{key}"))
 
     def update_records(self, run_id: str, rtype: str, rows: list[tuple[str, dict[str, Any]]]) -> None:
         """Bulk update_record: one executemany per distinct column set, then one dependent wakeup pass."""
         stamp = now()
         groups: dict[tuple[str, ...], list[tuple[Any, ...]]] = {}
         released: list[str] = []
+        finished: list[str] = []  # dropped/rejected: wakes same-type waiters only
         for key, fields in rows:
             fields = dict(fields)
             for k in ("source", "mapped", "annotations", "issues"):
@@ -224,16 +265,22 @@ class RunStore:
             groups.setdefault(tuple(fields), []).append((*fields.values(), run_id, rtype, key))
             if fields.get("status") in (LOADED, SUPERSEDED):
                 released.append(key)
+            elif fields.get("status") in (DROPPED, REJECTED):
+                finished.append(key)
         for cols, params in groups.items():
             self.db.executemany(f"UPDATE records SET {', '.join(f'{k}=?' for k in cols)}"
                                 " WHERE run_id=? AND rtype=? AND source_key=?", params)
         # Same wakeup as update_record; skipped outright when nothing in the run is blocked.
-        if released and self.db.execute(
+        if (released or finished) and self.db.execute(
                 "SELECT 1 FROM records WHERE run_id=? AND status='blocked' LIMIT 1", (run_id,)).fetchone():
             self.db.executemany(
                 """UPDATE records SET status='pending', blocked_by=NULL, note=?, updated_at=?
                    WHERE run_id=? AND blocked_by=? AND status='blocked'""",
                 [(f"released by {rtype}/{key}", stamp, run_id, f"{rtype}/{key}") for key in released])
+            self.db.executemany(
+                """UPDATE records SET status='pending', blocked_by=NULL, note=?, updated_at=?
+                   WHERE run_id=? AND rtype=? AND blocked_by=? AND status='blocked'""",
+                [(f"released by {rtype}/{key}", stamp, run_id, rtype, f"{rtype}/{key}") for key in finished])
 
     def status_counts(self, run_id: str) -> dict[str, dict[str, int]]:
         out: dict[str, dict[str, int]] = {}
@@ -248,6 +295,8 @@ class RunStore:
 
     # ---------------------------------------------------------------- xref
     def xset(self, run_id: str, kind: str, key: str, value: Any) -> None:
+        if kind == "superseded" and key.startswith("Patient/"):
+            self._pat_ids.clear()
         self.db.execute("INSERT OR REPLACE INTO xref VALUES (?,?,?,?)", (run_id, kind, key, _j(value)))
 
     def xget(self, run_id: str, kind: str, key: str, default: Any = None) -> Any:

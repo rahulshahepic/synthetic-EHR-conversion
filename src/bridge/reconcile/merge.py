@@ -53,6 +53,7 @@ def undo_merge_bookkeeping(store: S.RunStore, run_id: str, batch_id: str) -> Non
     store.update_record(run_id, "Patient", undo["duplicate"], status=S.LOADED, note="late merge reverted",
                         target_id=undo["duplicate_target_id"], batch_id=undo["duplicate_batch"])
     store.db.execute("DELETE FROM xref WHERE run_id=? AND kind='superseded' AND key=?", (run_id, f"Patient/{undo['duplicate']}"))
+    store._pat_ids.clear()  # patient_pat_ids cache: the merge link is gone
     for m in undo["members"]:
         store.xset(run_id, "pat", m, undo["duplicate"])
     store.db.execute("DELETE FROM xref WHERE run_id=? AND kind='merge_batch' AND key=?", (run_id, batch_id))
