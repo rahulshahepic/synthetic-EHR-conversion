@@ -9,7 +9,7 @@ for try in {1..10}; do
   remote_ref="$(git ls-remote --heads origin gh-pages)"
   if [[ -n "$remote_ref" ]]; then
     git fetch origin gh-pages
-    git -C "$archive" checkout -B gh-pages FETCH_HEAD
+    git -C "$archive" checkout -B gh-pages refs/remotes/origin/gh-pages
   else
     git -C "$archive" checkout --detach HEAD
     git -C "$archive" branch -D gh-pages 2>/dev/null || true
