@@ -13,6 +13,7 @@ dependencies = [
   "uvicorn>=0.27",
   "httpx>=0.27",
   "mcp>=2.0",
+  "orjson>=3.10",  # faster JSON encoding (exact results guaranteed by bridge/jsonx.py)
 ]
 
 [project.optional-dependencies]

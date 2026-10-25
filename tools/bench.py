@@ -2,6 +2,7 @@
 
 Examples:
   python tools/bench.py --patients 5000 --seed 42 --profile-out /tmp/bridge.prof
+  python tools/bench.py --patients 1000 --target embedded   # Nimbus in-process (no import overlap)
   python -m pstats /tmp/bridge.prof
 
 Times are comparable only with the same hardware, seed, patient count and revision.
@@ -10,6 +11,7 @@ The --profile-out option runs cProfile around the actual conversion.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import cProfile
 import json
 import pstats
@@ -19,7 +21,12 @@ import sys
 import threading
 import sqlite3
 import resource
+import socket
+import subprocess
 from pathlib import Path
+from typing import Iterator
+
+import httpx
 
 from bridge.load.client import connect
 from bridge.runs.runner import Runner
@@ -71,10 +78,46 @@ def monitor_database(path: Path, stop: threading.Event, started: float) -> None:
             progress("heartbeat", started, note=type(exc).__name__)
 
 
-def benchmark(patients: int = 5000, seed: int = 42, profile_out: str | None = None, *, without_index: bool = False, first_pass_only: bool = False) -> dict:
+@contextlib.contextmanager
+def nimbus_server(db: Path, log: Path) -> Iterator[str]:
+    """Run Nimbus as its own process (as in production) and yield its base URL."""
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]
+    with open(log, "w") as out:
+        proc = subprocess.Popen([sys.executable, "-m", "nimbus", "serve", "--db", str(db), "--port", str(port),
+                                 "--no-access-log"], stdout=out, stderr=subprocess.STDOUT)
+        url = f"http://127.0.0.1:{port}"
+        try:
+            deadline = time.monotonic() + 60
+            while True:
+                if proc.poll() is not None:
+                    raise RuntimeError(f"Nimbus server exited early: {log.read_text()[-2000:]}")
+                try:
+                    httpx.get(f"{url}/api/v1/Patient/$count", timeout=1).raise_for_status()
+                    break
+                except httpx.HTTPError:
+                    if time.monotonic() > deadline:
+                        raise
+                    time.sleep(0.1)
+            yield url
+        finally:
+            proc.terminate()
+            try:
+                proc.wait(timeout=30)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+
+
+def benchmark(patients: int = 5000, seed: int = 42, profile_out: str | None = None, *, without_index: bool = False,
+              first_pass_only: bool = False, target_mode: str = "process") -> dict:
+    if target_mode not in ("process", "embedded"):
+        raise ValueError("target_mode must be 'process' or 'embedded'")
     if patients < 1:
         raise ValueError("patients must be positive")
-    with tempfile.TemporaryDirectory(prefix="bridge-bench-") as scratch:
+    # Servers are entered after the scratch dir, so they stop before it is removed (also on errors).
+    with contextlib.ExitStack() as servers:
+        scratch = servers.enter_context(tempfile.TemporaryDirectory(prefix="bridge-bench-"))
         root = Path(scratch)
         export = root / "export"
         began = time.perf_counter()
@@ -83,7 +126,10 @@ def benchmark(patients: int = 5000, seed: int = 42, profile_out: str | None = No
         progress("generation_completed", began, patients=patients)
         generation_seconds = time.perf_counter() - began
         db = root / "run.db"
-        target = f"embedded:{root / 'nimbus.db'}"
+        if target_mode == "process":  # Nimbus in its own process: imports overlap Bridge's mapping
+            target = servers.enter_context(nimbus_server(root / "nimbus.db", root / "nimbus.log"))
+        else:
+            target = f"embedded:{root / 'nimbus.db'}"
         store = RunStore(str(db))
         if without_index:
             store.db.execute("DROP INDEX IF EXISTS ix_records_blocker_key")
@@ -173,6 +219,7 @@ def benchmark(patients: int = 5000, seed: int = 42, profile_out: str | None = No
             "verification": verification,
             "peak_rss_mb": round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024, 1),
             "seed": seed, "patients": patients, "without_index": without_index, "first_pass_only": first_pass_only,
+            "target_mode": target_mode,
             "generation_seconds": round(generation_seconds, 3),
             "conversion_seconds": round(conversion_seconds, 3),
             "records_by_status": counts,
@@ -188,8 +235,11 @@ def main() -> None:
     parser.add_argument("--profile-out", default=None)
     parser.add_argument("--without-index", action="store_true", help="drop blocker index for same-revision control")
     parser.add_argument("--first-pass-only", action="store_true", help="profile initial 5k processing only; not a completed conversion")
+    parser.add_argument("--target", choices=("process", "embedded"), default="process",
+                        help="run Nimbus as a separate server process (default) or in-process")
     args = parser.parse_args()
-    print(json.dumps(benchmark(args.patients, args.seed, args.profile_out, without_index=args.without_index, first_pass_only=args.first_pass_only), indent=2))
+    print(json.dumps(benchmark(args.patients, args.seed, args.profile_out, without_index=args.without_index,
+                               first_pass_only=args.first_pass_only, target_mode=args.target), indent=2))
 
 
 if __name__ == "__main__":

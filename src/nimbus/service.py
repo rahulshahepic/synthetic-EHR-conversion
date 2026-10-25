@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from . import models as m
+from . import jsonx
 from .validation import Issue, iter_refs, parse
 
 SCHEMA = """
@@ -220,7 +221,7 @@ class NimbusService:
             self._record_history(rt, rid, batch["batchId"], "update", existing, now)
             self._db.execute(
                 "UPDATE resources SET data=?, version=version+1, batch_id=?, updated_at=? WHERE rtype=? AND id=?",
-                (json.dumps(data), batch["batchId"], now, rt, rid),
+                (jsonx.dumps(data), batch["batchId"], now, rt, rid),
             )
         else:
             rid = _new_id()
@@ -228,7 +229,7 @@ class NimbusService:
             self._db.execute(
                 "INSERT INTO resources (rtype, id, source_key, version, data, batch_id, created_at, updated_at)"
                 " VALUES (?,?,?,?,?,?,?,?)",
-                (rt, rid, sk, 1, json.dumps(data), batch["batchId"], now, now),
+                (rt, rid, sk, 1, jsonx.dumps(data), batch["batchId"], now, now),
             )
         self._index(rt, rid, data, model=model, existing=existing is not None, refs=refs)
         if ref_cache is not None:
@@ -486,7 +487,7 @@ class NimbusService:
         self._db.execute(
             "UPDATE resources SET data=?, version=version+1, batch_id=COALESCE(?, batch_id), updated_at=?"
             " WHERE rtype=? AND id=?",
-            (json.dumps(data), batch_id, _now(), rt, row["id"]),
+            (jsonx.dumps(data), batch_id, _now(), rt, row["id"]),
         )
         self._index(rt, row["id"], data)
 

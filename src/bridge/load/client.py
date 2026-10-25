@@ -14,6 +14,8 @@ from typing import Any, Iterator
 
 import httpx
 
+from .. import jsonx
+
 MAX_PER_CALL = 500
 
 
@@ -25,8 +27,11 @@ class TargetError(Exception):
 
 
 class NimbusClient:
-    def __init__(self, http: httpx.Client):
+    def __init__(self, http: httpx.Client, *, out_of_process: bool = True):
         self.http = http
+        # True when Nimbus runs in another process, so importing can overlap Bridge's own work. An embedded
+        # Nimbus shares this interpreter (and its GIL): overlapping would only add contention.
+        self.out_of_process = out_of_process
 
     def _req(self, method: str, url: str, **kw: Any) -> Any:
         r = self.http.request(method, url, **kw)
@@ -42,8 +47,9 @@ class NimbusClient:
     def submit(self, batch_id: str, records: list[dict[str, Any]]) -> list[dict[str, Any]]:
         out = []
         for i in range(0, len(records), MAX_PER_CALL):
-            out += self._req("POST", f"/api/v1/import/batches/{batch_id}/records",
-                             json={"records": records[i:i + MAX_PER_CALL]})["results"]
+            body = jsonx.dumps({"records": records[i:i + MAX_PER_CALL]})  # the bulk of all request bytes
+            out += self._req("POST", f"/api/v1/import/batches/{batch_id}/records", content=body.encode(),
+                             headers={"content-type": "application/json"})["results"]
         return out
 
     def close(self, batch_id: str) -> dict[str, Any]:
@@ -105,7 +111,7 @@ def connect(target: str) -> NimbusClient:
         # Reuse one AnyIO portal for all embedded requests.
         http = TestClient(api.create_app(service.NimbusService(db)))
         http.__enter__()
-        client = NimbusClient(http)
+        client = NimbusClient(http, out_of_process=False)
         weakref.finalize(client, http.__exit__, None, None, None)
         return client
     return NimbusClient(httpx.Client(base_url=target, timeout=60))
