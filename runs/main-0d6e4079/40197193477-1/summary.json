@@ -1,0 +1,110 @@
+{
+ "cards": [
+  [
+   "300",
+   "patients converted",
+   ""
+  ],
+  [
+   "30,131",
+   "records loaded into Nimbus",
+   ""
+  ],
+  [
+   "0.980",
+   "mean fidelity (1.0 = lossless)",
+   ""
+  ],
+  [
+   "24",
+   "human decisions (grouped)",
+   ""
+  ],
+  [
+   "3",
+   "safety pauses",
+   ""
+  ],
+  [
+   "Passed",
+   "end-of-run checks: counts, read-back, 4 clinical sentinels",
+   "good"
+  ],
+  [
+   "GO",
+   "go-live readiness",
+   "good"
+  ]
+ ],
+ "fidelity": [
+  [
+   "AllergyIntolerance",
+   0.8474
+  ],
+  [
+   "DocumentReference",
+   0.8849
+  ],
+  [
+   "MedicationRequest",
+   0.9458
+  ],
+  [
+   "Patient",
+   0.9566
+  ],
+  [
+   "Organization",
+   0.9569
+  ],
+  [
+   "Practitioner",
+   0.9573
+  ],
+  [
+   "Condition",
+   0.9611
+  ],
+  [
+   "Location",
+   0.9667
+  ],
+  [
+   "Observation",
+   0.9822
+  ],
+  [
+   "Appointment",
+   0.9879
+  ],
+  [
+   "Coverage",
+   0.993
+  ],
+  [
+   "Encounter",
+   0.9942
+  ],
+  [
+   "Immunization",
+   0.9976
+  ],
+  [
+   "Payer",
+   1.0
+  ],
+  [
+   "Plan",
+   1.0
+  ],
+  [
+   "ChargeItem",
+   1.0
+  ],
+  [
+   "UserAccount",
+   1.0
+  ]
+ ],
+ "built": "2026-10-25 13:21 UTC"
+}
