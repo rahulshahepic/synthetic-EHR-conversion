@@ -70,6 +70,13 @@ def _ymd_ok(mm: int, dd: int) -> bool:
     return 1 <= mm <= 12 and 1 <= dd <= 31
 
 
+def _is_ascii_digits(v: str) -> bool:
+    """True for ASCII digit strings only. ``str.isdigit()`` is also true
+    for characters like '²' (latin-1 superscripts) that ``int()`` then
+    rejects — digit tests in this module must be ASCII-safe."""
+    return v.isascii() and v.isdigit()
+
+
 def _shape_rates(values: list[str]) -> dict[str, float]:
     """Fraction of values matching each candidate shape. A value may match
     several shapes; that ambiguity is exactly what the interviewer is for."""
@@ -78,7 +85,7 @@ def _shape_rates(values: list[str]) -> dict[str, float]:
     counts = {"YYMMDD": 0, "YYYYMMDD": 0, "JulianYYDDD": 0, "JulianYYYYDDD": 0,
               "HHMM": 0, "minutes_since_midnight": 0, "integer": 0, "decimal": 0}
     for v in values:
-        if not v.isdigit():
+        if not _is_ascii_digits(v):
             continue
         n = len(v)
         if n == 6 and _ymd_ok(int(v[2:4]), int(v[4:6])):
@@ -91,7 +98,7 @@ def _shape_rates(values: list[str]) -> dict[str, float]:
             counts["JulianYYYYDDD"] += 1
         if n == 4 and int(v[:2]) <= 23 and int(v[2:]) <= 59:
             counts["HHMM"] += 1
-        if v.lstrip("0").isdigit() and int(v) <= 1439:
+        if int(v) <= 1439:  # "0000" is midnight: it counts
             counts["minutes_since_midnight"] += 1
         counts["integer"] += 1
     decimals = sum(1 for v in values if re.fullmatch(r"[+-]?\d+\.\d+", v))
@@ -101,6 +108,20 @@ def _shape_rates(values: list[str]) -> dict[str, float]:
 
 
 _FLAG_RE = re.compile(r"^(?P<num>[<>]?\d+(?:\.\d+)?)(?P<flag>[A-Z]{1,2})$")
+_NUMERIC_LIKE_RE = re.compile(r"^[<>]?\d+(?:\.\d+)?[A-Z]{0,2}$")
+
+
+def _numeric_like(v: str) -> bool:
+    """A value is numeric-like if it is a plain number, a comparator number
+    (``>600``), or a number with a flag suffix (``12.4H``). Anything else —
+    ``NEG``, ``TRACE``, free text — is a non-numeric value."""
+    if _NUMERIC_LIKE_RE.match(v):
+        return True
+    try:
+        float(v)
+        return True
+    except ValueError:
+        return False
 
 
 def _field_stats(values: list[str], width: int | None) -> dict[str, Any]:
@@ -128,6 +149,10 @@ def _field_stats(values: list[str], width: int | None) -> dict[str, Any]:
     if flags:
         stats["flag_suffix_rate"] = round(len(flags) / len(nonblank), 4)
         stats["flag_values"] = sorted(set(flags))[:MAX_SAMPLES]
+    non_numeric = [v for v in nonblank if not _numeric_like(v)]
+    if non_numeric:
+        stats["non_numeric_rate"] = round(len(non_numeric) / len(nonblank), 4)
+        stats["non_numeric_samples"] = sorted(set(non_numeric))[:MAX_SAMPLES]
     if width:
         stats["full_width_rate"] = round(
             sum(1 for v in nonblank if len(v) == width) / len(nonblank), 4)
@@ -157,30 +182,50 @@ def profile_export(export_dir: str | Path,
             continue
         stem, suffix = path.stem.upper(), path.suffix.lower()
         if suffix == ".csv":
+            rows: list[dict[str, str]] = []
+            ragged = 0
             with path.open(newline="", encoding="utf-8", errors="replace") as f:
-                rows = [{k: (v or "").strip() for k, v in row.items()}
-                        for row in csv.DictReader(f)]
+                for raw_row in csv.DictReader(f):
+                    # A ragged row puts surplus cells under the None key (a
+                    # list) and missing cells as None values. Neither may
+                    # crash profiling: surplus cells are dropped from the
+                    # field view, missing cells read as blank, and the row
+                    # is counted in the file's ragged_rows observation.
+                    extras = raw_row.pop(None, None)
+                    if extras is not None or any(v is None for v in raw_row.values()):
+                        ragged += 1
+                    rows.append({k: (v or "").strip() for k, v in raw_row.items()})
             widths = {name: None for name in (rows[0].keys() if rows else [])}
             files[path.name] = {"records": len(rows), "record_types": {"": len(rows)},
+                                "ragged_rows": ragged,
                                 "fields": _profile_rows(rows, widths)}
         elif layouts and stem in layouts:
             per_rt = layouts[stem]
             by_rt: dict[str, list[dict[str, str]]] = {}
             widths: dict[str, int] = {}
+            unknown: dict[str, int] = {}
             for raw in path.read_bytes().decode("latin-1").splitlines():
                 if not raw.strip():
                     continue
                 rt = raw[:2].strip()
-                fields = per_rt.get(rt) or next(iter(per_rt.values()))
+                fields = per_rt.get(rt)
+                if fields is None:
+                    # An unrecognized record type is an observation, never
+                    # a row silently parsed with the first layout.
+                    unknown[rt] = unknown.get(rt, 0) + 1
+                    continue
                 row = {}
                 for fl in fields:
                     row[fl.name] = raw[fl.start:fl.start + fl.width].strip()
                     widths[fl.name] = fl.width
                 by_rt.setdefault(rt, []).append(row)
             all_rows = [r for rows in by_rt.values() for r in rows]
-            files[path.name] = {"records": len(all_rows),
-                                "record_types": {rt: len(rs) for rt, rs in sorted(by_rt.items())},
-                                "fields": _profile_rows(all_rows, widths)}
+            entry: dict[str, Any] = {"records": len(all_rows),
+                                     "record_types": {rt: len(rs) for rt, rs in sorted(by_rt.items())},
+                                     "fields": _profile_rows(all_rows, widths)}
+            if unknown:
+                entry["unknown_record_types"] = unknown
+            files[path.name] = entry
     observations: list[dict[str, Any]] = []
     n = 0
     for fname in sorted(files):
@@ -199,3 +244,35 @@ def observation_for(report: dict[str, Any], file: str, field: str) -> dict[str, 
         if obs["file"] == file and obs["field"] == field:
             return obs
     return None
+
+
+def value_shape_claims(report: dict[str, Any], min_rate: float = 0.01,
+                       max_rate: float = 0.5) -> list:
+    """Profiler-side value-shape claims, from the report's own statistics.
+
+    A predominantly numeric field carrying a material minority of
+    non-numeric text is exactly where an analyst belief like "non-numeric
+    values are bench errors, exclude them" can be wrong without anyone
+    noticing: the belief enters the claim store unopposed and the spec
+    adopts it. For every such field this emits a claim — sourced to the
+    field's profiler observation — stating the observed mix, so the belief
+    collides with data and opens a dispute instead of being swallowed.
+    Purely or mostly textual fields (names, note text, phone numbers)
+    emit nothing: there is no numeric convention for them to dispute.
+    """
+    from .claims import Claim
+    out = []
+    for obs in report.get("observations", []):
+        stats = obs.get("stats") or {}
+        rate = stats.get("non_numeric_rate") or 0.0
+        if rate < min_rate or rate > max_rate:
+            continue
+        samples = stats.get("non_numeric_samples") or []
+        value = (f"mixed numeric and non-numeric values: {rate:.1%} of values are "
+                 f"non-numeric text"
+                 + (f" (samples: {', '.join(samples)})" if samples else "")
+                 + "; non-numeric values are present in the data and carried as text")
+        out.append(Claim(subject=f"field:{obs['file']}.{obs['field']}",
+                         predicate="convention", value=value, source=obs["id"],
+                         source_kind="profiler-data", evidence_refs=(obs["id"],)))
+    return out

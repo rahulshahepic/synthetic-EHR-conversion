@@ -18,7 +18,7 @@ grading ledger (16 entries: 9 dictionary discrepancies, 5 analyst beliefs,
 | dict_appt_status_incomplete | routed-to-runtime-question | field:APPT.TXT.STATUS convention is an unresolved dispute in the spec |
 | dict_registration_account_claim | caught-by-analyst | spec carries the true position via analyst |
 | belief_lab_account_is_identity | caught-by-analyst | spec carries the true position via analyst |
-| belief_lab_nonnumeric_bench_error | swallowed | spec adopted the false position ('excluded') |
+| belief_lab_nonnumeric_bench_error | routed-to-runtime-question | field:LAB.TXT.RESULT convention is an unresolved dispute in the spec |
 | belief_registration_merges_routine | routed-to-runtime-question | identity merges route to a human reconciliation question by policy, whatever any analyst claimed |
 | belief_pharmacy_misc_meds_skippable | caught-by-analyst | spec carries the true position via analyst |
 | belief_systems_dictionary_current | caught-by-profiling | spec carries the true position via profiler-data |
@@ -29,16 +29,19 @@ grading ledger (16 entries: 9 dictionary discrepancies, 5 analyst beliefs,
 
 - caught-by-profiling: 4
 - caught-by-analyst: 8
-- routed-to-runtime-question: 3
-- swallowed: 1
+- routed-to-runtime-question: 4
+- swallowed: 0
 
-The one swallow: the lab analyst's position that non-numeric results are bench
-errors was adopted into the RESULT convention unchallenged — the profiler had
-observed word results in the data (OBS-0060 samples), but no claim contested
-the analyst, so the spec carries his position. That is the failure mode this
-scorecard exists to make visible: a confident analyst plus an unasked question.
+History: this scorecard originally showed one swallow — the lab analyst's
+position that non-numeric results are bench errors was adopted into the
+RESULT convention unchallenged, because no claim contested it. The PR #42
+review fixes closed that hole: the profiler now emits value-shape claims
+from its own statistics (OBS-0060: 10.8% of RESULT values are non-numeric
+text — NEG, POS, TRACE, …), the claim collides with the analyst's belief,
+and the dispute routes to a runtime question instead of a silent adoption.
 
-Three entries route to runtime questions instead of answers: the undocumented
+Four entries route to runtime questions instead of answers: the undocumented
 appointment status R (dictionary and data disagree, nobody could settle it),
-and both identity entries — merges are human decisions by policy, whatever
-any analyst claimed about them.
+the lab bench-error belief (profiler data disputes it), and both identity
+entries — merges are human decisions by policy, whatever any analyst
+claimed about them.

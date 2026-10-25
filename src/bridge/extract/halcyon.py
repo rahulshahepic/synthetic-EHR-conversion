@@ -98,7 +98,13 @@ def stage_all(store: RunStore, run_id: str, export: HalcyonExport, profile: Any)
                             "addr": "^".join(g(f"PID-11.{i}") for i in range(1, 6)), "phone": g("PID-13")}
 
     # --- identity
-    clusters, review, reasons = identity.resolve(pats, merges)
+    # A generated profile may state the merge policy
+    # (MERGE_POLICY="route_to_reconciliation"): then staging must not
+    # auto-group charts at all — deterministic and A40 links alike become
+    # review candidates for a human. The hand-written control profile
+    # carries no MERGE_POLICY and keeps the automatic behavior.
+    auto_merge = getattr(profile, "MERGE_POLICY", None) != "route_to_reconciliation"
+    clusters, review, reasons = identity.resolve(pats, merges, auto_merge=auto_merge)
     root_of = {m: root for root, members in clusters.items() for m in members}
     allergies = export.table("ALLERGY", "ALG_ID")
     real_allergy_pats = {a["PAT_ID"] for a in allergies if a["ALLERGEN"].strip().upper() not in ("NKA", "NKDA")}

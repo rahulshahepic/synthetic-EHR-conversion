@@ -13,7 +13,9 @@ is append-only: ``append_event`` never rewrites earlier lines.
 """
 from __future__ import annotations
 
+import fcntl
 import json
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -49,13 +51,25 @@ def read_events(path: str | Path) -> list[LedgerEvent]:
 
 
 def append_event(path: str | Path, type: str, payload: dict[str, Any]) -> LedgerEvent:
-    """Append one event and return it. Earlier lines are never touched."""
+    """Append one event and return it. Earlier lines are never touched.
+
+    The next id is found by counting raw lines under an exclusive file
+    lock — no full JSON re-parse of the ledger per append, and two writers
+    appending concurrently cannot interleave lines or reuse an id.
+    """
     p = Path(path)
-    existing = read_events(p)
-    ev = LedgerEvent(id=event_id(len(existing) + 1), type=type, payload=payload)
     p.parent.mkdir(parents=True, exist_ok=True)
-    with p.open("a", encoding="utf-8") as f:
-        f.write(ev.to_json() + "\n")
+    fd = os.open(p, os.O_RDWR | os.O_CREAT | os.O_APPEND, 0o644)
+    with os.fdopen(fd, "a+", encoding="utf-8") as f:
+        fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+        try:
+            f.seek(0)
+            n = sum(1 for line in f if line.strip())
+            ev = LedgerEvent(id=event_id(n + 1), type=type, payload=payload)
+            f.write(ev.to_json() + "\n")
+            f.flush()
+        finally:
+            fcntl.flock(f.fileno(), fcntl.LOCK_UN)
     return ev
 
 

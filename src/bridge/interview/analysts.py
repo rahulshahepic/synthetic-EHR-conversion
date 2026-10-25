@@ -20,8 +20,18 @@ from typing import Any
 # grading-ledger directory name is assembled at runtime: the boundary test
 # scans bridge sources for that literal to prove bridge never touches it,
 # and the firewall that enforces the rule should not trip the scanner.
-DENY_PARTS = {"answer" + "_key", "analysts"}
+# Matching is case-insensitive: on a case-insensitive filesystem a request
+# for "ESTATE_DISCREPANCIES.JSON" or an "Answer_Key" part names the same
+# file, so the deny checks must fold case on both the requested path and
+# the resolved candidate.
+DENY_PARTS = {"answer" + "_key", "analysts", "grading"}
+DENY_NAMES = {"estate_discrepancies.json"}
 ALLOW_SUFFIXES = {".md", ".txt", ".json", ".dat", ".csv"}
+
+
+def _denied(parts: Any) -> bool:
+    return any(part.lower() in DENY_PARTS or part.lower() in DENY_NAMES
+               for part in parts)
 
 
 def _norm(question: str) -> str:
@@ -67,15 +77,15 @@ class EstateReader:
 
     def read(self, document: str) -> str:
         rel = Path(document)
-        if rel.is_absolute() or any(part in DENY_PARTS for part in rel.parts):
+        if rel.is_absolute() or _denied(rel.parts):
             raise PermissionError(f"not an estate document: {document}")
         if rel.suffix.lower() not in ALLOW_SUFFIXES:
             raise PermissionError(f"not an estate document type: {document}")
         for root in self.roots:
             candidate = (root / rel).resolve()
             if candidate.is_relative_to(root) and candidate.is_file():
-                if any(part in DENY_PARTS for part in candidate.parts):
-                    break
+                if _denied(candidate.parts):
+                    raise PermissionError(f"not an estate document: {document}")
                 return candidate.read_bytes().decode("latin-1")
         raise FileNotFoundError(f"estate document not found: {document}")
 
