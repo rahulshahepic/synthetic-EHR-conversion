@@ -696,6 +696,15 @@ def test_reader_claim_value_cannot_inject_into_generated_profile():
         specgen.generate_spec([], store, "acceptance")
 
 
+def test_source_name_cannot_break_out_of_generated_docstring():
+    """Round 6: the source argument is caller-supplied text that lands
+    in the generated module's docstring. _comment_text flattens control
+    characters but cannot neutralize a triple quote, so the source name
+    is validated with the same identifier rule as the reader name."""
+    with pytest.raises(ValueError, match="not a permitted identifier"):
+        specgen.generate_spec([], ClaimStore(), 'x""";PWNED=True;"""')
+
+
 def test_profile_values_and_citations_cannot_inject_code():
     """Broad audit P1, both remaining routes: a constant's value is
     rendered as a Python literal, and a provenance citation is flattened

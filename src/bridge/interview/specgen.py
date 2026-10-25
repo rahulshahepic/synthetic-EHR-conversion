@@ -281,6 +281,13 @@ def generate_spec(events: list[LedgerEvent], store: ClaimStore, source: str,
     profiler value-shape claims, so a data-observed value shape can
     dispute an analyst's contrary belief instead of being swallowed.
     """
+    if not isinstance(source, str) or \
+            not re.fullmatch(r"[a-z][a-z0-9_]*", source):
+        # The source name lands in the generated profile's docstring and
+        # identifiers; a quote payload there would close the docstring
+        # and promote text into code. Same rule as the reader name.
+        raise ValueError(
+            f"source name is not a permitted identifier: {source!r}")
     if profile_report is not None:
         from .profiler import value_shape_claims
         extra = value_shape_claims(profile_report)
