@@ -14,17 +14,29 @@ Field expressions (the binding's vocabulary):
 - ``"FIELD"`` — the source field's value, stripped.
 - ``{"const": v}`` — a constant.
 - ``{"format": "{A},{B} {C}"}`` — source fields interpolated, whitespace collapsed at the ends.
-- ``{"field": F, ...}`` with modifiers applied in order:
-  ``null_values`` (values that mean "unknown" become blank), ``map`` (+ ``map_default``:
-  ``"keep"`` keeps unmapped values, anything else replaces them), ``date``/``datetime``
-  (a strptime format; output ``YYYYMMDD`` / ``YYYYMMDDHHMM``; unparseable values are kept
-  raw so the mapper's own checks see them), ``icd_decimal`` (``{"system_field": F,
+- ``{"concat": [expr, ...]}`` — expressions joined, whitespace collapsed at the ends.
+- ``{"cases": [{"if": cond, "then": expr}, ...], "else": expr}`` — the first case whose
+  condition holds. A condition is ``{"value": expr, "in": [...]}``, ``{"value": expr,
+  "blank": true}``, ``{"value": expr, "before": v}`` (string comparison, so compare
+  normalized dates), or ``{"all": [cond, ...]}``. Conventions that changed over time, or
+  differ by campus, are expressed this way.
+- ``{"field": F, ...}`` with modifiers applied in order: ``upper``, ``null_values`` (values
+  that mean "unknown" become blank), ``map`` (+ ``map_default``: ``"keep"`` keeps unmapped
+  values, anything else replaces them), ``date``/``datetime`` (a strptime format or a list
+  of them, tried in order; output ``YYYYMMDD`` / ``YYYYMMDDHHMM``; unparseable values are
+  kept raw so the mapper's own checks see them), ``icd_decimal`` (``{"system_field": F,
   "icd9": code}``: re-inserts the decimal point the source stripped), ``lookup``
-  (``{"file": stem, "key": K, "value": V}``: the value of V in the reference row keyed by
-  this value).
+  (``{"file": stem, "key": K, "value": V}``, or a list of them applied in turn: the value
+  of V in the reference row keyed by this value).
 
 Rows matching a mapping's ``exclude`` (``{field: [values]}``) are staged with an
-``_excluded`` reason, so the mapper drops them visibly (loss ledger), never silently.
+``_excluded`` reason, so the mapper drops them visibly (loss ledger), never silently;
+``exclude_unless`` (a condition) keeps the rows it matches.
+
+A value the spec derives rather than reads must say so: a ``cases`` entry may carry
+``"annotate": {"field": F, "klass": "inferred", "note": ...}``, and a mapping may carry
+``exclude_unless_annotate`` for the rows ``exclude_unless`` keeps. The notes ride on the staged
+record (``_canonical_notes``) and land in the record's fidelity annotations and loss ledger.
 """
 from __future__ import annotations
 
@@ -106,7 +118,19 @@ class Evaluator:
             self._lookups[idx_key] = {r[spec["key"]]: r for r in self.export.rows(spec["file"])}
         return self._lookups[idx_key].get(value, {}).get(spec["value"], "")
 
-    def value(self, expr: Any, row: Row) -> str:
+    def holds(self, cond: dict[str, Any], row: Row) -> bool:
+        if "all" in cond:
+            return all(self.holds(c, row) for c in cond["all"])
+        v = self.value(cond["value"], row)
+        if "in" in cond:
+            return v in cond["in"]
+        if "blank" in cond:
+            return (v == "") == bool(cond["blank"])
+        if "before" in cond:
+            return v != "" and v < cond["before"]
+        raise ValueError(f"bad condition {cond!r}")
+
+    def value(self, expr: Any, row: Row, notes: list[dict[str, Any]] | None = None) -> str:
         if isinstance(expr, str):
             return row.get(expr, "")
         if not isinstance(expr, dict):
@@ -116,7 +140,18 @@ class Evaluator:
         if "format" in expr:
             text = _FMT.sub(lambda m: row.get(m.group(1), ""), expr["format"])
             return re.sub(r"\s+", " ", text).strip(" ,")
+        if "concat" in expr:
+            return re.sub(r"\s+", " ", "".join(self.value(e, row) for e in expr["concat"])).strip()
+        if "cases" in expr:
+            for case in expr["cases"]:
+                if self.holds(case["if"], row):
+                    if notes is not None and case.get("annotate"):
+                        notes.append(dict(case["annotate"]))
+                    return self.value(case["then"], row)
+            return self.value(expr["else"], row) if "else" in expr else ""
         v = row.get(expr["field"], "")
+        if expr.get("upper"):
+            v = v.upper()
         if v in expr.get("null_values", []):
             v = ""
         if "map" in expr and v:
@@ -127,22 +162,33 @@ class Evaluator:
                 v = expr["map_default"]
         for kind, out_fmt in (("date", "%Y%m%d"), ("datetime", "%Y%m%d%H%M")):
             if kind in expr and v:
-                try:
-                    v = datetime.strptime(v, expr[kind]).strftime(out_fmt)
-                except ValueError:
-                    pass  # keep raw: the mapper's own date checks reject and annotate it
+                fmts = expr[kind] if isinstance(expr[kind], list) else [expr[kind]]
+                for fmt in fmts:
+                    try:
+                        v = datetime.strptime(v, fmt).strftime(out_fmt)
+                        break
+                    except ValueError:
+                        continue  # none parse: keep raw, the mapper's own date checks reject and annotate it
         if "icd_decimal" in expr and v:
             spec = expr["icd_decimal"]
             v = _icd_decimal(v, row.get(spec["system_field"], "") == spec["icd9"])
         if "lookup" in expr and v:
-            v = self._lookup(expr["lookup"], v)
+            for step in expr["lookup"] if isinstance(expr["lookup"], list) else [expr["lookup"]]:
+                v = self._lookup(step, v)
         return v
 
-    def record(self, mapping: dict[str, Any], row: Row) -> dict[str, str]:
-        return {name: self.value(expr, row) for name, expr in mapping["fields"].items()}
+    def record(self, mapping: dict[str, Any], row: Row) -> dict[str, Any]:
+        notes: list[dict[str, Any]] = []
+        out: dict[str, Any] = {name: self.value(expr, row, notes) for name, expr in mapping["fields"].items()}
+        if notes:
+            out["_canonical_notes"] = notes
+        return out
 
 
-def _excluded(mapping: dict[str, Any], row: Row) -> str | None:
+def _excluded(mapping: dict[str, Any], row: Row, ev: "Evaluator | None" = None) -> str | None:
+    unless = mapping.get("exclude_unless")
+    if unless and ev is not None and ev.holds(unless, row):
+        return None  # kept; with_pat annotates it
     for fld, values in (mapping.get("exclude") or {}).items():
         if row.get(fld, "") in values:
             reason = (mapping.get("exclude_reason") or {}).get(row.get(fld, ""), "")
@@ -236,9 +282,11 @@ def stage_canonical(store: Any, run_id: str, export: DelimitedExport, profile: A
                 payload["kind"] = kind
             if extra:
                 payload.update(extra(rec, p))
-            why = _excluded(m, row)
+            why = _excluded(m, row, ev)
             if why:
                 payload["_excluded"] = why
+            elif m.get("exclude_unless_annotate") and any(row.get(f, "") in v for f, v in (m.get("exclude") or {}).items()):
+                payload["_canonical_notes"] = payload.get("_canonical_notes", []) + [dict(m["exclude_unless_annotate"])]
             src_key = row[m["key"]]
             yield f"{key_prefix}{src_key}", payload, lin(m["file"], src_key)
 

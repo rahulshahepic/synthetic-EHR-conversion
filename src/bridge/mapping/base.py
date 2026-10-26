@@ -177,6 +177,9 @@ def run_mapper(ctx: MapContext) -> Outcome:
         payload = None
     else:
         payload = MAPPERS[ctx.rtype](ctx)
+        for n in ctx.src.get("_canonical_notes") or []:
+            # A value the source spec derived rather than read (see interview/canonical.py).
+            ctx.note(n["field"], n.get("klass", "inferred"), float(n.get("weight", 1.0)), n.get("note"), n.get("original"))
     if ctx.superseded_by:
         return Outcome("superseded", note=f"duplicate of {ctx.superseded_by}")
     if ctx.held_by:

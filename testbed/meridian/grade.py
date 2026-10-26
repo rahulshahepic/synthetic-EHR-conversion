@@ -27,21 +27,28 @@ from testbed import scoring
 CHECKS: dict[str, tuple[str, str, Any, Any]] = {
     "guide_version_skew": ("estate", "dictionary_status", "stale", "current"),
     "guide_timezone": ("profile", "facility_tz", {"SRC": "America/Phoenix"}, {"SRC": "America/Denver"}),
-    "guide_dx_decimal": ("field:PROBLEM.DAT.DX_CODE", "convention", "stripped", "stored with the decimal point"),
-    "guide_sex_codes": ("field:PERSON.DAT.SEX_CD", "convention", "3=X", "0=unknown"),
-    "guide_rel_codes": ("field:INSCOV.DAT.REL_CD", "convention", "C=child", "D=dependent"),
-    "guide_visit_types": ("field:VISIT.DAT.VISIT_TYPE", "convention", "TH telehealth", None),
-    "guide_lab_timestamp": ("field:LABRES.DAT.COLLECTED_TS", "convention", "DD-MON-YY", "YYYY-MM-DD"),
-    "guide_result_status": ("field:LABRES.DAT.RESULT_STATUS", "convention", "X=cancelled", "P=preliminary"),
-    "guide_vs_unit": ("field:VITALS.DAT.VS_UNIT", "convention", "blank at HVMC", "always populated"),
-    "guide_appt_status": ("field:APPT.DAT.APPT_STATUS", "convention", "BMP", None),
+    "guide_dx_decimal_partial": ("field:PROBLEM.DAT.DX_CODE", "convention", "before 2012 kept it", "stored with the decimal point ("),
+    "guide_sex_codes_aged": ("field:PERSON.DAT.SEX_CD", "convention", "3=X", None),
+    "guide_rel_codes_partial": ("field:INSCOV.DAT.REL_CD", "convention", "D=dependent child", "SP=spouse"),
+    "guide_visit_types_aged": ("field:VISIT.DAT.VISIT_TYPE", "convention", "case-insensitively", None),
+    "guide_void_partial": ("field:VISIT.DAT.STATUS", "convention", "left without being seen", None),
+    "guide_lab_timestamp_partial": ("field:LABRES.DAT.COLLECTED_TS", "convention", "Parse both", None),
+    "guide_result_status_aged": ("field:LABRES.DAT.RESULT_STATUS", "convention", "X=cancelled", "P=preliminary"),
+    "guide_appt_status_aged": ("field:APPT.DAT.APPT_STATUS", "convention", "BMP", None),
     "guide_stale_immune": ("file:IMMUNE", "presence", "absent", "listed"),
+    "guide_hold_right": ("field:RXORDER.DAT.RX_STATUS", "convention", "on hold", "treat as discontinued"),
     "undocumented_placeholder_dob": ("field:PERSON.DAT.BIRTH_DT", "convention", "placeholder", None),
+    "drugfile_wrong_rxnorm": ("codeset:formulary", "crosswalk", {"MD0108": "966222"}, {"MD0108": "966221"}),
     "belief_mpi_no_duplicates": ("identity", "keying_story", {"true_duplicates": True}, {"true_duplicates": False}),
     "belief_cancelled_results_purged": ("field:LABRES.DAT.RESULT_STATUS", "convention", "X=cancelled", "purged"),
+    "partial_lab_timestamps_always_oracle": ("field:LABRES.DAT.COLLECTED_TS", "convention", "Parse both", "always"),
     "belief_blank_rxnorm_inactive": ("codeset:formulary", "handling_unmapped", "route every order", "skip"),
+    "belief_hold_means_stopped": ("field:RXORDER.DAT.RX_STATUS", "convention", "on hold", "treat as discontinued"),
+    "belief_drugfile_all_correct": ("codeset:formulary", "drugfile_accuracy", "MD0108", "every RxNorm in the drug file is right"),
+    "partial_src_vitals_metric": ("field:VITALS.DAT.VS_UNIT", "convention", "SRC before 2016-03", None),
     "disagreement_duplicates": ("identity", "keying_story", {"true_duplicates": True}, {"true_duplicates": False}),
     "disagreement_sun_ridge_time": ("profile", "facility_tz", {"SRC": "America/Phoenix"}, {"SRC": "America/Denver"}),
+    "disagreement_void": ("field:VISIT.DAT.STATUS", "convention", "left without being seen", None),
 }
 
 
@@ -103,23 +110,30 @@ def conversion_checks(export: Path, run_db: Path) -> dict[str, Any]:
         mapped = json.loads(r["mapped"] or "{}")
         loaded = r["status"] == "loaded"
         rt = r["rtype"]
+        if rt == "Encounter" and src.get("VISIT_ID") in truth["void_kind"]:
+            kind = truth["void_kind"][src["VISIT_ID"]]
+            if kind == "lwbs":
+                rec("Left-without-being-seen ED visits kept, as cancelled", loaded and mapped["status"] == "cancelled", r["source_key"])
+            else:
+                rec("Entered-in-error VOID visits kept out", not loaded, r["source_key"])
         if rt == "Encounter" and loaded:
             campus = clinic_campus[src["DEPT_ID"]]
             start = mapped["period"]["start"]
             rec(f"Encounter time zone ({campus})", _offset_ok(start, truth["campus_tz"][campus]), f"{r['source_key']} {start}")
-            rec("Encounter class = truth", mapped["class"] == truth["visit_class"][src["VISIT_ID"]], r["source_key"])
+            rec("Encounter class = truth (incl. lowercase codes)", mapped["class"] == truth["visit_class"][src["VISIT_ID"]], r["source_key"])
         elif rt == "Observation":
             if src.get("kind") == "lab":
                 res_no = r["source_key"][4:]
                 if res_no in cancelled:
                     rec("Cancelled lab results kept out of Nimbus", not loaded, r["source_key"])
                 elif loaded:
-                    rec("Lab collection time parsed (DD-MON-YY)", mapped.get("effective", "")[:4] >= "2005", mapped.get("effective", ""))
-            elif loaded and src.get("FIELD") in ("WT", "TEMP", "HT"):
-                fac = src["_PAT_FAC"]
-                want = {"us": {"WT": "[lb_av]", "TEMP": "[degF]", "HT": "[in_i]"},
-                        "metric": {"WT": "kg", "TEMP": "Cel", "HT": "cm"}}[truth["vital_units"][fac]][src["FIELD"]]
-                rec(f"Vital unit = campus convention ({fac})", mapped["valueQuantity"]["unit"] == want, f"{r['source_key']} {mapped['valueQuantity']}")
+                    rec("Lab collection time parsed (both formats)", mapped.get("effective", "")[:4] >= "2005", mapped.get("effective", ""))
+            elif src.get("FIELD") in ("WT", "TEMP", "HT"):
+                want = truth["vital_unit"][r["source_key"][3:]]
+                migrated = src["_PAT_FAC"] == "SRC" and src["TAKEN_DT"] < "201603010000"
+                name = "Vital unit = truth (" + ("SRC migrated pre-2016" if migrated else src["_PAT_FAC"]) + ")"
+                if loaded:
+                    rec(name, mapped["valueQuantity"]["unit"] == want, f"{r['source_key']} {mapped['valueQuantity']}")
         elif rt == "Coverage" and loaded:
             rec("Coverage relationship = truth", mapped["subscriberRelationship"] == truth["relationship"][r["source_key"]],
                 f"{r['source_key']} {mapped['subscriberRelationship']} vs {truth['relationship'][r['source_key']]}")
@@ -127,7 +141,9 @@ def conversion_checks(export: Path, run_db: Path) -> dict[str, Any]:
             want = truth["rxnorm"].get(src["FORM_CODE"])
             if loaded:
                 got = mapped["medication"]["coding"][0]["code"]
-                rec("Medication RxNorm = truth", got == want, f"{r['source_key']} {got} vs {want}")
+                rec("Medication RxNorm = truth (incl. MD0108 drug-file error)", got == want, f"{r['source_key']} {got} vs {want}")
+                if src["STATUS"] == "H":
+                    rec("HOLD orders loaded as on-hold", mapped["status"] == "on-hold", f"{r['source_key']} {mapped['status']}")
             elif want is None:
                 rec("Uncodable meds kept out for pharmacist med rec", True, r["source_key"])
         elif rt == "Patient" and loaded:

@@ -24,35 +24,45 @@ the estate grading ledger `estate_discrepancies.json`. Bridge never reads it.
 
 ## What is hard about it
 
-| Problem | Where it shows |
-|---|---|
-| Guide says all times are Mountain Time; Sun Ridge is Arizona (no DST) | every SRC timestamp, half the year |
-| ICD codes stored without the decimal point; ICD-9 before Oct 2015 | `PROBLEM.DX_CODE`, `CODE_SYS` |
-| Sex codes 1/2/9 and 3 (X marker); guide says 0/1/2 | `PERSON.SEX_CD` |
-| `01/01/1900` is the desk's unknown-DOB placeholder | `PERSON.BIRTH_DT` |
-| Relationship codes S/P/C/O; guide says S/SP/D/O | `INSCOV.REL_CD` |
-| Telehealth visit type `TH`, undocumented | `VISIT.VISIT_TYPE` |
-| Lab timestamps Oracle-style `DD-MON-YY HH:MM` | `LABRES.COLLECTED_TS` |
-| Cancelled results (`X`) present though "purged" | `LABRES.RESULT_STATUS` |
-| HVMC vitals have no unit (US units implied); SRC sends metric | `VITALS.VS_UNIT` |
-| Appointment status `BMP`, undocumented, nobody knows it | `APPT.APPT_STATUS` |
-| Pre-2016 cross-campus duplicate registrations never merged | `PERSON` |
-| Drug file rows without RxNorm on active orders | `DRUGFILE.RXNORM`, `RXORDER` |
-| Guide lists `IMMUNE.DAT`; it never existed | file list |
+Meridian is meant to be messy the way real estates are. The vendor guide is **mostly right**. Where it is
+wrong, that is usually because it is old, and on several points it is right for older data and wrong for
+newer data. The analysts know the reality for their own corner, but they are sometimes partly right or
+plainly wrong, and they disagree with each other. Conventions changed over time and differ by campus.
+
+| Topic | Guide says | Analysts say | Data shows |
+|---|---|---|---|
+| Time zone | all Mountain Time | Denise: one clock, Mountain. Gary: Sun Ridge is Arizona, no DST | SRC is in AZ (Gary is right) |
+| Problem codes | stored with the decimal | Denise: stripped since the 2012 upgrade | dotted before 2012, dotless after (both right) |
+| Relationship codes | S, SP, D, O | Denise: S, P, C, O; "D isn't ours" | D only on migrated pre-2016 Sun Ridge coverages (guide right for those) |
+| Lab timestamps | YYYY-MM-DD HH:MM | Ray: always DD-MON-YY | DD-MON-YY, except Sun Ridge since 2024 in the guide's format |
+| Cancelled labs | F, C, P | Ray: cancelled results are purged | 54 `X` rows present |
+| Vital units | "as sent by the flowsheet" | Gary: HVMC blank = US, SRC metric with unit; hazy on the migration | SRC history before March 2016 is blank-unit US (Gary partly right) |
+| VOID visits | entered in error | Gary: entered in error. Denise: ED VOIDs since 2018 include left-without-being-seen | ER VOIDs with triage vitals are real visits (Denise is right) |
+| HOLD orders | on hold, may resume | Priya: treat as discontinued | HOLD orders have no stop date (guide is right) |
+| Drug file RxNorm | maintained by Pharmacy | Priya: all hand-checked, all right | MD0108 is wrong (966221; levothyroxine 50 mcg is 966222) |
+| RxNorm-less drugs | (not covered) | Priya: only on old inactive orders, skip | 26 active, 11 held orders |
+| Duplicates | (not covered) | Denise: MPI merged all. Gary: pre-2016 cross-campus ones remain | Gary is right |
+| Sex codes | 1, 2, 9 | Denise: plus 3 = X marker since 2021 | 1, 2, 3, 9 |
+| Visit types | OP, IP, ER, OBS, SDS | Gary: plus TH; lowercase is just typing | TH, plus 11 lowercase codes |
+| Appointment `BMP` | (absent) | nobody knows | 19 rows |
+| `IMMUNE.DAT` | listed | Gary: never existed | absent |
+| DOB 01/01/1900 | (absent) | Denise: desk placeholder | 6 rows |
 
 ## Analysts
 
 Four first-person profiles in `testbed/meridian/analysts/` (private to the analyst simulator; the
 interviewer reaches them only through `ask`): Denise Okafor (patient access & HIM), Ray Castillo (lab
 systems), Priya Natarajan (pharmacy informatics), Gary Lindqvist (interface & integration, owns the
-extract). They carry three wrong beliefs (no duplicates remain; cancelled results are purged; RxNorm-less
-drugs are only on inactive orders) and disagree on duplicates and on Sun Ridge's time zone.
+extract). Between them they hold four wrong beliefs and two partial truths, and they disagree on three
+points (duplicates, Sun Ridge's clock, VOID). The grading ledger (`answer_key/estate_discrepancies.json`,
+24 entries) labels each entry: dictionary, dictionary-partial, dictionary-aged, dictionary-right,
+reference-data, analyst-belief, analyst-partial, or analyst-disagreement.
 
 ## How Bridge reads it
 
 The interview produced `src/bridge/interview/specs/meridian/` (ledger: `ledgers/meridian.jsonl`). Its
 reader binding names the generic `delimited` reader and carries a **canonical binding**: for each Nimbus
 resource type, which file and which source field plays each role the mappers read, with value
-conventions (date formats, code maps, placeholders, decimal re-insertion, rows to exclude). See
+conventions (date formats, code maps, placeholders, decimal re-insertion, conditional rules for conventions that changed over time, rows to exclude and their exceptions). A value the spec derives rather than reads is annotated as inferred in the record's fidelity. See
 `src/bridge/interview/canonical.py`. The profile's `CROSSWALKS` overlay Bridge's terminology for the
 source's own code sets. Results: [Meridian results](meridian-results.md).

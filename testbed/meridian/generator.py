@@ -16,6 +16,8 @@ from typing import Any
 
 from . import estate, vocab as V
 
+MIGRATION = date(2016, 3, 1)  # Sun Ridge moved onto MCS/2; its history was loaded as-is
+
 FILES = {
     "CAMPUS": ["CAMPUS_CD", "CAMPUS_NAME", "CITY", "STATE"],
     "CLINIC": ["CLINIC_CD", "CLINIC_NAME", "CAMPUS_CD"],
@@ -84,7 +86,7 @@ class Gen:
         self.truth: dict[str, Any] = {"person": {}, "dx": {}, "allergy": {}, "appt_status": {},
                                       "provider_specialty": {}, "visit_class": {}, "campus_tz": {},
                                       "vital_units": {}, "relationship": {}, "lab_cancelled": [],
-                                      "sex_code": {}, "rxnorm": {}}
+                                      "sex_code": {}, "rxnorm": {}, "void_kind": {}, "vital_unit": {}}
         self.issues: list[dict[str, Any]] = []
         self.seq: dict[str, int] = {}
 
@@ -222,15 +224,18 @@ class Gen:
             if age < 18:
                 rel = "C"
             cno = str(self.nid("cov", 500000))
+            eff = self.rdate(date(2012, 1, 1), date(2025, 1, 1))
             if r.random() < rates["missing_rel"]:
                 self.issue("missing_relationship", "INSCOV", cno)
                 rel_out = ""
+            elif rel == "C" and p["campus"] == "SRC" and eff < MIGRATION:
+                rel_out = "D"  # old Sun Ridge desk convention (the guide's code), kept by the 2016 migration
             else:
                 rel_out = rel
             self.truth["relationship"][cno] = {"S": "self", "P": "spouse", "C": "child", "O": "other"}[rel]
             self.rows["INSCOV"].append({
                 "COV_NO": cno, "PERSON_NO": primary, "PLAN_CD": plan, "MEMBER_ID": f"{plan[:3]}{r.randint(10**7, 10**8 - 1)}",
-                "REL_CD": rel_out, "PRIORITY": str(prio), "EFF_DT": _mdy(self.rdate(date(2015, 1, 1), date(2025, 1, 1))),
+                "REL_CD": rel_out, "PRIORITY": str(prio), "EFF_DT": _mdy(eff),
                 "END_DT": ""})
         # visits (the duplicate charts carry their own history)
         visits: list[tuple[str, str, datetime, str]] = []
@@ -277,7 +282,7 @@ class Gen:
             self.rows["RXORDER"].append({
                 "RX_NO": rno, "PERSON_NO": primary, "VISIT_NO": vis[0] if vis and vis[1] == primary else "",
                 "DRUG_CD": code, "DRUG_DESC": desc, "DOSE_TXT": r.choice(doses), "SIG_TXT": r.choice(sigs),
-                "ORDER_DT": _mdy(start), "STOP_DT": _mdy(start + timedelta(days=r.randint(10, 400))) if status != "ACTIVE" else "",
+                "ORDER_DT": _mdy(start), "STOP_DT": _mdy(start + timedelta(days=r.randint(10, 400))) if status in ("DISCONTINUED", "COMPLETED") else "",
                 "RX_STATUS": status, "PRESCRIBER_ID": f"ST{r.randint(1, 18):04d}"})
             if truth_rx is None:
                 self.issue("unmapped_medication", "RXORDER", rno)
@@ -311,19 +316,28 @@ class Gen:
         else:
             disch = admit + timedelta(minutes=r.randint(20, 240)) if r.random() < 0.8 else None
         status = "VOID" if r.random() < 0.02 else "CLOSED"
+        lwbs = vt == "ER" and admit.date() >= date(2018, 1, 1) and status == "CLOSED" and r.random() < 0.08
+        if lwbs:
+            status, disch = "VOID", None
         vno = str(self.nid("visit", 4000000))
+        if status == "VOID":
+            self.truth["void_kind"][vno] = "lwbs" if lwbs else "error"
+            self.issue("lwbs_visit" if lwbs else "void_visit", "VISIT", vno)
         if vt == "IP" and status == "CLOSED" and r.random() < rates["missing_discharge"]:
             disch = None
             self.issue("missing_discharge", "VISIT", vno)
         self.truth["visit_class"][vno] = V.VISIT_TYPES[vt][0]
         self.rows["VISIT"].append({
-            "VISIT_NO": vno, "PERSON_NO": chart, "CLINIC_CD": clinic, "VISIT_TYPE": vt, "ADMIT_TS": _ts(admit),
+            "VISIT_NO": vno, "PERSON_NO": chart, "CLINIC_CD": clinic,
+            "VISIT_TYPE": vt.lower() if r.random() < 0.01 else vt, "ADMIT_TS": _ts(admit),
             "DISCH_TS": _ts(disch) if disch else "", "STATUS": status, "ATTEND_ID": f"ST{r.randint(1, 18):04d}",
             "CHIEF_COMPLAINT": r.choice(["COUGH", "CHEST PAIN", "FOLLOW UP", "ABD PAIN", "FEVER", "MED REFILL", ""])})
         if status == "CLOSED":
             self.labs(chart, vno, campus, admit)
             if vt != "TH":
                 self.vitals(chart, vno, campus, admit)
+        elif lwbs:
+            self.vitals(chart, vno, campus, admit, triage=True)  # triage vitals before the patient left
         return vno, chart, admit, campus
 
     def problem(self, chart: str, visits: list[tuple[str, str, datetime, str]]) -> None:
@@ -339,6 +353,9 @@ class Gen:
             icd10, text, sys_, code = r.choice(V.PROBLEMS)
             onset = self.rdate(date(2008, 1, 1), date(2015, 9, 30)) if sys_ == "I9" else \
                 self.rdate(date(2015, 10, 1), date(2026, 6, 1))
+            if onset < date(2012, 1, 1):
+                code = icd10 if sys_ == "I10" else {"25000": "250.00", "4019": "401.9", "496": "496", "27800": "278.00",
+                                                    "71590": "715.90", "311": "311"}[code]
             row = {"DX_CODE": code, "CODE_SYS": sys_, "DX_TEXT": text}
             self.truth["dx"][pno] = icd10
             # Dotless storage and ICD-9 are conventions (graded by value checks), not record problems;
@@ -389,16 +406,18 @@ class Gen:
             rno = str(self.nid("res", 8000000))
             self.rows["LABRES"].append({
                 "RES_NO": rno, "PERSON_NO": chart, "VISIT_NO": vno, "ACCESSION": acc, "TEST_CD": code, "RESULT": result,
-                "UNITS": unit, "REF_RANGE": ref, "ABN": abn, "COLLECTED_TS": _oracle_ts(when), "RESULT_STATUS": status})
+                "UNITS": unit, "REF_RANGE": ref, "ABN": abn, "COLLECTED_TS": _ts(when) if campus == "SRC" and when >= datetime(2024, 1, 1) else _oracle_ts(when),
+                "RESULT_STATUS": status})
             if status == "X":
                 self.truth["lab_cancelled"].append(rno)
                 self.issue("cancelled_result", "LABRES", rno)
             if kind == "text" and status != "X":
                 self.issue("unmapped_lab", "LABRES", rno)
 
-    def vitals(self, chart: str, vno: str, campus: str, admit: datetime) -> None:
+    def vitals(self, chart: str, vno: str, campus: str, admit: datetime, triage: bool = False) -> None:
         r = self.rng
-        metric = campus == "SRC"
+        migrated = campus == "SRC" and admit.date() < MIGRATION
+        metric = campus == "SRC" and not migrated
         when = admit + timedelta(minutes=r.randint(5, 30))
         values = {
             "BP": (f"{r.randint(100, 165)}/{r.randint(60, 98)}", ""),
@@ -415,7 +434,10 @@ class Gen:
                 value = value.replace(".", "")
                 self.issue("implausible_vital", "VITALS", vsno)
             if vs in ("TEMP", "WT", "HT") and not metric:
-                self.issue("unitless_vital", "VITALS", vsno)
+                self.issue("migrated_us_vital" if migrated else "unitless_vital", "VITALS", vsno)
+                self.truth["vital_unit"][vsno] = {"TEMP": "[degF]", "WT": "[lb_av]", "HT": "[in_i]"}[vs]
+            elif vs in ("TEMP", "WT", "HT"):
+                self.truth["vital_unit"][vsno] = {"TEMP": "Cel", "WT": "kg", "HT": "cm"}[vs]
             self.rows["VITALS"].append({"VS_NO": vsno, "PERSON_NO": chart, "VISIT_NO": vno, "TAKEN_TS": _ts(when),
                                         "VS_TYPE": vs, "VS_VALUE": value, "VS_UNIT": unit})
 

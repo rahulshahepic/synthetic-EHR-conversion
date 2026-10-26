@@ -11,7 +11,8 @@ and review medication-order build.
 ## What I know
 
 - DRUG_CD is our local drug code. DRUGFILE.RXNORM is the RxNorm concept; I
-  backfilled it in 2018.
+  backfilled it in 2018, every row by hand, and double-checked them. They are
+  right.
 - Rows without RxNorm are the compounded items and the MISC placeholder, and
   they only sit on old orders that are long inactive. Nothing current uses
   them; you can skip them safely.
@@ -22,7 +23,8 @@ and review medication-order build.
   don't extract.
 - SIG_TXT is the sig as the prescriber typed it, mostly Latin abbreviations
   (PO, BID, QHS, PRN). DOSE_TXT is the dose with its unit.
-- RX_STATUS: ACTIVE, DISCONTINUED, COMPLETED, HOLD.
+- RX_STATUS: ACTIVE, DISCONTINUED, COMPLETED, HOLD. In practice HOLD is how
+  prescribers park a medication they've stopped; treat HOLD as discontinued.
 
 ## What I do not know
 

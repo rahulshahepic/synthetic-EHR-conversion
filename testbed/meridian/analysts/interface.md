@@ -31,6 +31,12 @@ MCS/2 in 2016.
   height inches. Sun Ridge's flowsheet sends metric with the unit filled in
   (kg, C, cm). HR, RR and SPO2 never carry a unit at either campus. BP is
   "systolic/diastolic".
+- The Sun Ridge migration (March 2016). We loaded Sun Ridge's history from
+  their old system as-is, flowsheets included. I didn't map their flowsheet
+  myself; I think their old system was set up in American units, but I
+  wouldn't swear to it. It's old history; it doesn't come up much.
+- VOID visits are entered in error. That's what the guide says and what the
+  status means.
 - Duplicates. The 2016 MPI project only matched patients inside each campus.
   Patients who had been seen at both HVMC and Sun Ridge before 2016 still have
   two registrations, one per campus, and nobody linked them. I see it in the
@@ -42,6 +48,8 @@ MCS/2 in 2016.
   Denise / Ray / Priya.
 - Appointment status codes beyond what the guide says; scheduling is a
   vendor-hosted module and I just pass through what it writes.
+- Lab timestamp formats. The lab interface writes what the lab system sends;
+  ask Ray.
 
 ## How I answer
 

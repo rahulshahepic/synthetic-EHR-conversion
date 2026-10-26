@@ -95,6 +95,7 @@
      "field": "REL_CD",
      "map": {
       "C": "19",
+      "D": "19",
       "O": "G8",
       "P": "01",
       "S": "18"
@@ -115,7 +116,36 @@
     ]
    },
    "exclude_reason": {
-    "VOID": "visit entered in error (guide \u00a74 VISIT.STATUS)"
+    "VOID": "visit entered in error (guide \u00a74; Gary E000166)"
+   },
+   "exclude_unless": {
+    "all": [
+     {
+      "in": [
+       "ER"
+      ],
+      "value": {
+       "field": "VISIT_TYPE",
+       "upper": true
+      }
+     },
+     {
+      "blank": false,
+      "value": {
+       "field": "VISIT_NO",
+       "lookup": {
+        "file": "VITALS",
+        "key": "VISIT_NO",
+        "value": "VS_NO"
+       }
+      }
+     }
+    ]
+   },
+   "exclude_unless_annotate": {
+    "field": "status",
+    "klass": "inferred",
+    "note": "VOID kept as a cancelled visit: ER VOID with triage vitals = left without being seen (spec rule from Denise Okafor, E000192/E000194)"
    },
    "fields": {
     "ADMIT_DT": {
@@ -134,11 +164,15 @@
      "field": "STATUS",
      "map": {
       "CLOSED": "C",
-      "OPEN": "A"
+      "OPEN": "A",
+      "VOID": "X"
      }
     },
     "VISIT_ID": "VISIT_NO",
-    "VISIT_TYPE": "VISIT_TYPE"
+    "VISIT_TYPE": {
+     "field": "VISIT_TYPE",
+     "upper": true
+    }
    },
    "file": "VISIT",
    "key": "VISIT_NO"
@@ -182,13 +216,16 @@
      ]
     },
     "exclude_reason": {
-     "X": "cancelled result (Ray Castillo, E000196)"
+     "X": "cancelled result (Ray Castillo, E000202)"
     },
     "fields": {
      "ABN_FLAG": "ABN",
      "ACCESSION": "ACCESSION",
      "COLLECT_DT": {
-      "datetime": "%d-%b-%y %H:%M",
+      "datetime": [
+       "%d-%b-%y %H:%M",
+       "%Y-%m-%d %H:%M"
+      ],
       "field": "COLLECTED_TS"
      },
      "PAT_ID": "PERSON_NO",
@@ -231,7 +268,78 @@
       "field": "TAKEN_TS"
      },
      "VALUE": {
-      "format": "{VS_VALUE} {VS_UNIT}"
+      "cases": [
+       {
+        "annotate": {
+         "field": "valueQuantity.unit",
+         "klass": "inferred",
+         "note": "unit blank in source: migrated Sun Ridge history before 2016-03 read as US units (Gary Lindqvist E000164, hedged; 97-100 temperatures)",
+         "weight": 1.0
+        },
+        "if": {
+         "all": [
+          {
+           "blank": true,
+           "value": "VS_UNIT"
+          },
+          {
+           "in": [
+            "WT",
+            "TEMP",
+            "HT"
+           ],
+           "value": "VS_TYPE"
+          },
+          {
+           "in": [
+            "SRC"
+           ],
+           "value": {
+            "field": "VISIT_NO",
+            "lookup": [
+             {
+              "file": "VISIT",
+              "key": "VISIT_NO",
+              "value": "CLINIC_CD"
+             },
+             {
+              "file": "CLINIC",
+              "key": "CLINIC_CD",
+              "value": "CAMPUS_CD"
+             }
+            ]
+           }
+          },
+          {
+           "before": "201603010000",
+           "value": {
+            "datetime": "%Y-%m-%d %H:%M",
+            "field": "TAKEN_TS"
+           }
+          }
+         ]
+        },
+        "then": {
+         "concat": [
+          "VS_VALUE",
+          {
+           "const": " "
+          },
+          {
+           "field": "VS_TYPE",
+           "map": {
+            "HT": "in",
+            "TEMP": "F",
+            "WT": "lb"
+           }
+          }
+         ]
+        }
+       }
+      ],
+      "else": {
+       "format": "{VS_VALUE} {VS_UNIT}"
+      }
      },
      "VISIT_ID": "VISIT_NO"
     },

@@ -80,6 +80,9 @@ def test_spec_carries_the_interview_findings(pkg):
     assert tz["data_confirmed"] and tz["provenance"]["kind"] == "analyst"
     assert rules[("identity", "keying_story")]["value"]["true_duplicates"] is True
     assert "X=cancelled" in rules[("field:LABRES.DAT.RESULT_STATUS", "convention")]["value"]
+    assert "Parse both" in rules[("field:LABRES.DAT.COLLECTED_TS", "convention")]["value"]
+    assert "on hold" in rules[("field:RXORDER.DAT.RX_STATUS", "convention")]["value"]  # the guide over the pharmacist
+    assert rules[("codeset:formulary", "crosswalk")]["value"]["MD0108"] == "966222"    # drug-file error corrected
     assert rules[("codeset:formulary", "handling_unmapped")]["value"].startswith("route every order")
     unknowns = {(u["subject"], u["predicate"]) for u in pkg.spec["known_unknowns"]}
     assert ("field:APPT.DAT.APPT_STATUS", "convention") in unknowns  # nobody could explain BMP
@@ -109,6 +112,32 @@ class _Exp:
 
     def rows(self, stem):
         return self.files[stem]
+
+
+def test_cases_lookup_chain_and_annotations():
+    ev = canonical.Evaluator(_Exp({"VISIT": [{"VISIT_NO": "1", "CLINIC_CD": "SRFM"}],
+                                   "CLINIC": [{"CLINIC_CD": "SRFM", "CAMPUS_CD": "SRC"}]}))
+    campus = {"field": "VISIT_NO", "lookup": [{"file": "VISIT", "key": "VISIT_NO", "value": "CLINIC_CD"},
+                                              {"file": "CLINIC", "key": "CLINIC_CD", "value": "CAMPUS_CD"}]}
+    expr = {"cases": [{"if": {"all": [{"value": "U", "blank": True}, {"value": campus, "in": ["SRC"]},
+                                      {"value": {"field": "T", "date": "%m/%d/%Y"}, "before": "20160301"}]},
+                       "then": {"concat": ["V", {"const": " "}, {"const": "lb"}]},
+                       "annotate": {"field": "unit", "klass": "inferred", "note": "migrated"}}],
+            "else": {"format": "{V} {U}"}}
+    mapping = {"fields": {"VALUE": expr}}
+    old = ev.record(mapping, {"V": "150", "U": "", "VISIT_NO": "1", "T": "02/01/2015"})
+    assert old == {"VALUE": "150 lb", "_canonical_notes": [{"field": "unit", "klass": "inferred", "note": "migrated"}]}
+    assert ev.record(mapping, {"V": "70", "U": "kg", "VISIT_NO": "1", "T": "02/01/2020"}) == {"VALUE": "70 kg"}
+    multi = {"field": "T", "datetime": ["%d-%b-%y %H:%M", "%Y-%m-%d %H:%M"]}
+    assert ev.value(multi, {"T": "2024-03-05 08:15"}) == ev.value(multi, {"T": "05-MAR-24 08:15"}) == "202403050815"
+    assert ev.value({"field": "T", "upper": True}, {"T": "th"}) == "TH"
+
+
+def test_exclude_unless_keeps_and_annotates():
+    ev = canonical.Evaluator(_Exp({}))
+    m = {"exclude": {"S": ["VOID"]}, "exclude_unless": {"value": "T", "in": ["ER"]}}
+    assert canonical._excluded(m, {"S": "VOID", "T": "ER"}, ev) is None
+    assert canonical._excluded(m, {"S": "VOID", "T": "OP"}, ev)
 
 
 @pytest.mark.parametrize("expr,row,want", [

@@ -132,10 +132,19 @@ def _value_distribution(nonblank: list[str], limit: int) -> dict[str, Any]:
     for v in nonblank:
         counts[v] = counts.get(v, 0) + 1
     if len(counts) <= limit:
-        return {"value_counts": dict(sorted(counts.items()))}
+        return {"value_counts": dict(sorted(counts.items()))}  # signatures add nothing to a full distribution
     top = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))[:3]
     piles = {v: n for v, n in top if n >= 3 and n / len(nonblank) >= 0.005}
-    return {"top_values": piles} if piles else {}
+    out: dict[str, Any] = {"top_values": piles} if piles else {}
+    # Shapes: digits -> 9, letters -> A, everything else kept. Two shapes in one date or code
+    # field is how a convention change over time shows up in the data.
+    shapes: dict[str, int] = {}
+    for v in nonblank:
+        s = re.sub(r"[A-Za-z]", "A", re.sub(r"[0-9]", "9", v))
+        shapes[s] = shapes.get(s, 0) + 1
+    if len(shapes) <= limit:
+        out["format_signatures"] = dict(sorted(shapes.items(), key=lambda kv: (-kv[1], kv[0])))
+    return out
 
 
 def _field_stats(values: list[str], width: int | None, code_value_limit: int | None = None) -> dict[str, Any]:

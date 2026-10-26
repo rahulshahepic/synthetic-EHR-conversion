@@ -61,11 +61,29 @@ def test_analyst_profiles_complete(name):
     assert "answer key" not in text.lower() and "planted" not in text.lower()
 
 
-def test_analysts_disagree_on_duplicates_and_sun_ridge_time():
+def test_analysts_disagree_on_duplicates_time_and_void():
     reg = (ANALYSTS / "registration.md").read_text()
     itf = (ANALYSTS / "interface.md").read_text()
     assert "merged every duplicate" in reg and "still have\n  two registrations" in itf
     assert "everything in MCS/2 is\n  Mountain Time" in reg and "America/Phoenix" in itf
+    assert "leaves without being\n  seen" in reg and "VOID visits are entered in error" in itf
+
+
+def test_conventions_change_over_time(tmp_path):
+    """The mess is real-world shaped: the guide is right for old rows, the analysts for current ones."""
+    generate(tmp_path, seed=42, patients=300)
+    def rows(stem):
+        lines = (tmp_path / f"{stem}.DAT").read_bytes().decode("latin-1").splitlines()
+        h = lines[0].split("|")
+        return [dict(zip(h, ln.split("|"))) for ln in lines[1:]]
+    dx = [r for r in rows("PROBLEM") if r["DX_CODE"]]
+    assert all(r["ONSET_DT"][-4:] < "2012" for r in dx if "." in r["DX_CODE"])
+    assert any("." in r["DX_CODE"] for r in dx) and any(r["DX_CODE"] == "E119" for r in dx)
+    ts = [r["COLLECTED_TS"] for r in rows("LABRES")]
+    assert any(t[4] == "-" for t in ts) and any(t[2] == "-" for t in ts)
+    assert {r["REL_CD"] for r in rows("INSCOV")} >= {"C", "D"}
+    assert all(not r["STOP_DT"] for r in rows("RXORDER") if r["RX_STATUS"] == "HOLD")
+    assert any(r["VISIT_TYPE"].islower() for r in rows("VISIT"))
 
 
 def test_end_to_end_conversion_grades(tmp_path):
@@ -73,7 +91,11 @@ def test_end_to_end_conversion_grades(tmp_path):
     result = run_demo(tmp_path, seed=42, patients=300)
     assert result["status"] == "completed"
     grade = (tmp_path / "GRADE.md").read_text()
-    for line in ("| Encounter time zone (SRC) | 332 | 332 | 0 |", "| Cancelled lab results kept out of Nimbus | 69 | 69 | 0 |",
-                 "| Medication RxNorm = truth | 355 | 355 | 0 |", "Identity pairwise precision 1.000"):
+    for line in ("| Encounter time zone (SRC) | 300 | 300 | 0 |", "| Cancelled lab results kept out of Nimbus | 54 | 54 | 0 |",
+                 "| Medication RxNorm = truth (incl. MD0108 drug-file error) | 344 | 344 | 0 |",
+                 "| Vital unit = truth (SRC migrated pre-2016) | 129 | 129 | 0 |",
+                 "| Left-without-being-seen ED visits kept, as cancelled | 11 | 11 | 0 |",
+                 "| Entered-in-error VOID visits kept out | 14 | 14 | 0 |",
+                 "| HOLD orders loaded as on-hold | 69 | 69 | 0 |", "Identity pairwise precision 1.000"):
         assert line in grade
     assert "swallowed" not in grade and "| missed |" not in grade

@@ -40,6 +40,11 @@ coding team that maintains problem lists. I ran the registration side of the
   it's a desk error from last week, not history.
 - Time. We are one health system on one clock: everything in MCS/2 is
   Mountain Time.
+- VOID visits. HIM voids a visit that was registered in error. And since 2018
+  the ED registrars also VOID the visit when a patient leaves without being
+  seen, because MCS/2 has no other way to close it. Those patients were really
+  there: triage took their vitals. They are not errors and shouldn't vanish
+  from the chart.
 
 ## What I do not know
 
@@ -47,6 +52,8 @@ coding team that maintains problem lists. I ran the registration side of the
 - The drug file, medication orders, RxNorm. That's Priya.
 - How the extract is produced, file formats, interfaces, clinic setup and
   vital-sign flowsheets. That's Gary in IT.
+- How Sun Ridge's desks did things before they joined us in 2016. Their old
+  registrations came over in the migration; I didn't build that.
 
 ## How I answer
 
