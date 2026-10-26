@@ -31,17 +31,15 @@ def _store() -> claims_mod.ClaimStore:
     return store
 
 
-def _seed_layout(store: claims_mod.ClaimStore, path: str,
-                 fields: tuple[str, ...] = ("ACCT",)):
-    """Record the estate layout evidence a real interview produces —
-    a dictionary-kind layout claim from the shipped layouts file —
-    so keying-story validation has the estate's fields on record
-    (PR #43 round-4 review: a key field validates only against estate
-    evidence for its file, never by shape alone)."""
-    store.add(claims_mod.Claim(
-        f"file:{path.split('.')[0]}", "layout_binding",
-        {"path": path, "layouts": {"S": [{"name": f} for f in fields]}},
-        "LAYOUTS.DAT v5.0 (estate document)", source_kind="dictionary"))
+def _inventory(*paths: str, fields: tuple[str, ...] = ("ACCT", "DOB"),
+               event_id: str = "E000900") -> list[ledger_mod.LedgerEvent]:
+    """The profiler's export inventory as a real interview records it —
+    an ``inventory`` ledger event — so keying-story validation has the
+    estate's fields on record. A key field validates only against
+    machine evidence for its file (the inventory or a data
+    observation), never by shape and never from a layout claim."""
+    return [ledger_mod.LedgerEvent(event_id, "inventory",
+                                   {"files": {p: list(fields) for p in paths}})]
 
 
 def test_spec_is_deterministic_and_declarative_first():
@@ -96,13 +94,11 @@ def test_identity_merges_route_to_human_despite_analyst_claim():
 
 def test_keying_story_structured_value_becomes_the_rule():
     store = _store()
-    _seed_layout(store, "REG.TXT")
-    _seed_layout(store, "LAB.TXT")
     story = {"key_fields": ["LAB.TXT.ACCT", "REG.TXT.ACCT"],
              "master_index": False}
     store.add(claims_mod.Claim("identity", "keying_story", story,
                                "ledger:E000012 (Greg Holt, systems)"))
-    pkg = specgen.generate_spec([], store, "delphi")
+    pkg = specgen.generate_spec(_inventory("REG.TXT", "LAB.TXT"), store, "delphi")
     rule = next(r for r in pkg.spec["rules"] if r["predicate"] == "keying_story")
     assert rule["value"] == story
     assert not any(o["predicate"] == "keying_story"
@@ -140,13 +136,12 @@ def test_keying_story_free_text_is_flagged_never_a_rule(text):
 ])
 def test_keying_story_malformed_structure_is_flagged(bad):
     store = _store()
-    # Seed REG.TXT's layout so REG.TXT.ACCT is a real field: the
+    # REG.TXT is in the inventory so REG.TXT.ACCT is a real field: the
     # non-bool-flag cases must be rejected by the flag validation,
     # not incidentally by a missing-evidence field rejection.
-    _seed_layout(store, "REG.TXT")
     store.add(claims_mod.Claim("identity", "keying_story", bad,
                                "ledger:E000012"))
-    pkg = specgen.generate_spec([], store, "delphi")
+    pkg = specgen.generate_spec(_inventory("REG.TXT"), store, "delphi")
     assert not any(r["predicate"] == "keying_story" for r in pkg.spec["rules"])
     assert any(o["predicate"] == "keying_story"
                for o in pkg.spec["policy_overrides"])
@@ -181,8 +176,6 @@ def test_keying_story_field_order_is_canonical_not_a_dispute():
     review: _canon kept list order, so swapped fields read as two
     different values and the keying rule vanished into a known unknown)."""
     store = claims_mod.ClaimStore()
-    _seed_layout(store, "REG.TXT")
-    _seed_layout(store, "LAB.TXT")
     store.add(claims_mod.Claim(
         "identity", "keying_story",
         {"key_fields": ["REG.TXT.ACCT", "LAB.TXT.ACCT"], "master_index": False},
@@ -192,7 +185,7 @@ def test_keying_story_field_order_is_canonical_not_a_dispute():
         {"key_fields": ["LAB.TXT.ACCT", "REG.TXT.ACCT"], "master_index": False},
         "ledger:E000012 (Greg Holt, systems)", source_kind="analyst"))
     assert store.dispute("identity", "keying_story") is None
-    pkg = specgen.generate_spec([], store, "delphi")
+    pkg = specgen.generate_spec(_inventory("REG.TXT", "LAB.TXT"), store, "delphi")
     rule = next(r for r in pkg.spec["rules"] if r["predicate"] == "keying_story")
     assert rule["value"] == {"key_fields": ["LAB.TXT.ACCT", "REG.TXT.ACCT"],
                              "master_index": False}
@@ -315,36 +308,25 @@ def test_keying_story_two_segment_instruction_token_is_flagged(token):
 
 
 def test_keying_story_validated_against_the_estates_fields():
-    """When the estate's layouts are on record, a key field must name
-    a field that actually exists there: MERGE.ALL.CHARTS passes the
-    three-segment shape but names no Delphi field, so it is flagged.
-    The real departmental story in the same store still becomes the
-    rule."""
+    """When the profiler's inventory is on record, a key field must
+    name a field that actually exists there: MERGE.ALL.CHARTS passes
+    the three-segment shape but names no Delphi field, so it is
+    flagged. The real departmental story still becomes the rule."""
     store = claims_mod.ClaimStore()
-    store.add(claims_mod.Claim(
-        "file:REG", "layout_binding",
-        {"path": "REG.TXT",
-         "layouts": {"A": [{"name": "ACCT"}, {"name": "DOB"}]}},
-        "LAYOUTS.DAT v5.0 (estate document)", source_kind="dictionary"))
     store.add(claims_mod.Claim("identity", "keying_story",
                                {"key_fields": ["MERGE.ALL.CHARTS"],
                                 "master_index": False},
                                "ledger:E000012"))
-    pkg = specgen.generate_spec([], store, "delphi")
+    pkg = specgen.generate_spec(_inventory("REG.TXT"), store, "delphi")
     assert not any(r["predicate"] == "keying_story" for r in pkg.spec["rules"])
     assert any(o["predicate"] == "keying_story"
                for o in pkg.spec["policy_overrides"])
     good = claims_mod.ClaimStore()
-    good.add(claims_mod.Claim(
-        "file:REG", "layout_binding",
-        {"path": "REG.TXT",
-         "layouts": {"A": [{"name": "ACCT"}, {"name": "DOB"}]}},
-        "LAYOUTS.DAT v5.0 (estate document)", source_kind="dictionary"))
     good.add(claims_mod.Claim("identity", "keying_story",
                               {"key_fields": ["REG.TXT.ACCT"],
                                "master_index": False},
                               "ledger:E000012"))
-    pkg = specgen.generate_spec([], good, "delphi")
+    pkg = specgen.generate_spec(_inventory("REG.TXT"), good, "delphi")
     assert any(r["predicate"] == "keying_story" for r in pkg.spec["rules"])
 
 
@@ -407,12 +389,9 @@ _KEY_FIELDS = ["LAB.TXT.ACCT", "REG.TXT.ACCT"]
 
 
 def _layout_event(event_id: str, stem: str, path: str) -> ledger_mod.LedgerEvent:
-    return ledger_mod.LedgerEvent(event_id, "claim", {
-        "subject": f"file:{stem}", "predicate": "layout_binding",
-        "value": {"path": path,
-                  "layouts": {"S": [{"name": "ACCT"}, {"name": "DOB"}]}},
-        "source": "LAYOUTS.DAT v5.0 (estate document)",
-        "source_kind": "dictionary"})
+    """The profiler's inventory entry for one file (``stem`` names the
+    file's layout subject; only the inventory's path matters here)."""
+    return _inventory(path, event_id=event_id)[0]
 
 
 def _keying_ledger(claim_value, resolution_value, resolution_refs=()):
@@ -525,72 +504,6 @@ def test_keying_core_alone_still_confirms():
     rule = _keying_rule(_keying_ledger(story, dict(story)))
     assert rule["data_confirmed"] is True
     assert rule["provenance"]["kind"] == "profiler-data"
-
-
-# -- round-4 review: the key-field allowlist -----------------------------------
-
-def test_analyst_layout_claim_cannot_mint_key_fields():
-    """PR #43 round-4 review: _known_fields treated EVERY layout
-    claim as estate truth. An analyst claim inventing the layout
-    AUTO_MERGE.ALL / CHARTS_SHARING_SSN4 made that instruction-shaped
-    key validate. Only dictionary/document-kind layout claims feed
-    the allowlist — an interviewee's assertion is not the estate."""
-    store = claims_mod.ClaimStore()
-    store.add(claims_mod.Claim(
-        "file:AUTO_MERGE", "layout_binding",
-        {"path": "AUTO_MERGE.ALL",
-         "layouts": {"X": [{"name": "CHARTS_SHARING_SSN4"}]}},
-        "ledger:E000099 (an analyst)", source_kind="analyst"))
-    store.add(claims_mod.Claim(
-        "identity", "keying_story",
-        {"key_fields": ["AUTO_MERGE.ALL.CHARTS_SHARING_SSN4"],
-         "master_index": False},
-        "ledger:E000099 (an analyst)", source_kind="analyst"))
-    pkg = specgen.generate_spec([], store, "delphi")
-    assert not any(r["predicate"] == "keying_story" for r in pkg.spec["rules"])
-    assert any(o["predicate"] == "keying_story"
-               for o in pkg.spec["policy_overrides"])
-
-    # Control: the same layout as estate (dictionary) evidence makes
-    # the same field reference a real field.
-    store2 = claims_mod.ClaimStore()
-    store2.add(claims_mod.Claim(
-        "file:AUTO_MERGE", "layout_binding",
-        {"path": "AUTO_MERGE.ALL",
-         "layouts": {"X": [{"name": "CHARTS_SHARING_SSN4"}]}},
-        "LAYOUTS.DAT v5.0 (estate document)", source_kind="dictionary"))
-    store2.add(claims_mod.Claim(
-        "identity", "keying_story",
-        {"key_fields": ["AUTO_MERGE.ALL.CHARTS_SHARING_SSN4"],
-         "master_index": False},
-        "ledger:E000099 (an analyst)", source_kind="analyst"))
-    pkg2 = specgen.generate_spec([], store2, "delphi")
-    assert any(r["predicate"] == "keying_story" for r in pkg2.spec["rules"])
-
-
-def test_disputed_layout_claim_feeds_no_fields():
-    """A layout claim under an open dispute is contested, not estate
-    truth: while two dictionary readings of REG.TXT disagree, neither
-    side's field list validates a keying story."""
-    store = claims_mod.ClaimStore()
-    store.add(claims_mod.Claim(
-        "file:REG", "layout_binding",
-        {"path": "REG.TXT", "layouts": {"S": [{"name": "ACCT"}]}},
-        "LAYOUTS.DAT v5.0", source_kind="dictionary"))
-    store.add(claims_mod.Claim(
-        "file:REG", "layout_binding",
-        {"path": "REG.TXT", "layouts": {"S": [{"name": "OTHER"}]}},
-        "DATADICT.TXT v4.1", source_kind="dictionary"))
-    _seed_layout(store, "LAB.TXT")
-    store.add(claims_mod.Claim(
-        "identity", "keying_story",
-        {"key_fields": ["REG.TXT.ACCT", "LAB.TXT.ACCT"],
-         "master_index": False},
-        "ledger:E000012 (Greg Holt, systems)", source_kind="analyst"))
-    pkg = specgen.generate_spec([], store, "delphi")
-    assert not any(r["predicate"] == "keying_story" for r in pkg.spec["rules"])
-    assert any(o["predicate"] == "keying_story"
-               for o in pkg.spec["policy_overrides"])
 
 
 def test_one_observed_field_does_not_validate_its_whole_file():
@@ -770,249 +683,6 @@ def test_document_quote_observation_does_not_feed_the_allowlist():
     assert any(r["predicate"] == "keying_story" for r in pkg.spec["rules"])
 
 
-def _layout_store(resolution_value, *, resolve=True):
-    """A dictionary layout for REG.TXT listing ACCT + MERGE_ALL, the
-    LAB layout seeded, and — when resolve is set — the REG dispute
-    resolved to ``resolution_value``."""
-    store = claims_mod.ClaimStore()
-    store.add(claims_mod.Claim(
-        "file:REG", "layout_binding",
-        {"path": "REG.TXT",
-         "layouts": {"S": [{"name": "ACCT"}, {"name": "MERGE_ALL"}]}},
-        "DATADICT.TXT v4.1 (estate document)", source_kind="dictionary"))
-    _seed_layout(store, "LAB.TXT")
-    if resolve:
-        store.resolve("file:REG", "layout_binding", resolution_value,
-                      "DATADICT.TXT v4.1 errata (estate document)",
-                      source_kind="document")
-    return store
-
-
-def _keying_pkg(store, key_fields):
-    store.add(claims_mod.Claim(
-        "identity", "keying_story",
-        {"key_fields": key_fields, "master_index": False},
-        "ledger:E000012 (Greg Holt, systems)", source_kind="analyst"))
-    return specgen.generate_spec([], store, "delphi")
-
-
-def test_overruled_single_claim_layout_feeds_no_fields():
-    """PR #43 round-5 review: the dispute guard skipped only disputes
-    with more than one claimed value, so a SINGLE layout claim
-    resolved to a corrected layout still fed its overruled fields —
-    REG.TXT.MERGE_ALL validated after the estate corrected the layout
-    to ACCT only. The allowlist reads the resolved value, however
-    many claims the dispute held; a resolution to None (the layout
-    withdrawn) feeds nothing at all."""
-    corrected = {"path": "REG.TXT", "layouts": {"S": [{"name": "ACCT"}]}}
-    pkg = _keying_pkg(_layout_store(corrected),
-                      ["REG.TXT.MERGE_ALL", "LAB.TXT.ACCT"])
-    assert not any(r["predicate"] == "keying_story" for r in pkg.spec["rules"])
-    assert any(o["predicate"] == "keying_story"
-               for o in pkg.spec["policy_overrides"])
-    # The corrected layout was introduced by the resolution, which is a
-    # selection, not evidence: no documentary claim states it, so even
-    # its ACCT field does not validate (round-6 review).
-    pkg = _keying_pkg(_layout_store(corrected),
-                      ["REG.TXT.ACCT", "LAB.TXT.ACCT"])
-    assert not any(r["predicate"] == "keying_story" for r in pkg.spec["rules"])
-    # Withdrawn: even the surviving field is gone.
-    pkg = _keying_pkg(_layout_store(None), ["REG.TXT.ACCT", "LAB.TXT.ACCT"])
-    assert not any(r["predicate"] == "keying_story" for r in pkg.spec["rules"])
-
-
-def test_resolution_introduced_layout_feeds_no_fields():
-    """The allowlist reads the resolved state, so the overruled
-    OLD_ACCT does not validate. But a resolution is a selection, not
-    evidence (round-6 review): a layout only the RESOLUTION states —
-    NEW_ACCT, whatever kind the resolution declares — feeds nothing
-    either, until a documentary claim states it."""
-    store = claims_mod.ClaimStore()
-    store.add(claims_mod.Claim(
-        "file:REG", "layout_binding",
-        {"path": "REG.TXT", "layouts": {"S": [{"name": "OLD_ACCT"}]}},
-        "DATADICT.TXT v4.1 (estate document)", source_kind="dictionary"))
-    _seed_layout(store, "LAB.TXT")
-    store.resolve("file:REG", "layout_binding",
-                  {"path": "REG.TXT", "layouts": {"S": [{"name": "NEW_ACCT"}]}},
-                  "DATADICT.TXT v4.1 errata (estate document)",
-                  source_kind="document")
-    pkg = _keying_pkg(store, ["REG.TXT.NEW_ACCT", "LAB.TXT.ACCT"])
-    assert not any(r["predicate"] == "keying_story" for r in pkg.spec["rules"])
-    store2 = claims_mod.ClaimStore()
-    store2.add(claims_mod.Claim(
-        "file:REG", "layout_binding",
-        {"path": "REG.TXT", "layouts": {"S": [{"name": "OLD_ACCT"}]}},
-        "DATADICT.TXT v4.1 (estate document)", source_kind="dictionary"))
-    _seed_layout(store2, "LAB.TXT")
-    store2.resolve("file:REG", "layout_binding",
-                   {"path": "REG.TXT",
-                    "layouts": {"S": [{"name": "NEW_ACCT"}]}},
-                   "DATADICT.TXT v4.1 errata (estate document)",
-                   source_kind="document")
-    pkg = _keying_pkg(store2, ["REG.TXT.OLD_ACCT", "LAB.TXT.ACCT"])
-    assert not any(r["predicate"] == "keying_story" for r in pkg.spec["rules"])
-
-
-def test_layout_kind_comes_from_the_source_not_the_label():
-    """PR #43 round-5 review: a layout claim's source_kind is
-    self-declared on replay — copied straight from the event — unlike
-    profiler-data, which must be earned. An analyst-sourced layout
-    claim labelled source_kind 'document' still minted allowlist
-    fields. The kind is read from the source (the conservative
-    reading): a ledger answer is an analyst assertion whatever label
-    the event carries, and an estate document earns dictionary
-    standing from its source alone."""
-    store = claims_mod.ClaimStore()
-    store.add(claims_mod.Claim(
-        "file:AUTO_MERGE", "layout_binding",
-        {"path": "AUTO_MERGE.ALL",
-         "layouts": {"X": [{"name": "CHARTS"}]}},
-        "ledger:E000040 (an analyst)", source_kind="document"))
-    store.add(claims_mod.Claim(
-        "identity", "keying_story",
-        {"key_fields": ["AUTO_MERGE.ALL.CHARTS"], "master_index": False},
-        "ledger:E000040 (an analyst)", source_kind="analyst"))
-    pkg = specgen.generate_spec([], store, "delphi")
-    assert not any(r["predicate"] == "keying_story" for r in pkg.spec["rules"])
-
-    # An estate-document source with NO structured kind earns nothing
-    # either: there is no free-text fallback (round-6 review).
-    def _store(source_kind):
-        store2 = claims_mod.ClaimStore()
-        store2.add(claims_mod.Claim(
-            "file:AUTO_MERGE", "layout_binding",
-            {"path": "AUTO_MERGE.ALL",
-             "layouts": {"X": [{"name": "CHARTS"}]}},
-            "LAYOUTS.DAT v5.0 (estate document)", source_kind=source_kind))
-        store2.add(claims_mod.Claim(
-            "identity", "keying_story",
-            {"key_fields": ["AUTO_MERGE.ALL.CHARTS"], "master_index": False},
-            "ledger:E000040 (an analyst)", source_kind="analyst"))
-        return store2
-    pkg = specgen.generate_spec([], _store(""), "delphi")
-    assert not any(r["predicate"] == "keying_story" for r in pkg.spec["rules"])
-    # Control: the same document recorded as dictionary evidence feeds it.
-    pkg = specgen.generate_spec([], _store("dictionary"), "delphi")
-    assert any(r["predicate"] == "keying_story" for r in pkg.spec["rules"])
-
-
-# -- round-6 review: resolutions are selections, not evidence ------------------
-
-def _auto_merge_keying(store):
-    store.add(claims_mod.Claim(
-        "identity", "keying_story",
-        {"key_fields": ["AUTO_MERGE.ALL.CHARTS"], "master_index": False},
-        "ledger:E000042 (an analyst)", source_kind="analyst"))
-    return specgen.generate_spec([], store, "delphi")
-
-
-def test_analyst_resolution_cannot_promote_an_analyst_layout():
-    """PR #43 round-6 review (ChatGPT P2, reproduced): the resolved-
-    layout branch fed ANY resolution's value unconditionally, so
-    resolving an analyst's invented layout with an analyst resolution
-    promoted it to estate evidence. A resolution selects a value; it
-    does not mint evidence. The same story without the resolution was
-    correctly flagged, and stays flagged with it."""
-    layout = {"path": "AUTO_MERGE.ALL",
-              "layouts": {"S": [{"name": "CHARTS"}]}}
-    store = claims_mod.ClaimStore()
-    store.add(claims_mod.Claim(
-        "file:AUTO_MERGE", "layout_binding", layout,
-        "ledger:E000040 (an analyst)", source_kind="analyst"))
-    store.resolve("file:AUTO_MERGE", "layout_binding", layout,
-                  "ledger:E000041 (an analyst)", source_kind="analyst")
-    pkg = _auto_merge_keying(store)
-    assert not any(r["predicate"] == "keying_story" for r in pkg.spec["rules"])
-    assert any(o["predicate"] == "keying_story"
-               for o in pkg.spec["policy_overrides"])
-
-
-def test_lone_resolve_event_cannot_mint_layout_fields():
-    """PR #43 round-6 review (Claude, reproduced): ClaimStore.resolve
-    creates a dispute even when nothing was claimed, and the lone
-    resolve's value fed the allowlist unchecked — the exact case the
-    _known_fields docstring said must be blocked."""
-    store = claims_mod.ClaimStore()
-    store.resolve("file:AUTO_MERGE", "layout_binding",
-                  {"path": "AUTO_MERGE.ALL",
-                   "layouts": {"X": [{"name": "CHARTS"}]}},
-                  "ledger:E000041")
-    pkg = _auto_merge_keying(store)
-    assert not any(r["predicate"] == "keying_story" for r in pkg.spec["rules"])
-
-
-def test_layout_evidence_kind_is_structured_not_a_substring():
-    """PR #43 round-6 review (Claude, reproduced both directions):
-    substring matching on the source sentence let an analyst through
-    ("Greg Holt, per the estate layouts", source_kind analyst) and
-    kept a real estate document out ("REGISTRATION MANUAL p.4",
-    source_kind document — manuals are estate documents). The
-    recorded kind decides; the sentence does not."""
-    store = claims_mod.ClaimStore()
-    store.add(claims_mod.Claim(
-        "file:AUTO_MERGE", "layout_binding",
-        {"path": "AUTO_MERGE.ALL",
-         "layouts": {"X": [{"name": "CHARTS"}]}},
-        "Greg Holt, per the estate layouts", source_kind="analyst"))
-    pkg = _auto_merge_keying(store)
-    assert not any(r["predicate"] == "keying_story" for r in pkg.spec["rules"])
-
-    store2 = claims_mod.ClaimStore()
-    store2.add(claims_mod.Claim(
-        "file:REG", "layout_binding",
-        {"path": "REG.TXT", "layouts": {"S": [{"name": "ACCT"}]}},
-        "REGISTRATION MANUAL p.4", source_kind="document"))
-    store2.add(claims_mod.Claim(
-        "identity", "keying_story",
-        {"key_fields": ["REG.TXT.ACCT"], "master_index": False},
-        "ledger:E000042 (an analyst)", source_kind="analyst"))
-    pkg2 = specgen.generate_spec([], store2, "delphi")
-    assert any(r["predicate"] == "keying_story" for r in pkg2.spec["rules"])
-
-
-def test_documentary_winning_claim_supports_the_resolved_layout():
-    """PR #43 round-6 review (ChatGPT): an analyst RESOLUTION may
-    still select a value a documentary claim actually stated — the
-    estate evidence is the claim, and the resolution is only the
-    selection. That layout feeds the allowlist as before."""
-    layout = {"path": "REG.TXT", "layouts": {"S": [{"name": "ACCT"}]}}
-    store = claims_mod.ClaimStore()
-    store.add(claims_mod.Claim(
-        "file:REG", "layout_binding", layout,
-        "DATADICT.TXT v4.1 (estate document)", source_kind="dictionary"))
-    _seed_layout(store, "LAB.TXT")
-    store.resolve("file:REG", "layout_binding", layout,
-                  "ledger:E000041 (an analyst)", source_kind="analyst")
-    pkg = _keying_pkg(store, ["REG.TXT.ACCT", "LAB.TXT.ACCT"])
-    assert any(r["predicate"] == "keying_story" for r in pkg.spec["rules"])
-
-
-def test_resolution_only_layout_is_neither_rule_nor_evidence():
-    """PR #43 round-6 review: a lone resolve (nothing claimed) is not
-    a fact anyone stated. It neither feeds the allowlist (so the
-    keying story naming its field is flagged) nor becomes a rule (so
-    the reader binding stays empty) — the allowlist and the reader
-    still agree, by both ignoring it."""
-    events = [
-        ledger_mod.LedgerEvent("E000001", "resolve", {
-            "subject": "file:REG", "predicate": "layout_binding",
-            "value": {"path": "REG.TXT",
-                      "layouts": {"S": [{"name": "ACCT"}]}},
-            "source": "DATADICT.TXT v4.1 errata (estate document)",
-            "source_kind": "document"}),
-        ledger_mod.LedgerEvent("E000002", "claim", {
-            "subject": "identity", "predicate": "keying_story",
-            "value": {"key_fields": ["REG.TXT.ACCT"], "master_index": False},
-            "source": "ledger:E000003 (an analyst)",
-            "source_kind": "analyst"}),
-    ]
-    store = claims_mod.ClaimStore.from_ledger(events)
-    pkg = specgen.generate_spec(events, store, "delphi")
-    assert not any(r["predicate"] == "keying_story" for r in pkg.spec["rules"])
-    assert "REG" not in pkg.reader_binding["files"]
-
-
 # -- round-6 review: confirmation attribution ----------------------------------
 
 def test_copied_ref_does_not_confirm_the_added_fact():
@@ -1165,33 +835,76 @@ def test_resolved_merge_policy_is_flagged(with_claim):
                    for r in pkg.spec["rules"])
 
 
-def test_answer_derived_layout_claim_feeds_no_fields():
-    """PR #43 round-6 review (Claude): a layout claim's structured kind
-    is a label copied from the event. A dictionary-kind claim whose
-    evidence is an interview answer is that answer, whatever its
-    label: it feeds nothing. (Same claim with no answer ref: control.)"""
-    layout = {"path": "AUTO_MERGE.ALL", "layouts": {"X": [{"name": "CHARTS"}]}}
+# -- machine evidence only: no layout claim or resolution feeds the allowlist --
 
-    def events(refs):
-        return [
-            ledger_mod.LedgerEvent("E000001", "question", {"analyst": "greg",
-                                                           "text": "layouts?"}),
-            ledger_mod.LedgerEvent("E000002", "answer", {"text": "trust me"}),
-            ledger_mod.LedgerEvent("E000003", "claim", {
-                "subject": "file:AUTO_MERGE", "predicate": "layout_binding",
-                "value": layout, "source": "Greg Holt (systems) answer",
-                "source_kind": "dictionary", "evidence_refs": refs}),
-            ledger_mod.LedgerEvent("E000004", "claim", {
-                "subject": "identity", "predicate": "keying_story",
-                "value": {"key_fields": ["AUTO_MERGE.ALL.CHARTS"],
-                          "master_index": False},
-                "source": "ledger:E000002 (Greg Holt, systems)",
-                "source_kind": "analyst"}),
-        ]
+_INVENTED = {"path": "AUTO_MERGE.ALL", "layouts": {"X": [{"name": "CHARTS"}]}}
 
-    for refs, emitted in ((["E000002"], False), ([], True)):
-        evs = events(refs)
-        pkg = specgen.generate_spec(evs, claims_mod.ClaimStore.from_ledger(evs),
-                                    "delphi")
-        assert any(r["predicate"] == "keying_story"
-                   for r in pkg.spec["rules"]) is emitted, refs
+
+def _invented_layout_store(how):
+    store = claims_mod.ClaimStore()
+    if how == "lone_resolve":
+        store.resolve("file:AUTO_MERGE", "layout_binding", _INVENTED,
+                      "DATADICT.TXT errata (estate document)",
+                      source_kind="document")
+    else:
+        source, kind = {
+            "dictionary": ("LAYOUTS.DAT v5.0 (estate document)", "dictionary"),
+            "document": ("REGISTRATION MANUAL p.4", "document"),
+            "unlabelled": ("per the estate layouts", ""),
+            "analyst": ("ledger:E000040 (an analyst)", "analyst"),
+        }[how.removesuffix("_resolved")]
+        store.add(claims_mod.Claim("file:AUTO_MERGE", "layout_binding",
+                                   _INVENTED, source, source_kind=kind))
+        if how.endswith("_resolved"):
+            store.resolve("file:AUTO_MERGE", "layout_binding", _INVENTED,
+                          "DATADICT.TXT errata (estate document)",
+                          source_kind="document")
+    store.add(claims_mod.Claim(
+        "identity", "keying_story",
+        {"key_fields": ["AUTO_MERGE.ALL.CHARTS"], "master_index": False},
+        "ledger:E000042 (an analyst)", source_kind="analyst"))
+    return store
+
+
+@pytest.mark.parametrize("how", [
+    "dictionary", "document", "unlabelled", "analyst",
+    "dictionary_resolved", "analyst_resolved", "lone_resolve"])
+def test_no_layout_claim_or_resolution_feeds_the_allowlist(how):
+    """PR #43 rounds 4-6: every round found another way to label an
+    invented layout as estate truth (an analyst claim, a self-declared
+    dictionary/document kind, a source sentence mentioning the estate,
+    a resolution, a lone resolve). The allowlist now takes machine
+    evidence only — the profiler's inventory and data observations —
+    so none of these validates AUTO_MERGE.ALL.CHARTS, however it is
+    labelled or resolved."""
+    pkg = specgen.generate_spec([], _invented_layout_store(how), "delphi")
+    assert not any(r["predicate"] == "keying_story" for r in pkg.spec["rules"])
+    assert any(o["predicate"] == "keying_story"
+               for o in pkg.spec["policy_overrides"])
+
+
+def test_recorded_inventory_feeds_the_allowlist():
+    """Control: the same field validates once the profiler's inventory
+    records it — machine evidence of what the export's data holds."""
+    pkg = specgen.generate_spec(
+        _inventory("AUTO_MERGE.ALL", fields=("CHARTS",)),
+        _invented_layout_store("analyst"), "delphi")
+    assert any(r["predicate"] == "keying_story" for r in pkg.spec["rules"])
+
+
+@pytest.mark.parametrize("payload", [
+    {}, {"files": "REG.TXT"}, {"files": ["REG.TXT"]},
+    {"files": {"REG.TXT": "ACCT"}}, {"files": {"REG.TXT": [7, None, ""]}},
+])
+def test_malformed_inventory_event_contributes_nothing(payload):
+    """A malformed inventory event is ignored, never a crash: one bad
+    event cannot stop spec generation for the source."""
+    events = [ledger_mod.LedgerEvent("E000001", "inventory", payload)]
+    assert specgen.recorded_inventory(events) == {}
+    store = claims_mod.ClaimStore()
+    store.add(claims_mod.Claim(
+        "identity", "keying_story",
+        {"key_fields": ["REG.TXT.ACCT"], "master_index": False},
+        "ledger:E000042 (an analyst)", source_kind="analyst"))
+    pkg = specgen.generate_spec(events, store, "delphi")
+    assert not any(r["predicate"] == "keying_story" for r in pkg.spec["rules"])

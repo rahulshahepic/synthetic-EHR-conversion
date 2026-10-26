@@ -1,7 +1,8 @@
 """Append-only interview ledgers.
 
 A ledger is the record of one import's discovery: profiler observations
-imported as events, questions asked, answers received, claims asserted,
+and the profiler's export inventory (``inventory`` events, the files and
+fields found in the data) imported as events, questions asked, answers received, claims asserted,
 disputes opened and resolved. Ledgers are committed in the repo at
 ``src/bridge/interview/ledgers/<source>.jsonl`` and double as CI fixtures:
 spec generation from a ledger is a pure function, so replaying a ledger

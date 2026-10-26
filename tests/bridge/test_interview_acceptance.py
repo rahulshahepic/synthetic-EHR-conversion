@@ -901,3 +901,18 @@ def test_ledger_appends_are_unique_under_concurrent_writers(tmp_path):
     events = ledger_mod.read_events(path)
     assert len(events) == 80
     assert [e.id for e in events] == [ledger_mod.event_id(i) for i in range(1, 81)]
+
+
+def test_recorded_delphi_inventory_matches_the_profiler(delphi_export):
+    """The allowlist's machine evidence is the profiler's inventory,
+    recorded in the Delphi ledger as an ``inventory`` event. That
+    record must be exactly what the profiler finds in the export
+    today (the seed-42 export the ledger was recorded from), so the
+    ledger cannot carry fields the data does not have."""
+    from bridge.interview import specgen
+    layouts, _ = profiler_mod.parse_layouts_dat(
+        (delphi_export / "LAYOUTS.DAT").read_text())
+    inventory = Inventory.from_profile_report(
+        profiler_mod.profile_export(delphi_export, layouts))
+    events = ledger_mod.read_events(LEDGERS / "delphi.jsonl")
+    assert specgen.recorded_inventory(events) == inventory.files

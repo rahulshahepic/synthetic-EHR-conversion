@@ -91,9 +91,9 @@ MERGE_POLICY_RULE = {
 # ``+`` composite of field references (``REG.TXT.SSN4+REG.TXT.DOB``).
 # A bare grammar cannot keep an instruction out on its own — an
 # uppercase token like ``AUTO_MERGE.ALL_CHARTS`` is shaped exactly like
-# a field reference — so a reference validates only when the estate
-# itself establishes that the field exists in that file: the layouts
-# on record, the coverage inventory, or the profiler's observations.
+# a field reference — so a reference validates only when machine
+# evidence establishes that the field exists in that file: the
+# profiler's inventory of the export, or its data observations.
 # The check is per file: a token naming a file with no estate evidence
 # behind it does not validate, however it is shaped (``MERGE.ALL``,
 # ``AUTO_MERGE.ALL.CHARTS_SHARING_SSN4_WITHOUT_REVIEW``), and an
@@ -105,100 +105,34 @@ MERGE_POLICY_RULE = {
 # the way it could when only whitespace was banned.
 
 
-def _interview_event_ids(events: list[LedgerEvent]) -> set[str]:
-    """Ids of the ledger's question and answer events: what an
-    interviewee said, as opposed to what the estate's documents say."""
-    return {e.id for e in events if e.type in ("question", "answer")}
-
-
-def _layout_evidence(claim: Claim, interview_ids: set[str]) -> bool:
-    """Whether a layout CLAIM is estate evidence — a document of the
-    estate itself (dictionary, layouts file, registration manual) rather
-    than an interviewee's assertion.
-
-    Only a claim can be: a resolution selects among evidence and is
-    never evidence itself, so no ``resolve`` event — lone or not, however
-    labelled — adds a field. A claim earns estate standing only when
-    its structured kind is ``dictionary``/``document`` AND nothing ties
-    it to the interview: a ``ledger:`` source, or an evidence ref
-    naming a question/answer event, makes it an analyst answer whatever
-    label it carries. There is no free-text fallback: a claim with no
-    structured kind earns nothing, however its source is worded ("per
-    the estate layouts"), and a real manual recorded with kind
-    ``document`` counts whatever its title.
-
-    The ledger itself remains the trust root: its writer records
-    dictionary ingests and profiler observations alike, so a forged
-    document-kind claim is as possible as a forged observation. What
-    this closes is the route the builder exists to guard — an
-    interview answer turning into estate truth."""
-    if claim.source_kind not in ("dictionary", "document"):
-        return False
-    if (claim.source or "").startswith("ledger:"):
-        return False
-    return not any(r in interview_ids for r in claim.evidence_refs)
-
-
-def _known_fields(store: ClaimStore, observations: dict[str, dict[str, Any]],
-                  inventory: Inventory | None,
-                  interview_ids: set[str] = frozenset()) -> dict[str, set[str]]:
+def _known_fields(events: list[LedgerEvent],
+                  observations: dict[str, dict[str, Any]],
+                  inventory: Inventory | None) -> dict[str, set[str]]:
     """The estate's real fields, keyed by file: ``FILE -> {FIELD}``,
-    from the records that speak for the estate itself, available at
-    generation time: estate-document layout claims (``_layout_evidence``)
-    in their settled state, the coverage inventory, and the profiler's
-    data observations recorded in the ledger.
+    from machine evidence only: the profiler's inventory of the export
+    (recorded in the ledger as an ``inventory`` event, or passed in as
+    the coverage ``inventory``) and the profiler's data observations.
 
-    Only those records feed the allowlist. An interviewee's layout
-    claim is an assertion, not estate truth: feeding it in would let
-    any claim mint the fields its own keying story needs (an invented
-    ``AUTO_MERGE.ALL`` layout makes the instruction "valid"). A document
-    quote filed under an observation-like id is not data either: only
-    observations that pass the data-observation test contribute their
-    (file, field).
-
-    Layouts are read from the RESOLVED state, but a resolution is a
-    *selection* among evidence, not evidence itself: a resolved layout
-    feeds the allowlist only when an estate-document claim stated the
-    selected value. The resolution's own source and kind count for
-    nothing, so a lone ``resolve`` event with nothing claimed promotes
-    nothing. An open dispute contributes nothing while it is
-    contested; a resolution to None (the layout withdrawn) feeds
-    nothing at all. An undisputed layout contributes its
-    estate-document claims' fields."""
+    No claim or resolution feeds it, whatever its kind, source or
+    evidence refs. A layout claim's kind is a label written into the
+    ledger alongside the claim; letting it count meant every round of
+    review found another way to label an interviewee's invented layout
+    (``AUTO_MERGE.ALL``) as estate truth so that its keying story would
+    validate. The inventory is what the profiler found when it read the
+    export's data with the estate's own layouts file, so a field is
+    known exactly when the data has it (the dictionary's stale FAX
+    field is not). A document quote filed under an observation-like id
+    is not data either: only observations that pass the
+    data-observation test contribute their (file, field)."""
     by_file: dict[str, set[str]] = {}
 
     def feed(file: Any, field: Any) -> None:
         if isinstance(file, str) and file and isinstance(field, str) and field:
             by_file.setdefault(file, set()).add(field)
 
-    def feed_layout(value: Any) -> None:
-        if not isinstance(value, dict):
-            return
-        path = value.get("path")
-        if not isinstance(path, str) or not path:
-            return
-        for fields in (value.get("layouts") or {}).values():
-            if not isinstance(fields, list):
-                continue
-            for f in fields:
-                if isinstance(f, dict):
-                    feed(path, f.get("name"))
-
-    layout_keys = {(c.subject, c.predicate) for c in store.claims
-                   if c.predicate == "layout_binding"}
-    for subject, predicate in layout_keys:
-        documentary = [c for c in store.get(subject, predicate)
-                       if _layout_evidence(c, interview_ids)]
-        dispute = store.dispute(subject, predicate)
-        if dispute is not None:
-            if dispute.resolved and dispute.resolved_value is not None \
-                    and any(values_match(subject, predicate, c.value,
-                                         dispute.resolved_value)
-                            for c in documentary):
-                feed_layout(dispute.resolved_value)
-            continue  # open dispute: contested, not estate truth yet
-        for claim in documentary:
-            feed_layout(claim.value)
+    for fname, field_names in recorded_inventory(events).items():
+        for name in field_names:
+            feed(fname, name)
     if inventory is not None:
         for fname, field_names in inventory.files.items():
             for name in field_names:
@@ -207,6 +141,29 @@ def _known_fields(store: ClaimStore, observations: dict[str, dict[str, Any]],
         if is_data_observation(oid, observations):
             feed(payload.get("file"), payload.get("field"))
     return by_file
+
+
+def recorded_inventory(events: list[LedgerEvent]) -> dict[str, list[str]]:
+    """The export inventory recorded in a ledger: the union of its
+    ``inventory`` events, each ``{"files": {FILE: [FIELD, ...]}}`` as
+    the profiler wrote it (``Inventory.from_profile_report``). A
+    malformed payload, file or field contributes nothing rather than
+    raising, so one bad event cannot stop spec generation."""
+    out: dict[str, set[str]] = {}
+    for e in events:
+        if e.type != "inventory":
+            continue
+        files = e.payload.get("files")
+        if not isinstance(files, dict):
+            continue
+        for fname, fields in files.items():
+            if not isinstance(fname, str) or not fname \
+                    or not isinstance(fields, list):
+                continue
+            names = {f for f in fields if isinstance(f, str) and f}
+            if names:
+                out.setdefault(fname, set()).update(names)
+    return {f: sorted(v) for f, v in sorted(out.items())}
 
 
 def _valid_key_field(token: Any, known_by_file: dict[str, set[str]]) -> bool:
@@ -455,8 +412,7 @@ def generate_spec(events: list[LedgerEvent], store: ClaimStore, source: str,
         if extra:
             store = _with_extra_claims(store, extra)
     observations = observation_payloads(events)
-    known_fields = _known_fields(store, observations, inventory,
-                                 _interview_event_ids(events))
+    known_fields = _known_fields(events, observations, inventory)
     rules: list[dict[str, Any]] = []
     overrides: list[dict[str, Any]] = []
     invalid_keying: Any = None
