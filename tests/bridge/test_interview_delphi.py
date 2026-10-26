@@ -101,6 +101,131 @@ def test_scorecard_verdicts(verdicts):
                        "routed-to-runtime-question": 4, "caught-by-documents": 3}
 
 
+def test_single_key_claims_do_not_invent_a_master_index(events):
+    """PR #43 review, finding 5: the dictionary's "one account per
+    patient" and Tom Reyes's "the L number is the patient" are single-key
+    positions — one key_fields entry, master_index false. The estate is
+    explicit that no master index exists (the vendor module was never
+    bought), so the ledger must not record master_index: true for them."""
+    store = claims_mod.ClaimStore.from_ledger(events)
+    values = {c.source: c.value for c in store.get("identity", "keying_story")}
+    assert values["DATADICT.TXT v4.1"] == {"key_fields": ["REG.TXT.ACCT"],
+                                           "master_index": False}
+    assert values["ledger:E000050 (Tom Reyes, laboratory)"] == {
+        "key_fields": ["LAB.TXT.ACCT"], "master_index": False}
+
+
+def _keying_spec(value):
+    return {"rules": [
+        {"id": "R001", "subject": "identity", "predicate": "keying_story",
+         "value": value, "provenance": {"kind": "analyst"},
+         "data_confirmed": False},
+        dict(specgen.MERGE_POLICY_RULE),
+    ], "known_unknowns": []}
+
+
+@pytest.mark.parametrize("value", [
+    {"key_fields": ["REG.TXT.SSN4", "REG.TXT.DOB"], "master_index": False},
+    {"key_fields": ["NOTE.TXT.TEXT", "BILL.TXT.AMOUNT"], "master_index": False},
+    {"key_fields": ["REG.TXT.ACCT", "REG.TXT.DOB"], "master_index": False},
+    {"key_fields": ["LAB.TXT.ACCT", "PHA.TXT.ACCT"], "master_index": True},
+    {"key_fields": ["REG.TXT.ACCT"], "master_index": False},
+    # Round-2 review: demographic names beyond the old exact set, and
+    # composite tokens whose non-account part hides in front.
+    {"key_fields": ["REG.TXT.SSN", "REG.TXT.ACCT", "LAB.TXT.ACCT"],
+     "master_index": False},
+    {"key_fields": ["REG.TXT.PATIENT_NAME", "REG.TXT.ACCT", "LAB.TXT.ACCT"],
+     "master_index": False},
+    {"key_fields": ["LAB.TXT.MRN+REG.TXT.ACCT", "RAD.TXT.ACCT"],
+     "master_index": False},
+])
+def test_keying_position_grades_facts_not_shape(value):
+    """PR #43 review, finding 7: the true position is per-department
+    account keys with no master index — graded against the expected
+    structured facts, not token counts. A demographic key pair, unrelated
+    fields, a single-department composite, a master-index story, or a
+    single key must NOT earn caught-by-analyst for either identity
+    discrepancy."""
+    for entry_id in ("dict_registration_account_claim",
+                     "belief_lab_account_is_identity"):
+        verdict = scorecard.grade_entry({"id": entry_id}, _keying_spec(value))
+        assert verdict["verdict"] == "swallowed", (entry_id, value, verdict)
+
+
+def test_keying_position_master_index_absent_is_the_true_position():
+    """PR #43 review, finding 7 (second half): master_index is optional
+    in the spec validator, so a departmental story that omits it must
+    grade as the true position — not None, not swallowed."""
+    spec = _keying_spec({"key_fields": ["LAB.TXT.ACCT", "REG.TXT.ACCT"]})
+    for entry_id in ("dict_registration_account_claim",
+                     "belief_lab_account_is_identity"):
+        verdict = scorecard.grade_entry({"id": entry_id}, spec)
+        assert verdict["verdict"] == "caught-by-analyst", (entry_id, verdict)
+
+
+def test_duplicate_charts_requires_the_resolved_fact_recorded():
+    """PR #43 review, finding 6: routed requires the keying story to
+    record the resolved fact (true_duplicates: true). A keying rule plus
+    the merge policy alone overstates what was resolved."""
+    plain = _keying_spec({"key_fields": ["LAB.TXT.ACCT", "REG.TXT.ACCT"],
+                          "master_index": False})
+    verdict = scorecard.grade_entry({"id": "disagreement_duplicate_charts"}, plain)
+    assert verdict["verdict"] == "swallowed"
+    recorded = _keying_spec({"key_fields": ["LAB.TXT.ACCT", "REG.TXT.ACCT"],
+                             "master_index": False, "true_duplicates": True})
+    verdict = scorecard.grade_entry({"id": "disagreement_duplicate_charts"}, recorded)
+    assert verdict["verdict"] == "routed-to-runtime-question"
+
+
+@pytest.mark.parametrize("value", [
+    # true_duplicates recorded on a FALSE keying story resolves nothing:
+    {"key_fields": ["REG.TXT.SSN4", "REG.TXT.DOB"],
+     "master_index": True, "true_duplicates": True},
+    {"key_fields": ["REG.TXT.SSN4", "REG.TXT.DOB"],
+     "master_index": False, "true_duplicates": True},
+    {"key_fields": ["LAB.TXT.ACCT", "REG.TXT.ACCT"],
+     "master_index": True, "true_duplicates": True},
+])
+def test_duplicate_charts_also_requires_the_true_keying_position(value):
+    """PR #43 round-2 review: true_duplicates alone used to earn
+    "routed" whatever the keying story said. Routing also requires
+    _keying_position == truth."""
+    verdict = scorecard.grade_entry(
+        {"id": "disagreement_duplicate_charts"}, _keying_spec(value))
+    assert verdict["verdict"] == "swallowed", verdict
+
+
+def test_duplicate_charts_grader_reads_its_truth_from_the_check(monkeypatch):
+    """PR #43 round-4 review: the duplicate-charts grader graded
+    against a hardcoded {'account_field': 'ACCT', 'min_departments': 2}
+    copy instead of the entry's own keying_truth in CHECKS, so the
+    hardcoded copy could drift from the data. A variant truth — a
+    different account field, a wider department span — must change
+    the grade."""
+    spec = _keying_spec({"key_fields": ["REG.TXT.CHART", "LAB.TXT.CHART",
+                                        "BILL.TXT.CHART"],
+                         "master_index": False, "true_duplicates": True})
+    verdict = scorecard.grade_entry({"id": "disagreement_duplicate_charts"}, spec)
+    assert verdict["verdict"] == "swallowed"  # default truth keys on ACCT
+    variant = dict(scorecard.CHECKS["disagreement_duplicate_charts"])
+    variant["keying_truth"] = {"account_field": "CHART", "min_departments": 3}
+    monkeypatch.setitem(scorecard.CHECKS, "disagreement_duplicate_charts",
+                        variant)
+    verdict = scorecard.grade_entry({"id": "disagreement_duplicate_charts"}, spec)
+    assert verdict["verdict"] == "routed-to-runtime-question"
+
+
+def test_keying_rule_keeps_its_analyst_provenance(pkg):
+    """PR #43 round-2 review: the resolution adds true_duplicates on
+    top of Greg Holt's claimed story, so exact-value matching found no
+    winning claim and the rule's ref collapsed to the bare resolution.
+    The ref must keep the analyst attribution (match on the keying
+    core: key_fields + master_index)."""
+    rule = next(r for r in pkg.spec["rules"] if r["predicate"] == "keying_story")
+    assert rule["provenance"]["ref"].startswith(
+        "ledger:E000066 (Greg Holt, systems); dispute resolved via")
+
+
 def test_delphi_staging_through_committed_binding(tmp_path):
     from testbed.delphi import generate
     out = tmp_path / "delphi"
@@ -113,3 +238,93 @@ def test_delphi_staging_through_committed_binding(tmp_path):
         by_type[r["record_type"]] = by_type.get(r["record_type"], 0) + 1
     for stem, count in manifest["counts"].items():
         assert by_type.get(stem) == count, stem
+
+
+def test_keying_check_without_truth_grades_ungraded(monkeypatch):
+    """PR #43 round-5 review (minor): _keying_position fell back to a
+    hardcoded ('ACCT', 2) truth when a check carried no keying_truth,
+    so a missing or misspelled key in the grading data quietly graded
+    against facts nobody recorded. No truth in the check, no grade:
+    the verdict is "ungraded", never a confident caught/swallowed
+    computed from the default."""
+    spec = _keying_spec({"key_fields": ["LAB.TXT.ACCT", "REG.TXT.ACCT"],
+                         "master_index": False, "true_duplicates": True})
+    for entry_id in ("dict_registration_account_claim",
+                     "belief_lab_account_is_identity",
+                     "disagreement_duplicate_charts"):
+        variant = dict(scorecard.CHECKS[entry_id])
+        del variant["keying_truth"]
+        monkeypatch.setitem(scorecard.CHECKS, entry_id, variant)
+        verdict = scorecard.grade_entry({"id": entry_id}, spec)
+        assert verdict["verdict"] == "ungraded", (entry_id, verdict)
+
+
+def test_non_dict_keying_truth_grades_ungraded_not_a_crash(monkeypatch):
+    """PR #43 round-6 review (Claude, reproduced): a hand-edited
+    keying_truth that is not a dict ('ACCT/2') raised AttributeError
+    in _keying_position and aborted grade() for every discrepancy.
+    A malformed truth is "ungraded", for the keying checks and for
+    duplicate_charts alike."""
+    spec = _keying_spec({"key_fields": ["LAB.TXT.ACCT", "REG.TXT.ACCT"],
+                         "master_index": False, "true_duplicates": True})
+    for entry_id in ("dict_registration_account_claim",
+                     "belief_lab_account_is_identity",
+                     "disagreement_duplicate_charts"):
+        variant = dict(scorecard.CHECKS[entry_id])
+        variant["keying_truth"] = "ACCT/2"
+        monkeypatch.setitem(scorecard.CHECKS, entry_id, variant)
+        verdict = scorecard.grade_entry({"id": entry_id}, spec)
+        assert verdict["verdict"] == "ungraded", (entry_id, verdict)
+
+
+def test_duplicate_charts_without_truth_or_rule_grades_ungraded(monkeypatch):
+    """PR #43 round-6 review (Claude, reproduced): the ungraded guard
+    ran only when the spec carried a dict keying rule, so a check
+    with no keying_truth and a spec with NO keying rule still graded
+    "swallowed" — a confident verdict from no truth. The truth check
+    comes before the spec is looked at."""
+    variant = dict(scorecard.CHECKS["disagreement_duplicate_charts"])
+    del variant["keying_truth"]
+    monkeypatch.setitem(scorecard.CHECKS, "disagreement_duplicate_charts",
+                        variant)
+    spec = {"rules": [dict(specgen.MERGE_POLICY_RULE)], "known_unknowns": []}
+    verdict = scorecard.grade_entry({"id": "disagreement_duplicate_charts"}, spec)
+    assert verdict["verdict"] == "ungraded", verdict
+
+
+@pytest.mark.parametrize("truth", [
+    {"account_field": "ACCT", "min_departments": "2"},
+    {"account_field": "ACCT", "min_departments": True},
+    {"account_field": "ACCT", "min_departments": 0},
+    {"account_field": 7, "min_departments": 2},
+    {"account_field": "", "min_departments": 2},
+])
+def test_wrongly_typed_keying_truth_grades_ungraded(monkeypatch, truth):
+    """PR #43 round-6 review (Claude): _keying_truth checked only for a
+    dict with non-None members, so min_departments "2" crashed the
+    ``>=`` comparison and aborted grade(). Member types are checked
+    too: a non-empty string field name, a positive int."""
+    spec = _keying_spec({"key_fields": ["LAB.TXT.ACCT", "REG.TXT.ACCT"],
+                         "master_index": False, "true_duplicates": True})
+    for entry_id in ("dict_registration_account_claim",
+                     "disagreement_duplicate_charts"):
+        variant = dict(scorecard.CHECKS[entry_id])
+        variant["keying_truth"] = truth
+        monkeypatch.setitem(scorecard.CHECKS, entry_id, variant)
+        verdict = scorecard.grade_entry({"id": entry_id}, spec)
+        assert verdict["verdict"] == "ungraded", (entry_id, verdict)
+
+
+def test_keying_check_without_truth_or_rule_grades_ungraded(monkeypatch):
+    """PR #43 round-6 review (Claude): the truth-first check covered
+    only duplicate_charts, so a regular keying check with no
+    keying_truth and a spec with no keying rule fell through to a
+    confident "missed"."""
+    variant = dict(scorecard.CHECKS["dict_registration_account_claim"])
+    del variant["keying_truth"]
+    monkeypatch.setitem(scorecard.CHECKS, "dict_registration_account_claim",
+                        variant)
+    spec = {"rules": [dict(specgen.MERGE_POLICY_RULE)], "known_unknowns": []}
+    verdict = scorecard.grade_entry({"id": "dict_registration_account_claim"},
+                                    spec)
+    assert verdict["verdict"] == "ungraded", verdict

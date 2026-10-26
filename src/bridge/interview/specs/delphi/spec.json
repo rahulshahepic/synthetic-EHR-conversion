@@ -26,7 +26,7 @@
    "subject": "identity"
   }
  ],
- "ledger_events": 80,
+ "ledger_events": 83,
  "policy_overrides": [
   {
    "claimed_values": [
@@ -2491,10 +2491,19 @@
    "predicate": "keying_story",
    "provenance": {
     "kind": "analyst",
-    "ref": "dispute resolved via ledger answers (Greg Holt, systems; Marla Denny, registration)"
+    "ref": "ledger:E000066 (Greg Holt, systems); dispute resolved via ledger answers (Greg Holt, systems; Marla Denny, registration)"
    },
    "subject": "identity",
-   "value": "No master index. Departmental accounts (registration, lab, radiology, pharmacy) are matched per person; registration also creates true duplicate charts for the same person."
+   "value": {
+    "key_fields": [
+     "LAB.TXT.ACCT",
+     "PHA.TXT.ACCT",
+     "RAD.TXT.ACCT",
+     "REG.TXT.ACCT"
+    ],
+    "master_index": false,
+    "true_duplicates": true
+   }
   },
   {
    "data_confirmed": false,

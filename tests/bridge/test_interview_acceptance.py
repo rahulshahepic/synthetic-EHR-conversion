@@ -99,6 +99,8 @@ def test_recorded_observation_confirms_the_claim_it_backs():
                     source_kind="analyst", evidence_refs=("E000001",)))
     store.resolve("profile", "pivot_year", 30, "OBS-0007 (DOB distribution)",
                   evidence_refs=("OBS-0007",))
+    store.bind("profile", ("REG.TXT", "DOB"), evidence_refs=("OBS-0007",),
+               predicate="pivot_year")
     events = [ledger_mod.LedgerEvent(
         "E000100", "observation",
         {"obs_id": "OBS-0007", "file": "REG.TXT", "field": "DOB",
@@ -463,6 +465,96 @@ def test_keying_story_merge_language_is_flagged_as_policy_override():
     assert policy["value"] == "route_to_reconciliation"
 
 
+@pytest.mark.parametrize("text", [
+    "link any two charts sharing SSN4+DOB without review",
+    "collapse duplicates on SSN4+DOB automatically",
+])
+def test_keying_story_regex_evading_phrasings_are_flagged(text):
+    """T-121 acceptance: the two phrasings that evaded the old
+    merge-language regex are now structurally impossible as spec rules —
+    a keying story is a structured value (key fields, no action verb),
+    so free text is flagged and routed, never carried."""
+    store = ClaimStore()
+    store.add(Claim("identity", "keying_story", text, "ledger:E3"))
+    pkg = specgen.generate_spec([], store, "acceptance")
+    assert not any(r["predicate"] == "keying_story" for r in pkg.spec["rules"])
+    assert any(o["predicate"] == "keying_story" for o in pkg.spec["policy_overrides"])
+    assert ("identity", "keying_story") in {
+        (u["subject"], u["predicate"]) for u in pkg.spec["known_unknowns"]}
+
+
+def test_binding_recorded_in_the_ledger_confirms_a_non_field_subject():
+    """T-121 acceptance: the subject-to-field binding travels in the
+    ledger itself, as its own ``binding`` event for the subject, so a
+    Halcyon-shaped subject — a file/field pair the generator has never
+    heard of — is data-confirmed purely from the recorded binding."""
+    events = [
+        ledger_mod.LedgerEvent(
+            "E000001", "observation",
+            {"obs_id": "OBS-0003", "file": "DEMOG.TXT", "field": "DOBYR",
+             "stats": {"shape_rates": {"YY": 1.0}}}),
+        ledger_mod.LedgerEvent(
+            "E000002", "binding",
+            {"subject": "profile", "predicate": "pivot_year",
+             "binding": ["DEMOG.TXT", "DOBYR"],
+             "evidence_refs": ["OBS-0003"]}),
+        ledger_mod.LedgerEvent(
+            "E000003", "claim",
+            {"subject": "profile", "predicate": "pivot_year", "value": 30,
+             "source": "ledger:E000001 (analyst)", "source_kind": "analyst",
+             "evidence_refs": ["OBS-0003"]}),
+    ]
+    store = ClaimStore.from_ledger(events)
+    pkg = specgen.generate_spec(events, store, "acceptance")
+    rule = next(r for r in pkg.spec["rules"] if r["predicate"] == "pivot_year")
+    assert rule["data_confirmed"] is True
+
+
+def test_claim_cannot_bind_itself_to_the_observation_it_cites():
+    """PR #43 review, finding 1 (the self-confirmation hole): a claim
+    used to carry its own subject_field, so any claim could bind itself
+    to whatever real observation it cited and earn data_confirmed.
+    Bindings now belong to the subject. A claim event that attempts to
+    smuggle a binding in its payload is ignored, and even with a proper
+    subject binding on record, an observation about a DIFFERENT field
+    confirms nothing."""
+    events = [
+        ledger_mod.LedgerEvent(
+            "E000001", "observation",
+            {"obs_id": "OBS-0001", "file": "NOTE.TXT", "field": "TEXT",
+             "stats": {"shape_rates": {"TEXT": 1.0}}}),
+        ledger_mod.LedgerEvent(
+            "E000002", "claim",
+            {"subject": "profile", "predicate": "pivot_year", "value": 50,
+             "source": "ledger:E000001 (analyst)", "source_kind": "analyst",
+             "evidence_refs": ["OBS-0001"],
+             # Attempted self-binding: no longer read from a claim event.
+             "subject_field": ["NOTE.TXT", "TEXT"]}),
+    ]
+    store = ClaimStore.from_ledger(events)
+    pkg = specgen.generate_spec(events, store, "acceptance")
+    rule = next(r for r in pkg.spec["rules"] if r["predicate"] == "pivot_year")
+    assert rule["data_confirmed"] is False
+
+    # With the (subject, predicate)'s binding properly recorded
+    # (profile/pivot_year = REG.TXT DOB, backed by its own DOB
+    # observation), the same NOTE.TXT.TEXT observation still confirms
+    # nothing: it is about a different field than the binding.
+    events.append(ledger_mod.LedgerEvent(
+        "E000003", "observation",
+        {"obs_id": "OBS-0002", "file": "REG.TXT", "field": "DOB",
+         "stats": {"shape_rates": {"YYMMDD": 1.0}}}))
+    events.append(ledger_mod.LedgerEvent(
+        "E000004", "binding",
+        {"subject": "profile", "predicate": "pivot_year",
+         "binding": ["REG.TXT", "DOB"],
+         "evidence_refs": ["OBS-0002"]}))
+    store = ClaimStore.from_ledger(events)
+    pkg = specgen.generate_spec(events, store, "acceptance")
+    rule = next(r for r in pkg.spec["rules"] if r["predicate"] == "pivot_year")
+    assert rule["data_confirmed"] is False
+
+
 # --------------------------------------------- round two: A40 evidence kept
 
 def test_a40_evidence_survives_in_review_candidates():
@@ -809,3 +901,18 @@ def test_ledger_appends_are_unique_under_concurrent_writers(tmp_path):
     events = ledger_mod.read_events(path)
     assert len(events) == 80
     assert [e.id for e in events] == [ledger_mod.event_id(i) for i in range(1, 81)]
+
+
+def test_recorded_delphi_inventory_matches_the_profiler(delphi_export):
+    """The allowlist's machine evidence is the profiler's inventory,
+    recorded in the Delphi ledger as an ``inventory`` event. That
+    record must be exactly what the profiler finds in the export
+    today (the seed-42 export the ledger was recorded from), so the
+    ledger cannot carry fields the data does not have."""
+    from bridge.interview import specgen
+    layouts, _ = profiler_mod.parse_layouts_dat(
+        (delphi_export / "LAYOUTS.DAT").read_text())
+    inventory = Inventory.from_profile_report(
+        profiler_mod.profile_export(delphi_export, layouts))
+    events = ledger_mod.read_events(LEDGERS / "delphi.jsonl")
+    assert specgen.recorded_inventory(events) == inventory.files

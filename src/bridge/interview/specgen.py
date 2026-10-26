@@ -14,10 +14,17 @@ carries structured profiler evidence, and ``data_confirmed`` is true only
 when a cited observation id resolves to an actual profiler observation
 recorded in the ledger — an ``OBS-<digits>`` event with non-empty stats —
 *and* that observation is about this rule's subject: a ``field:`` subject
-must match the observation's file and field exactly, and subjects that
-are not fields carry an explicit subject-to-field mapping
-(:data:`OBSERVATION_SUBJECT_FIELDS`). An observation about some other
-field confirms nothing here, however real it is. A document quote
+names its file and field in the subject itself, and any other subject
+confirms only through the binding recorded for the (subject, predicate)
+itself — a ledger ``binding`` event, recorded once per
+(subject, predicate) with its own evidence, and itself backed by a
+cited observation describing the bound field (a binding event with no
+such evidence, or a conflicting rebind, confirms nothing). A binding is never carried on a claim or a resolution, so no
+claim can bind itself to whatever observation it cites. The generator
+carries no per-source binding table, so a subject from a new source can
+be confirmed as soon as its interview records the binding. An
+observation about some other field confirms nothing here, however real
+it is. A document quote
 recorded under an observation-like id (an estate note, a dictionary
 excerpt) is document evidence: it can inform a resolution, but it never
 confirms anything and never earns the profiler-data kind. Resolutions
@@ -32,9 +39,14 @@ when an analyst describes merging as routine. The override applies to
 every identity claim other than the keying story, whatever predicate it
 arrives under. The overridden claim stays visible in the spec's
 ``policy_overrides``. The keying story itself is a fact (how charts are
-keyed), but if its text prescribes auto-merging, that language is flagged
-in ``policy_overrides`` too — the spec never carries an unflagged
-auto-merge instruction, whatever predicate it arrived under.
+keyed), and it is a *structured* value — the key fields, whether a
+master index exists, and whether registration creates true duplicate
+charts — never a sentence: there is nowhere in that shape for an
+instruction to hide. A keying claim that arrives as free text (or
+a malformed structure) is not a keying fact at all: it is flagged in
+``policy_overrides`` and the subject surfaces as a known unknown, so the
+spec never carries an unflagged auto-merge instruction, whatever
+predicate it arrived under.
 """
 from __future__ import annotations
 
@@ -45,7 +57,9 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
-from .claims import Claim, ClaimStore, Dispute, _canon
+from .claims import (Claim, ClaimStore, Dispute, is_data_observation,
+                     observation_confirms, observation_payloads,
+                     values_match)
 from .coverage import Inventory, build_checklist, uncovered
 from .ledger import LedgerEvent
 
@@ -73,73 +87,156 @@ MERGE_POLICY_RULE = {
 }
 
 
-_OBS_DATA_ID = re.compile(r"^OBS-\d+$")
+# A key field in a structured keying story: a field reference, or a
+# ``+`` composite of field references (``REG.TXT.SSN4+REG.TXT.DOB``).
+# A bare grammar cannot keep an instruction out on its own — an
+# uppercase token like ``AUTO_MERGE.ALL_CHARTS`` is shaped exactly like
+# a field reference — so a reference validates only when machine
+# evidence establishes that the field exists in that file: the
+# profiler's inventory of the export, or its data observations.
+# The check is per file: a token naming a file with no estate evidence
+# behind it does not validate, however it is shaped (``MERGE.ALL``,
+# ``AUTO_MERGE.ALL.CHARTS_SHARING_SSN4_WITHOUT_REVIEW``), and an
+# interview that has observed REG.TXT.DOB has NOT thereby established
+# that REG.TXT.ACCT exists. Until the evidence exists the story stays
+# flagged as a known unknown instead of becoming a rule. Lowercase,
+# hyphens and free words fail too, so an instruction
+# ("auto-merge-any-two-charts-...") cannot hide inside a single token
+# the way it could when only whitespace was banned.
 
-# Subjects that are not ``field:`` subjects, mapped to the (file, field)
-# an observation must be about to confirm a rule on that subject. The
-# pivot year is a claim about two-digit years in registration DOBs; the
-# potassium unit is a claim about the UNIT column of the lab dictionary.
-OBSERVATION_SUBJECT_FIELDS: dict[tuple[str, str], tuple[str, str]] = {
-    ("profile", "pivot_year"): ("REG.TXT", "DOB"),
-    ("unit:POT", "unit"): ("LABDICT.TXT", "UNIT"),
-}
 
-# Merge-action language: an instruction to merge without a human. The
-# keying story may describe how charts are keyed, but it may not carry
-# this into the spec unflagged.
-_MERGE_ACTION = re.compile(
-    r"auto[-\s]?merge|automatically\s+merge|merge\s+any\b|"
-    r"merges?\s+(are|is)\s+routine|routine\s+merges?", re.IGNORECASE)
+def _known_fields(events: list[LedgerEvent],
+                  observations: dict[str, dict[str, Any]],
+                  inventory: Inventory | None) -> dict[str, set[str]]:
+    """The estate's real fields, keyed by file: ``FILE -> {FIELD}``,
+    from machine evidence only: the profiler's inventory of the export
+    (recorded in the ledger as an ``inventory`` event, or passed in as
+    the coverage ``inventory``) and the profiler's data observations.
+
+    No claim or resolution feeds it, whatever its kind, source or
+    evidence refs. A layout claim's kind is a label written into the
+    ledger alongside the claim; letting it count meant every round of
+    review found another way to label an interviewee's invented layout
+    (``AUTO_MERGE.ALL``) as estate truth so that its keying story would
+    validate. The inventory is what the profiler found when it read the
+    export's data with the estate's own layouts file, so a field is
+    known exactly when the data has it (the dictionary's stale FAX
+    field is not). A document quote filed under an observation-like id
+    is not data either: only observations that pass the
+    data-observation test contribute their (file, field).
+
+    Trust boundary: generation cannot authenticate a ledger event. An
+    ``inventory`` or data ``observation`` event is believed because of
+    WHO writes those event types — the profiler, via the runner, from
+    the export's data — never because of anything an interview can
+    say. Interview content (answers, and the claims and resolutions
+    drawn from them) never becomes an inventory or observation event.
+    A hand-written inventory or observation event would mint fields;
+    for a committed ledger, the acceptance test that re-profiles the
+    export and requires the recorded inventory to match exactly is the
+    check that catches that. What this function guarantees is that no
+    claim or resolution, however labelled, can add a field."""
+    by_file: dict[str, set[str]] = {}
+
+    def feed(file: Any, field: Any) -> None:
+        if isinstance(file, str) and file and isinstance(field, str) and field:
+            by_file.setdefault(file, set()).add(field)
+
+    for fname, field_names in recorded_inventory(events).items():
+        for name in field_names:
+            feed(fname, name)
+    if inventory is not None:
+        for fname, field_names in inventory.files.items():
+            for name in field_names:
+                feed(fname, name)
+    for oid, payload in observations.items():
+        if is_data_observation(oid, observations):
+            feed(payload.get("file"), payload.get("field"))
+    return by_file
 
 
-def _observation_payloads(events: list[LedgerEvent]) -> dict[str, dict[str, Any]]:
-    """Observation id -> payload, for every observation in the ledger."""
-    out: dict[str, dict[str, Any]] = {}
+def recorded_inventory(events: list[LedgerEvent]) -> dict[str, list[str]]:
+    """The export inventory recorded in a ledger: the union of its
+    ``inventory`` events, each ``{"files": {FILE: [FIELD, ...]}}`` as
+    the profiler wrote it (``Inventory.from_profile_report``). A
+    malformed payload, file or field contributes nothing rather than
+    raising, so one bad event cannot stop spec generation."""
+    out: dict[str, set[str]] = {}
     for e in events:
-        if e.type == "observation":
-            oid = e.payload.get("obs_id")
-            if oid:
-                out[oid] = e.payload
+        if e.type != "inventory":
+            continue
+        files = e.payload.get("files")
+        if not isinstance(files, dict):
+            continue
+        for fname, fields in files.items():
+            if not isinstance(fname, str) or not fname \
+                    or not isinstance(fields, list):
+                continue
+            names = {f for f in fields if isinstance(f, str) and f}
+            if names:
+                out.setdefault(fname, set()).update(names)
+    return {f: sorted(v) for f, v in sorted(out.items())}
+
+
+def _valid_key_field(token: Any, known_by_file: dict[str, set[str]]) -> bool:
+    if not isinstance(token, str) or not token:
+        return False
+    for part in token.split("+"):
+        file, dot, field = part.rpartition(".")
+        if not dot or not file or not field:
+            return False
+        fields = known_by_file.get(file)
+        if fields is None or field not in fields:
+            return False
+    return True
+
+
+def _valid_keying_story(value: Any,
+                        known_by_file: dict[str, set[str]] | None = None) -> dict[str, Any] | None:
+    """The keying story as a structured value, or None if it is not one.
+
+    A keying story states which fields key a chart, whether a master
+    index exists, and whether registration creates true duplicate charts
+    — a dict whose only keys are ``key_fields`` (a non-empty list of
+    field-reference tokens validated as above) and the optional
+    booleans ``master_index`` and ``true_duplicates``. Field order is not
+    meaningful: the returned story carries the fields de-duplicated and
+    sorted, so the same fields in a different order are the same story.
+    Anything else, above all a free-text string, is not a keying fact and
+    cannot enter the spec as one."""
+    if not isinstance(value, dict):
+        return None
+    if not set(value) <= {"key_fields", "master_index", "true_duplicates"}:
+        return None
+    fields = value.get("key_fields")
+    if not isinstance(fields, list) or not fields:
+        return None
+    if any(not _valid_key_field(f, known_by_file or {}) for f in fields):
+        return None
+    for flag in ("master_index", "true_duplicates"):
+        if flag in value and not isinstance(value[flag], bool):
+            return None
+    out: dict[str, Any] = {"key_fields": sorted(set(fields))}
+    for flag in ("master_index", "true_duplicates"):
+        if flag in value:
+            out[flag] = value[flag]
     return out
 
 
-def _is_data_observation(ref: str, observations: dict[str, dict[str, Any]]) -> bool:
-    """A reference is profiler *data* evidence only if it names an actual
-    profiler observation recorded in the ledger: an ``OBS-<digits>`` id
-    whose event carries non-empty stats. Document quotes filed under
-    observation-like ids (``OBS-ESTATE-1``, ``OBS-VERSION``) fail this —
-    deliberately."""
-    return bool(_OBS_DATA_ID.match(ref or "")) and bool(
-        observations.get(ref, {}).get("stats"))
-
-
-def _expected_observation_subject(subject: str, predicate: str) -> tuple[str, str] | None:
-    """The (file, field) an observation must describe to confirm a rule on
-    (subject, predicate): exact for ``field:`` subjects, the explicit
-    mapping for the rest. No binding, no confirmation."""
+def _field_subject_binding(subject: str) -> tuple[str, str] | None:
+    """The (file, field) a ``field:`` subject names, parsed from the
+    subject itself. Non-field subjects have no intrinsic binding: theirs
+    is the (subject, predicate)-level binding recorded on the store
+    (``ClaimStore.bindings``), from a ledger ``binding`` event. No
+    binding, no confirmation. (A recorded binding for a ``field:``
+    subject is refused at the store boundary, so this parse can never
+    be shadowed by one.)"""
     if subject.startswith("field:"):
         rest = subject[len("field:"):]
         if "." in rest:
             file, field = rest.rsplit(".", 1)
             return file, field
-        return None
-    return OBSERVATION_SUBJECT_FIELDS.get((subject, predicate))
-
-
-def _ref_confirms(ref: str, subject: str, predicate: str,
-                  observations: dict[str, dict[str, Any]]) -> bool:
-    """A reference confirms a rule only if it is a real profiler data
-    observation *about this rule's subject*. Existence is not enough:
-    an observation of NOTE.TXT.TEXT says nothing about the pivot year."""
-    if not _is_data_observation(ref, observations):
-        return False
-    expected = _expected_observation_subject(subject, predicate)
-    if expected is None:
-        return False
-    payload = observations[ref]
-    actual = (str(payload.get("file", "")), str(payload.get("field", "")))
-    return (actual[0].lower(), actual[1].lower()) == \
-        (expected[0].lower(), expected[1].lower())
+    return None
 
 
 def _conservative_kind(src: str) -> str:
@@ -172,20 +269,20 @@ def _claim_kind(claim: Claim, observations: dict[str, dict[str, Any]]) -> str:
     if claim.source_kind:
         if claim.source_kind != "profiler-data":
             return claim.source_kind
-        tied = any(_is_data_observation(r, observations)
+        tied = any(is_data_observation(r, observations)
                    for r in claim.evidence_refs) \
-            or _is_data_observation(first, observations)
+            or is_data_observation(first, observations)
         if tied:
             return "profiler-data"
         # Demote: fall through to the conservative source reading below.
-    elif _is_data_observation(first, observations):
+    elif is_data_observation(first, observations):
         return "profiler-data"
     return _conservative_kind(src)
 
 
-def _evidence_confirmed(refs: Any, subject: str, predicate: str,
+def _evidence_confirmed(refs: Any, expected: tuple[str, str],
                         observations: dict[str, dict[str, Any]]) -> bool:
-    return any(_ref_confirms(r, subject, predicate, observations) for r in refs)
+    return any(observation_confirms(r, expected, observations) for r in refs)
 
 
 def _rule_provenance(store: ClaimStore, subject: str, predicate: str, value: Any,
@@ -198,35 +295,74 @@ def _rule_provenance(store: ClaimStore, subject: str, predicate: str, value: Any
     ``data_confirmed`` is kept separate from who claimed the value: an
     analyst's claim confirmed by a profiler observation is analyst-kind
     and data-confirmed.
+
+    When several claims state the winning value, the kind is the FIRST
+    such claim's, and confirmation may come from any of them: a
+    dictionary claim recorded before a profiler claim of the same value
+    yields kind ``dictionary`` and, if the profiler claim's bound
+    observation confirms it, ``data_confirmed: true``. The kind says
+    who first stated the fact; ``data_confirmed`` says whether data
+    backs it. (The scorecard credits profiling for a data-confirmed
+    dictionary rule, so the measurement is not lost.) An unearned
+    ``profiler-data`` kind is still demoted when nothing confirms.
     """
     dispute = store.dispute(subject, predicate)
     winners = [c for c in store.get(subject, predicate)
-               if _canon(c.value) == _canon(value)]
+               if values_match(subject, predicate, c.value, value)]
     kind: str | None = None
     confirmed = False
     winning_src = ""
+    # The binding an observation must match to confirm this rule: parsed
+    # from a ``field:`` subject, else the (subject, predicate)-level
+    # binding recorded on the store. Claims and resolutions carry no
+    # binding of their own. A recorded binding counts only when it is
+    # itself backed by evidence: at least one of its recorded refs must
+    # be a real observation of the bound (file, field) — a binding
+    # asserted with empty or unrelated refs (the self-binding route
+    # through a bare binding event) confirms nothing. A conflicted
+    # binding already reads as None from the store.
+    subject_binding = _field_subject_binding(subject)
+    if subject_binding is None:
+        recorded = store.binding_for(subject, predicate)
+        if recorded is not None and _evidence_confirmed(
+                store.binding_refs.get((subject, predicate), ()),
+                recorded, observations):
+            subject_binding = recorded
     if winners:
         kind = _claim_kind(winners[0], observations)
         winning_src = winners[0].source or ""
-        for c in winners:
-            refs = list(c.evidence_refs)
-            if c.source and c.source.split():
-                refs.append(c.source.split()[0].rstrip("(:"))
-            if _evidence_confirmed(refs, subject, predicate, observations):
-                confirmed = True
+        if subject_binding is not None:
+            for c in winners:
+                refs = list(c.evidence_refs)
+                if c.source and c.source.split():
+                    refs.append(c.source.split()[0].rstrip("(:"))
+                if _evidence_confirmed(refs, subject_binding, observations):
+                    confirmed = True
+                    break
     if dispute is not None and dispute.resolved:
         # Structured evidence refs only. The resolution's free-text source
         # is a label for humans: an OBS id mentioned there — including in
         # a sentence saying it does NOT support the resolution — confirms
         # nothing.
         refs = list(dispute.resolution_evidence_refs)
-        if _evidence_confirmed(refs, subject, predicate, observations):
+        if subject_binding is not None and _evidence_confirmed(
+                refs, subject_binding, observations):
             confirmed = True
         if kind is None:
             winning_src = dispute.resolution_source or ""
             kind = dispute.resolution_source_kind or (
-                "profiler-data" if _evidence_confirmed(
-                    refs, subject, predicate, observations) else "analyst")
+                "profiler-data" if confirmed else "analyst")
+    if (subject, predicate) == ("identity", "keying_story") \
+            and isinstance(value, dict) and any(
+                k not in ("key_fields", "master_index") for k in value):
+        # A keying story that records a fact beyond its key fields and
+        # master index (``true_duplicates``: how registration behaves)
+        # is never data-confirmed. A binding names one (file, field),
+        # and no observation of a field measures that fact — whoever
+        # cites the observation, claim or resolution, and whatever kind
+        # the citing event declares. Counting it would let a copied
+        # ACCT observation ref "confirm" the duplicate-charts fact.
+        confirmed = False
     kind = kind or "analyst"
     if kind == "profiler-data" and not confirmed:
         # The meeting point of the claim and resolution routes: the
@@ -243,6 +379,10 @@ def _with_extra_claims(store: ClaimStore, extra: list[Claim]) -> ClaimStore:
     store is left untouched, keeping generate_spec a pure function)."""
     new = ClaimStore()
     new.claims = list(store.claims)
+    new.bindings = dict(store.bindings)
+    new.binding_refs = dict(store.binding_refs)
+    new.binding_conflicts = {k: list(v) for k, v in store.binding_conflicts.items()}
+    new.flagged_bindings = list(store.flagged_bindings)
     new.disputes = {
         key: Dispute(subject=d.subject, predicate=d.predicate, claims=list(d.claims),
                      resolved_value=d.resolved_value,
@@ -293,16 +433,36 @@ def generate_spec(events: list[LedgerEvent], store: ClaimStore, source: str,
         extra = value_shape_claims(profile_report)
         if extra:
             store = _with_extra_claims(store, extra)
-    observations = _observation_payloads(events)
+    observations = observation_payloads(events)
+    known_fields = _known_fields(events, observations, inventory)
     rules: list[dict[str, Any]] = []
     overrides: list[dict[str, Any]] = []
-    keys = sorted({c.key() for c in store.claims})
+    invalid_keying: Any = None
+    # Subjects come from claims only. A resolution settles a dispute
+    # among claims; a lone ``resolve`` event with nothing claimed
+    # (ClaimStore.resolve creates the dispute anyway) is not a fact
+    # anyone stated, so it never becomes a rule — otherwise one event
+    # could emit a keying story, a crosswalk handling, or a layout,
+    # with whatever provenance kind it declared for itself.
+    # (The one exception is the merge-policy screen below: a lone
+    # resolve on an identity merge predicate still reaches it, so the
+    # override is recorded — it never becomes a rule either way.)
+    keys = sorted({c.key() for c in store.claims} | {
+        key for key, d in store.disputes.items()
+        if key[0] == "identity" and key[1] != "keying_story" and d.resolved})
     n = 0
     for subject, predicate in keys:
         if subject == "identity" and predicate != "keying_story":
             # Merge policy is policy, not evidence — for ANY predicate that
             # expresses it, not only the one literally named merge_policy.
+            # The resolved value counts too: resolving a merge dispute to
+            # "auto_merge_all" is overridden and flagged exactly like
+            # claiming it.
             claimed = [c.value for c in store.get(subject, predicate)]
+            d = store.dispute(subject, predicate)
+            if d is not None and d.resolved and d.resolved_value is not None \
+                    and d.resolved_value not in claimed:
+                claimed.append(d.resolved_value)
             if any(v != "route_to_reconciliation" for v in claimed):
                 overrides.append({"subject": subject, "predicate": predicate,
                                   "claimed_values": claimed,
@@ -311,15 +471,21 @@ def generate_spec(events: list[LedgerEvent], store: ClaimStore, source: str,
         value = store.resolved_value(subject, predicate)
         if value is None:
             continue  # unresolved / null-resolved dispute -> known unknown
-        if subject == "identity" and predicate == "keying_story" \
-                and isinstance(value, str) and _MERGE_ACTION.search(value):
-            # The keying story is a fact about how charts are keyed, not
-            # a merge instruction. If its text prescribes auto-merging,
-            # the prescription is overridden by policy and flagged here,
-            # exactly like a merge claim under any other predicate.
-            overrides.append({"subject": subject, "predicate": predicate,
-                              "claimed_values": [value],
-                              "policy": "route_to_reconciliation"})
+        if subject == "identity" and predicate == "keying_story":
+            structured = _valid_keying_story(value, known_fields)
+            if structured is None:
+                # Not a structured keying fact — free text, or a malformed
+                # structure — so it could carry an instruction no screen
+                # has vetted. It is overridden by policy and flagged here,
+                # exactly like a merge claim under any other predicate, and
+                # the subject surfaces as a known unknown below instead of
+                # entering the spec as a rule.
+                overrides.append({"subject": subject, "predicate": predicate,
+                                  "claimed_values": [value],
+                                  "policy": "route_to_reconciliation"})
+                invalid_keying = value
+                continue
+            value = structured
         kind, confirmed, prov_str = _rule_provenance(
             store, subject, predicate, value, observations)
         n += 1
@@ -361,6 +527,14 @@ def generate_spec(events: list[LedgerEvent], store: ClaimStore, source: str,
                         disposition="runtime_question",
                         note=f"coverage checklist item {item.id} is {item.status}: "
                              f"{item.description}")
+    if invalid_keying is not None:
+        add_unknown("identity", "keying_story",
+                    claimed_values=[invalid_keying],
+                    disposition="runtime_question",
+                    note="the keying story on record is not a structured "
+                         "value (key fields, no action verb), so it is "
+                         "flagged in policy_overrides and the keying "
+                         "question goes to the runtime instead")
     known_unknowns.append({
         "subject": "identity", "predicate": "merge_decisions",
         "disposition": "runtime_question",
