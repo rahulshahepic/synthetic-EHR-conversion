@@ -12,7 +12,7 @@ from typing import Any, Callable, Iterable, Iterator
 
 from .load.client import NimbusClient
 from .runs import store as S
-from .terminology import TERMS
+from .terminology import terms_for
 
 ANTICOAG_RXNORM = {"855332", "1364445"}
 INSULIN_RXNORM = {"285018"}
@@ -133,8 +133,12 @@ def _sentinel(name: str, description: str, source: Iterable[dict[str, Any]], kee
 
 def sentinels(store: S.RunStore, client: NimbusClient, run_id: str) -> dict[str, Any]:
     pat_of = store.xall(run_id, "pat")
+    # Source drug codes resolve through the run's own profile crosswalks, the ones its mapping used.
+    from .profiles import load_profile
+    terms = terms_for(load_profile(store.run(run_id)["config"].get("profile")))
+
     def active_with(codes: set[str]) -> Callable[[dict[str, Any]], bool]:
-        return lambda r: r["source"]["STATUS"] == "A" and TERMS.formulary.get(r["source"]["FORM_CODE"], ("",))[0] in codes
+        return lambda r: r["source"]["STATUS"] == "A" and terms.formulary.get(r["source"]["FORM_CODE"], ("",))[0] in codes
 
     # Each target collection is traversed once, aggregating only the counts/IDs
     # required by clinical sentinels instead of retaining millions of payloads.

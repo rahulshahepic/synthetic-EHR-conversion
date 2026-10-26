@@ -1,0 +1,63 @@
+{
+ "interface": {
+  "answers": {
+   "APPT_STATUS has BMP in 26 rows. What does it mean?": "Scheduling is a vendor-hosted module; I pass through what it writes. I don't know what BMP means. Ask the vendor or the clinics.",
+   "Can you confirm the file format: delimiter, header row, encoding, quoting?": "Pipe-delimited, header row on every file, Latin-1, CRLF line ends, no quoting. Pipes are not allowed in data.",
+   "How are patients keyed across files, and can one person have more than one PERSON_NO?": "PERSON_NO joins everything; MRN is enterprise-wide. But yes: the 2016 MPI project only matched patients inside each campus. Patients seen at both HVMC and Sun Ridge before 2016 still have two registrations, one per campus, and nobody linked them. Same-campus duplicate registrations still happen too.",
+   "How do I tell which campus a timestamp belongs to?": "Visits and appointments through the clinic's campus, CLINIC.CAMPUS_CD. Everything else through the patient's registration campus, PERSON.CAMPUS_CD.",
+   "Lab collection timestamps look like 01-APR-14 09:14, not the guide's format. Where do they come from?": "They come straight from the lab interface as the lab system writes them. Ask Ray about the details; I don't reformat them.",
+   "The guide lists IMMUNE.DAT, but there is no such file in the export. Is it missing from this delivery?": "No. There is no IMMUNE.DAT. It was in the vendor's guide but we never kept immunizations in MCS/2; the state registry is the record.",
+   "The guide says every timestamp is Mountain Time. Is that true for both campuses, including Sun Ridge in Tucson?": "No. HVMC is Mountain local time with daylight saving. Sun Ridge is in Tucson: Arizona does not do daylight saving, and Sun Ridge timestamps are Arizona local time all year. Treat SRC as America/Phoenix and HVMC as America/Denver.",
+   "The guide you sent is version 3.2 from 2014 and describes extract format 3.x, but the manifest says 4.0. Which is current, and what changed?": "4.0 is current, since the 2019 upgrade. The guide never got updated. 4.0 added the LOINC column in TESTDICT and the TH visit type. Treat the guide as a 3.x document.",
+   "VISIT_TYPE has a value TH in 225 rows that the guide does not list. What is it, and what is SDS?": "TH is telehealth, video visits, since 2020. SDS is same-day surgery, outpatient procedural.",
+   "VS_UNIT is blank on most vital-sign rows, though the guide says it is always populated. What unit are the blank ones in?": "HVMC's flowsheet never sends a unit. Everything there is US units: weight pounds, temperature Fahrenheit, height inches. Sun Ridge's flowsheet sends metric with the unit filled in: kg, C, cm. HR, RR and SPO2 never carry a unit at either campus. BP is systolic/diastolic.",
+   "What are the VS_TYPE codes?": "BP blood pressure, HR heart rate, RR respiratory rate, TEMP temperature, WT weight, HT height, SPO2 oxygen saturation. One row per measurement."
+  },
+  "blind_spots": [],
+  "name": "Gary-Lindqvist",
+  "outside_response": "Outside my area."
+ },
+ "lab": {
+  "answers": {
+   "COLLECTED_TS looks like 14-MAR-23 08:15. How should it be read, and in which time zone?": "That is Oracle-style from the lab interface: day, three-letter month, two-digit year, then 24-hour time. Every lab row is from 2005 or later, so the two-digit year is always 20xx. It's local time at the collecting campus.",
+   "RESULT_STATUS has F, C and X in the data. What do they mean?": "F final, C corrected; the value on the row is the corrected value. Cancelled results are purged before the nightly extract, so you won't see them.",
+   "There are 69 rows with RESULT_STATUS X in this extract, 42 of them with the result text CANCELLED. If cancelled results are purged, what are these?": "That's the only status I know of besides F and C. If you see X with CANCELLED in the result, those are cancelled orders. They shouldn't be in there, and they certainly should not go into the new chart.",
+   "What are the ABN flag values?": "H high, L low, A abnormal for positives.",
+   "What is in RESULT and UNITS? I see mmol/L on some glucose rows.": "RESULT is the result as released: numbers, NEG/POS for qualitative tests, or text like SEE SCANNED REPORT for send-outs. UNITS is what the instrument reported. Sun Ridge's analyzer reports glucose in mmol/L, HVMC mg/dL. Both are right.",
+   "Where do LOINC codes for your tests come from, and which tests have none?": "I loaded the LOINC column in TESTDICT in 2019 for every orderable test. SENDOUT is the miscellaneous send-out bucket: the real test is whatever the reference lab ran and the result is a scanned report, so it has no LOINC and never will."
+  },
+  "blind_spots": [],
+  "name": "Ray-Castillo",
+  "outside_response": "Outside my area."
+ },
+ "pharmacy": {
+  "answers": {
+   "And MD0190 and MD0199?": "MD0190 is a compounded mouthwash and has no single RxNorm concept. MD0199 is MISC MEDICATION - SEE COMMENT: the actual drug is in a free-text comment we don't extract.",
+   "DRUGFILE.RXNORM is blank on three drugs. What are they, and are they still used?": "Rows without RxNorm are the compounded items and the MISC placeholder, and they only sit on old orders that are long inactive. Nothing current uses them; you can skip them safely.",
+   "MD0105 has no RxNorm in the drug file and appears on 25 orders. What is it?": "MD0105 is insulin glargine 100 units/mL. Its RxNorm is 285018. I'm sure of that one; I just never got it into the drug file.",
+   "What do SIG_TXT, DOSE_TXT and RX_STATUS hold?": "SIG_TXT is the sig as the prescriber typed it, mostly Latin abbreviations. DOSE_TXT is the dose with its unit. RX_STATUS is ACTIVE, DISCONTINUED, COMPLETED, HOLD.",
+   "Who maintains allergy entries?": "Registration and nursing own allergies. Ask Denise."
+  },
+  "blind_spots": [],
+  "name": "Priya-Natarajan",
+  "outside_response": "Outside my area."
+ },
+ "registration": {
+  "answers": {
+   "A few patients have a birth date of 01/01/1900. Are those real?": "No. When a patient can't give a date of birth the desk keys 01/01/1900 so the registration can be saved. It is a placeholder, not a birth date; HIM is supposed to chase it, and some never got fixed.",
+   "Appointment status BMP: do you know what it means?": "That's not mine. Scheduling sits with the clinics and IT. Ask Gary.",
+   "Can one patient have more than one PERSON_NO?": "The 2016 MPI project merged every duplicate registration at both campuses. Since then there is one PERSON_NO per person. If you find two, it's a desk error from last week, not history.",
+   "Coverage relationship codes in the data are S, P, C and O; the guide says S, SP, D, O. What do the desks key?": "S self, P spouse or partner, C child, O other. Some coverages were saved with it blank.",
+   "Do both campuses chart in the same time zone?": "We are one health system on one clock: everything in MCS/2 is Mountain Time.",
+   "Lab result status X: do you know what it means?": "That's not mine. Ask Ray.",
+   "Problem codes in the extract have no decimal point (E119, 25000), but the guide says they are stored with it. Which is right?": "MCS/2 strips the decimal point when it stores a code, ever since the 2012 upgrade. E11.9 is stored E119, 250.00 is stored 25000.",
+   "SEX_CD in the data is 1, 2, 3 or 9. The guide says 0, 1, 2. What do 3 and 9 mean, and is 0 ever used?": "1 male, 2 female, 9 unknown. Since 2021 we record 3 for patients whose documents carry an X marker. Zero is not something anyone keys.",
+   "What does NKA_YN mean, and can it disagree with the allergy file?": "Y means the patient told the desk no known allergies. Nurses sometimes add allergies later without clearing it, so yes.",
+   "What values can RACE_TXT hold?": "The picklist text: White, Black or African American, Asian, Hispanic or Latino, American Indian/Alaska Native, Pacific Islander, Other, Declined. Yes, Hispanic is on the race picklist; it should have been an ethnicity question.",
+   "When is a problem coded ICD-9 versus ICD-10, and what are problems with no code?": "ICD-10 since October 2015, ICD-9 before that. Problems entered without a code are free text the provider typed."
+  },
+  "blind_spots": [],
+  "name": "Denise-Okafor",
+  "outside_response": "Outside my area."
+ }
+}

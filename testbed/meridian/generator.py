@@ -279,7 +279,7 @@ class Gen:
                 "DRUG_CD": code, "DRUG_DESC": desc, "DOSE_TXT": r.choice(doses), "SIG_TXT": r.choice(sigs),
                 "ORDER_DT": _mdy(start), "STOP_DT": _mdy(start + timedelta(days=r.randint(10, 400))) if status != "ACTIVE" else "",
                 "RX_STATUS": status, "PRESCRIBER_ID": f"ST{r.randint(1, 18):04d}"})
-            if not rx:
+            if truth_rx is None:
                 self.issue("unmapped_medication", "RXORDER", rno)
         # appointments
         for _ in range(r.choice([0, 1, 2, 3])):
@@ -315,8 +315,6 @@ class Gen:
         if vt == "IP" and status == "CLOSED" and r.random() < rates["missing_discharge"]:
             disch = None
             self.issue("missing_discharge", "VISIT", vno)
-        if vt == "TH":
-            self.issue("undocumented_visit_type", "VISIT", vno)
         self.truth["visit_class"][vno] = V.VISIT_TYPES[vt][0]
         self.rows["VISIT"].append({
             "VISIT_NO": vno, "PERSON_NO": chart, "CLINIC_CD": clinic, "VISIT_TYPE": vt, "ADMIT_TS": _ts(admit),
@@ -343,9 +341,10 @@ class Gen:
                 self.rdate(date(2015, 10, 1), date(2026, 6, 1))
             row = {"DX_CODE": code, "CODE_SYS": sys_, "DX_TEXT": text}
             self.truth["dx"][pno] = icd10
-            self.issue("dotless_icd", "PROBLEM", pno)
-            if sys_ == "I9":
-                self.issue("icd9_code", "PROBLEM", pno)
+            # Dotless storage and ICD-9 are conventions (graded by value checks), not record problems;
+            # only codes that need a human choice are issues.
+            if sys_ == "I9" and code in ("311", "71590"):
+                self.issue("icd9_one_to_many", "PROBLEM", pno)
             if code == "M545":
                 self.issue("retired_icd10", "PROBLEM", pno)
         vis = [v for v in visits if v[1] == chart]

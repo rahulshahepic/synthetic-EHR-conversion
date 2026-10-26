@@ -90,7 +90,8 @@ class OverlayTerminology(Terminology):
     ``crosswalks`` maps a code-set name to ``{source value: target}`` as the interview recorded it
     (the profile's ``CROSSWALKS``). Text-keyed sets (race, specialties) are matched normalized,
     like the base tables. Targets: ``visit_class``/``specialties`` a value, ``labs`` a LOINC,
-    ``formulary`` an RxNorm, ``race`` ``"race|ethnicity"``.
+    ``formulary`` an RxNorm, ``race`` ``"race|ethnicity"``. A LOINC or RxNorm the base tables
+    already know keeps their house unit and display.
     """
 
     def __init__(self, crosswalks: dict[str, dict[str, str]]):
@@ -108,11 +109,15 @@ class OverlayTerminology(Terminology):
 
     @cached_property
     def labs(self) -> dict[str, tuple[str, str, str]]:
-        return self._over("labs", TERMS.labs, lambda t: (t, "", ""))
+        # The source's crosswalk names the LOINC; the house unit and display for a LOINC Bridge
+        # already knows come from the base table (the source reports its own units per result).
+        known = {loinc: (ucum, display) for loinc, ucum, display in TERMS.labs.values()}
+        return self._over("labs", TERMS.labs, lambda t: (t, *known.get(t, ("", ""))))
 
     @cached_property
     def formulary(self) -> dict[str, tuple[str, str]]:
-        return self._over("formulary", TERMS.formulary, lambda t: (t, ""))
+        known = {rx: display for rx, display in TERMS.formulary.values()}
+        return self._over("formulary", TERMS.formulary, lambda t: (t, known.get(t, "")))
 
     @cached_property
     def specialties(self) -> dict[str, str]:

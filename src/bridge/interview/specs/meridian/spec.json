@@ -1,0 +1,3198 @@
+{
+ "generator": "bridge.interview.specgen",
+ "known_unknowns": [
+  {
+   "claimed_values": [
+    "SCH, ARR, CMP, NOS, CAN",
+    "observed values SCH, ARR, CMP, NOS, CAN and BMP (26 rows); BMP is not in the guide"
+   ],
+   "disposition": "runtime_question",
+   "predicate": "convention",
+   "subject": "field:APPT.DAT.APPT_STATUS"
+  },
+  {
+   "disposition": "runtime_question",
+   "note": "Every proposed identity merge is decided by a human in reconciliation; the spec contains no auto-merge rule.",
+   "predicate": "merge_decisions",
+   "subject": "identity"
+  }
+ ],
+ "ledger_events": 389,
+ "policy_overrides": [
+  {
+   "claimed_values": [
+    "84 PERSON rows fall in 41 groups sharing BIRTH_DT+SSN_LAST4; 23 groups span both campuses (PERSON.DAT cross-tab via read_estate)"
+   ],
+   "policy": "route_to_reconciliation",
+   "predicate": "duplicate_evidence",
+   "subject": "identity"
+  }
+ ],
+ "reader_binding": {
+  "canonical": {
+   "AllergyIntolerance": {
+    "fields": {
+     "ALG_ID": "ALG_NO",
+     "ALLERGEN": "ALLERGEN_TXT",
+     "ENTERED_DT": {
+      "date": "%m/%d/%Y",
+      "field": "NOTED_DT"
+     },
+     "PAT_ID": "PERSON_NO",
+     "REACTION": "REACTION_TXT",
+     "SEVERITY": {
+      "field": "SEVERITY",
+      "map": {
+       "MILD": "MILD",
+       "MODERATE": "MOD",
+       "SEVERE": "SEV"
+      }
+     }
+    },
+    "file": "ALLERGY",
+    "key": "ALG_NO"
+   },
+   "Appointment": {
+    "fields": {
+     "APPT_DT": {
+      "datetime": "%Y-%m-%d %H:%M",
+      "field": "APPT_TS"
+     },
+     "APPT_ID": "APPT_NO",
+     "DEPT_ID": "CLINIC_CD",
+     "DURATION_MIN": "LEN_MIN",
+     "PAT_ID": "PERSON_NO",
+     "PROV_ID": "PROVIDER_ID",
+     "REASON": "APPT_REASON",
+     "STATUS": {
+      "field": "APPT_STATUS",
+      "map": {
+       "ARR": "A",
+       "CAN": "X",
+       "CMP": "C",
+       "NOS": "N",
+       "SCH": "S"
+      }
+     }
+    },
+    "file": "APPT",
+    "key": "APPT_NO"
+   },
+   "Condition": {
+    "fields": {
+     "CODE": {
+      "field": "DX_CODE",
+      "icd_decimal": {
+       "icd9": "I9",
+       "system_field": "CODE_SYS"
+      }
+     },
+     "CODE_TYPE": {
+      "field": "CODE_SYS",
+      "map": {
+       "I10": "10",
+       "I9": "9"
+      }
+     },
+     "DX_DESC": "DX_TEXT",
+     "DX_ID": "PROB_NO",
+     "ONSET_DT": {
+      "date": "%m/%d/%Y",
+      "field": "ONSET_DT"
+     },
+     "PAT_ID": "PERSON_NO",
+     "RESOLVED_DT": {
+      "date": "%m/%d/%Y",
+      "field": "RESOLVE_DT"
+     },
+     "STATUS": "STATUS",
+     "VISIT_ID": "VISIT_NO"
+    },
+    "file": "PROBLEM",
+    "key": "PROB_NO"
+   },
+   "Coverage": {
+    "fields": {
+     "COB_ORDER": "PRIORITY",
+     "EFF_DT": {
+      "date": "%m/%d/%Y",
+      "field": "EFF_DT"
+     },
+     "MEMBER_ID": "MEMBER_ID",
+     "PAT_ID": "PERSON_NO",
+     "PLAN_ID": "PLAN_CD",
+     "REL_CODE": {
+      "field": "REL_CD",
+      "map": {
+       "C": "19",
+       "O": "G8",
+       "P": "01",
+       "S": "18"
+      }
+     },
+     "TERM_DT": {
+      "date": "%m/%d/%Y",
+      "field": "END_DT"
+     }
+    },
+    "file": "INSCOV",
+    "key": "COV_NO"
+   },
+   "Encounter": {
+    "exclude": {
+     "STATUS": [
+      "VOID"
+     ]
+    },
+    "exclude_reason": {
+     "VOID": "visit entered in error (guide \u00a74 VISIT.STATUS)"
+    },
+    "fields": {
+     "ADMIT_DT": {
+      "datetime": "%Y-%m-%d %H:%M",
+      "field": "ADMIT_TS"
+     },
+     "ATTEND_PROV_ID": "ATTEND_ID",
+     "DEPT_ID": "CLINIC_CD",
+     "DISCH_DT": {
+      "datetime": "%Y-%m-%d %H:%M",
+      "field": "DISCH_TS"
+     },
+     "PAT_ID": "PERSON_NO",
+     "REASON_TEXT": "CHIEF_COMPLAINT",
+     "STATUS": {
+      "field": "STATUS",
+      "map": {
+       "CLOSED": "C",
+       "OPEN": "A"
+      }
+     },
+     "VISIT_ID": "VISIT_NO",
+     "VISIT_TYPE": "VISIT_TYPE"
+    },
+    "file": "VISIT",
+    "key": "VISIT_NO"
+   },
+   "MedicationRequest": {
+    "fields": {
+     "DOSE": "DOSE_TXT",
+     "DRUG_NAME": "DRUG_DESC",
+     "FORM_CODE": "DRUG_CD",
+     "ORD_ID": "RX_NO",
+     "PAT_ID": "PERSON_NO",
+     "PROV_ID": "PRESCRIBER_ID",
+     "SIG": "SIG_TXT",
+     "START_DT": {
+      "date": "%m/%d/%Y",
+      "field": "ORDER_DT"
+     },
+     "STATUS": {
+      "field": "RX_STATUS",
+      "map": {
+       "ACTIVE": "A",
+       "COMPLETED": "C",
+       "DISCONTINUED": "D",
+       "HOLD": "H"
+      }
+     },
+     "STOP_DT": {
+      "date": "%m/%d/%Y",
+      "field": "STOP_DT"
+     },
+     "VISIT_ID": "VISIT_NO"
+    },
+    "file": "RXORDER",
+    "key": "RX_NO"
+   },
+   "Observation": [
+    {
+     "exclude": {
+      "RESULT_STATUS": [
+       "X"
+      ]
+     },
+     "exclude_reason": {
+      "X": "cancelled result (Ray Castillo, E000196)"
+     },
+     "fields": {
+      "ABN_FLAG": "ABN",
+      "ACCESSION": "ACCESSION",
+      "COLLECT_DT": {
+       "datetime": "%d-%b-%y %H:%M",
+       "field": "COLLECTED_TS"
+      },
+      "PAT_ID": "PERSON_NO",
+      "REF_RANGE": "REF_RANGE",
+      "RESULT_VAL": "RESULT",
+      "TEST_CODE": "TEST_CD",
+      "TEST_NAME": {
+       "field": "TEST_CD",
+       "lookup": {
+        "file": "TESTDICT",
+        "key": "TEST_CD",
+        "value": "TEST_NAME"
+       }
+      },
+      "UNITS": "UNITS",
+      "VISIT_ID": "VISIT_NO",
+      "_STATUS": "RESULT_STATUS"
+     },
+     "file": "LABRES",
+     "key": "RES_NO",
+     "kind": "lab"
+    },
+    {
+     "fields": {
+      "FIELD": {
+       "field": "VS_TYPE",
+       "map": {
+        "BP": "BP",
+        "HR": "PULSE",
+        "HT": "HT",
+        "RR": "RESP",
+        "SPO2": "SPO2",
+        "TEMP": "TEMP",
+        "WT": "WT"
+       }
+      },
+      "PAT_ID": "PERSON_NO",
+      "TAKEN_DT": {
+       "datetime": "%Y-%m-%d %H:%M",
+       "field": "TAKEN_TS"
+      },
+      "VALUE": {
+       "format": "{VS_VALUE} {VS_UNIT}"
+      },
+      "VISIT_ID": "VISIT_NO"
+     },
+     "file": "VITALS",
+     "key": "VS_NO",
+     "kind": "vital"
+    }
+   ],
+   "Organization": {
+    "departments": {
+     "fields": {
+      "DEPT_ID": "CLINIC_CD",
+      "DEPT_NAME": "CLINIC_NAME",
+      "FAC_ID": "CAMPUS_CD"
+     },
+     "file": "CLINIC",
+     "key": "CLINIC_CD"
+    },
+    "sites": {
+     "fields": {
+      "FAC_ID": "CAMPUS_CD",
+      "FAC_NAME": "CAMPUS_NAME"
+     },
+     "file": "CAMPUS",
+     "key": "CAMPUS_CD"
+    }
+   },
+   "Patient": {
+    "fields": {
+     "ADDR": {
+      "format": "{ADDR1}^{ADDR2}^{CITY}^{ST}^{ZIP}"
+     },
+     "DECEASED_DT": {
+      "date": "%m/%d/%Y",
+      "field": "DECEASED_DT"
+     },
+     "DOB": {
+      "date": "%m/%d/%Y",
+      "field": "BIRTH_DT",
+      "null_values": [
+       "01/01/1900"
+      ]
+     },
+     "FAC_ID": "CAMPUS_CD",
+     "LAST_UPD": {
+      "date": "%m/%d/%Y",
+      "field": "UPDATED_DT"
+     },
+     "MRN": "MRN",
+     "NKA_FLAG": "NKA_YN",
+     "PAT_ID": "PERSON_NO",
+     "PAT_NAME": {
+      "format": "{LAST_NM},{FIRST_NM} {MID_NM}"
+     },
+     "PHONE_CELL": "CELL_PH",
+     "PHONE_HOME": "HOME_PH",
+     "RACE": "RACE_TXT",
+     "SEX": {
+      "field": "SEX_CD",
+      "map": {
+       "1": "M",
+       "2": "F",
+       "3": "X",
+       "9": "U"
+      }
+     },
+     "SSN4": "SSN_LAST4"
+    },
+    "file": "PERSON",
+    "key": "PERSON_NO"
+   },
+   "Payer": {
+    "fields": {
+     "PAYER_ID": "CARRIER_CD",
+     "PAYER_NAME": "CARRIER_NAME"
+    },
+    "file": "CARRIER",
+    "key": "CARRIER_CD"
+   },
+   "Plan": {
+    "fields": {
+     "PAYER_ID": "CARRIER_CD",
+     "PLAN_ID": "PLAN_CD",
+     "PLAN_NAME": "PLAN_NAME",
+     "PLAN_TYPE": "PLAN_TYPE"
+    },
+    "file": "INSPLAN",
+    "key": "PLAN_CD"
+   },
+   "Practitioner": {
+    "fields": {
+     "ACTIVE": "ACTIVE_YN",
+     "BILLING_FLAG": "BILLS_YN",
+     "NAME": "STAFF_NAME",
+     "NPI": "NPI",
+     "PROV_ID": "STAFF_ID",
+     "SPECIALTY": "SPEC_TXT",
+     "TERM_DT": {
+      "date": "%m/%d/%Y",
+      "field": "TERM_DATE"
+     }
+    },
+    "file": "STAFF",
+    "key": "STAFF_ID"
+   }
+  },
+  "files": {
+   "ALLERGY": {
+    "columns": [
+     "ALG_NO",
+     "ALLERGEN_TXT",
+     "NOTED_DT",
+     "PERSON_NO",
+     "REACTION_TXT",
+     "SEVERITY"
+    ],
+    "header": true,
+    "key": "ALG_NO",
+    "path": "ALLERGY.DAT"
+   },
+   "APPT": {
+    "columns": [
+     "APPT_NO",
+     "APPT_REASON",
+     "APPT_STATUS",
+     "APPT_TS",
+     "CLINIC_CD",
+     "LEN_MIN",
+     "PERSON_NO",
+     "PROVIDER_ID"
+    ],
+    "header": true,
+    "key": "APPT_NO",
+    "path": "APPT.DAT"
+   },
+   "CAMPUS": {
+    "columns": [
+     "CAMPUS_CD",
+     "CAMPUS_NAME",
+     "CITY",
+     "STATE"
+    ],
+    "header": true,
+    "key": "CAMPUS_CD",
+    "path": "CAMPUS.DAT"
+   },
+   "CARRIER": {
+    "columns": [
+     "CARRIER_CD",
+     "CARRIER_NAME"
+    ],
+    "header": true,
+    "key": "CARRIER_CD",
+    "path": "CARRIER.DAT"
+   },
+   "CLINIC": {
+    "columns": [
+     "CAMPUS_CD",
+     "CLINIC_CD",
+     "CLINIC_NAME"
+    ],
+    "header": true,
+    "key": "CLINIC_CD",
+    "path": "CLINIC.DAT"
+   },
+   "DRUGFILE": {
+    "columns": [
+     "DRUG_CD",
+     "DRUG_DESC",
+     "RXNORM"
+    ],
+    "header": true,
+    "key": "DRUG_CD",
+    "path": "DRUGFILE.DAT"
+   },
+   "INSCOV": {
+    "columns": [
+     "COV_NO",
+     "EFF_DT",
+     "END_DT",
+     "MEMBER_ID",
+     "PERSON_NO",
+     "PLAN_CD",
+     "PRIORITY",
+     "REL_CD"
+    ],
+    "header": true,
+    "key": "COV_NO",
+    "path": "INSCOV.DAT"
+   },
+   "INSPLAN": {
+    "columns": [
+     "CARRIER_CD",
+     "PLAN_CD",
+     "PLAN_NAME",
+     "PLAN_TYPE"
+    ],
+    "header": true,
+    "key": "PLAN_CD",
+    "path": "INSPLAN.DAT"
+   },
+   "LABRES": {
+    "columns": [
+     "ABN",
+     "ACCESSION",
+     "COLLECTED_TS",
+     "PERSON_NO",
+     "REF_RANGE",
+     "RESULT",
+     "RESULT_STATUS",
+     "RES_NO",
+     "TEST_CD",
+     "UNITS",
+     "VISIT_NO"
+    ],
+    "header": true,
+    "key": "RES_NO",
+    "path": "LABRES.DAT"
+   },
+   "PERSON": {
+    "columns": [
+     "ADDR1",
+     "ADDR2",
+     "BIRTH_DT",
+     "CAMPUS_CD",
+     "CELL_PH",
+     "CITY",
+     "DECEASED_DT",
+     "FIRST_NM",
+     "HOME_PH",
+     "LAST_NM",
+     "MID_NM",
+     "MRN",
+     "NKA_YN",
+     "PERSON_NO",
+     "RACE_TXT",
+     "SEX_CD",
+     "SSN_LAST4",
+     "ST",
+     "UPDATED_DT",
+     "ZIP"
+    ],
+    "header": true,
+    "key": "PERSON_NO",
+    "path": "PERSON.DAT"
+   },
+   "PROBLEM": {
+    "columns": [
+     "CODE_SYS",
+     "DX_CODE",
+     "DX_TEXT",
+     "ONSET_DT",
+     "PERSON_NO",
+     "PROB_NO",
+     "RESOLVE_DT",
+     "STATUS",
+     "VISIT_NO"
+    ],
+    "header": true,
+    "key": "PROB_NO",
+    "path": "PROBLEM.DAT"
+   },
+   "RXORDER": {
+    "columns": [
+     "DOSE_TXT",
+     "DRUG_CD",
+     "DRUG_DESC",
+     "ORDER_DT",
+     "PERSON_NO",
+     "PRESCRIBER_ID",
+     "RX_NO",
+     "RX_STATUS",
+     "SIG_TXT",
+     "STOP_DT",
+     "VISIT_NO"
+    ],
+    "header": true,
+    "key": "RX_NO",
+    "path": "RXORDER.DAT"
+   },
+   "STAFF": {
+    "columns": [
+     "ACTIVE_YN",
+     "BILLS_YN",
+     "NPI",
+     "ROLE",
+     "SPEC_TXT",
+     "STAFF_ID",
+     "STAFF_NAME",
+     "TERM_DATE"
+    ],
+    "header": true,
+    "key": "STAFF_ID",
+    "path": "STAFF.DAT"
+   },
+   "TESTDICT": {
+    "columns": [
+     "LOINC",
+     "TEST_CD",
+     "TEST_NAME",
+     "UNITS"
+    ],
+    "header": true,
+    "key": "TEST_CD",
+    "path": "TESTDICT.DAT"
+   },
+   "VISIT": {
+    "columns": [
+     "ADMIT_TS",
+     "ATTEND_ID",
+     "CHIEF_COMPLAINT",
+     "CLINIC_CD",
+     "DISCH_TS",
+     "PERSON_NO",
+     "STATUS",
+     "VISIT_NO",
+     "VISIT_TYPE"
+    ],
+    "header": true,
+    "key": "VISIT_NO",
+    "path": "VISIT.DAT"
+   },
+   "VITALS": {
+    "columns": [
+     "PERSON_NO",
+     "TAKEN_TS",
+     "VISIT_NO",
+     "VS_NO",
+     "VS_TYPE",
+     "VS_UNIT",
+     "VS_VALUE"
+    ],
+    "header": true,
+    "key": "VS_NO",
+    "path": "VITALS.DAT"
+   }
+  },
+  "format": {
+   "delimiter": "|",
+   "encoding": "latin-1",
+   "suffix": ".DAT"
+  },
+  "reader": "delimited",
+  "source": "meridian"
+ },
+ "rules": [
+  {
+   "data_confirmed": false,
+   "id": "R001",
+   "kind": "fact",
+   "predicate": "documented_gap",
+   "provenance": {
+    "kind": "interviewer",
+    "ref": "OBS-0002 + ledger:E000212"
+   },
+   "subject": "codeset:allergens",
+   "value": "allergen text maps through Bridge base allergen crosswalk; Bee stings and Adhesive tape stay uncoded (loss ledger); allergy owners are registration/nursing (ledger:E000212)"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R002",
+   "kind": "fact",
+   "predicate": "crosswalk",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "DRUGFILE.DAT RXNORM column (estate) + MD0105 from ledger:E000206 (Priya Natarajan, pharmacy)"
+   },
+   "subject": "codeset:formulary",
+   "value": {
+    "MD0101": "314076",
+    "MD0102": "861007",
+    "MD0103": "617312",
+    "MD0104": "855332",
+    "MD0105": "285018",
+    "MD0106": "308191",
+    "MD0107": "745679",
+    "MD0108": "966222",
+    "MD0109": "198053",
+    "MD0110": "312940",
+    "MD0111": "1364445",
+    "MD0112": "312615"
+   }
+  },
+  {
+   "data_confirmed": false,
+   "id": "R003",
+   "kind": "fact",
+   "predicate": "handling_unmapped",
+   "provenance": {
+    "kind": "interviewer",
+    "ref": "RXORDER.DAT cross-tab of DRUG_CD x RX_STATUS (interviewer query of the estate extract); dispute resolved via RXORDER.DAT cross-tab refutes the skip belief (E000204); medication safety: never skip silently"
+   },
+   "subject": "codeset:formulary",
+   "value": "route every order to the unmapped_medication question (pharmacist decides); MD0190/MD0199 sit on 23 ACTIVE and 17 HOLD orders"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R004",
+   "kind": "fact",
+   "predicate": "crosswalk",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "TESTDICT.DAT LOINC column (estate), loaded by Ray Castillo (ledger:E000198)"
+   },
+   "subject": "codeset:labs",
+   "value": {
+    "A1C": "4548-4",
+    "CHOL": "2093-3",
+    "CR": "2160-0",
+    "GLUC": "2345-7",
+    "HGB": "718-7",
+    "INR": "6301-6",
+    "K": "2823-3",
+    "LDL": "13457-7",
+    "NA": "2951-2",
+    "RSTREP": "78012-2",
+    "TSH": "3016-3",
+    "WBC": "6690-2"
+   }
+  },
+  {
+   "data_confirmed": false,
+   "id": "R005",
+   "kind": "fact",
+   "predicate": "documented_gap",
+   "provenance": {
+    "kind": "analyst",
+    "ref": "ledger:E000198 (Ray Castillo, lab)"
+   },
+   "subject": "codeset:labs",
+   "value": "SENDOUT: send-out bucket, scanned report, no LOINC (ledger:E000198); routes to the unmapped_lab runtime question"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R006",
+   "kind": "fact",
+   "predicate": "crosswalk",
+   "provenance": {
+    "kind": "analyst",
+    "ref": "ledger:E000176 (Denise Okafor, registration)"
+   },
+   "subject": "codeset:race",
+   "value": {
+    "American Indian/Alaska Native": "american-indian-alaska-native",
+    "Asian": "asian",
+    "Black or African American": "black-african-american",
+    "Declined": "asked-declined",
+    "Hispanic or Latino": "|hispanic-latino",
+    "Other": "other",
+    "Pacific Islander": "native-hawaiian-pacific-islander",
+    "White": "white"
+   }
+  },
+  {
+   "data_confirmed": false,
+   "id": "R007",
+   "kind": "fact",
+   "predicate": "documented_gap",
+   "provenance": {
+    "kind": "interviewer",
+    "ref": "OBS-0094 + interviews (no owner)"
+   },
+   "subject": "codeset:specialties",
+   "value": "no interviewed analyst owns provider specialties; Bridge base crosswalk covers 8 of 9 SPEC_TXT values; Gen Surg degrades to other at runtime with a loss note"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R008",
+   "kind": "fact",
+   "predicate": "crosswalk",
+   "provenance": {
+    "kind": "analyst",
+    "ref": "ledger:E000158 (Gary Lindqvist, interface)"
+   },
+   "subject": "codeset:visit_class",
+   "value": {
+    "ER": "emergency",
+    "IP": "inpatient",
+    "OBS": "observation",
+    "OP": "ambulatory",
+    "SDS": "ambulatory",
+    "TH": "virtual"
+   }
+  },
+  {
+   "data_confirmed": false,
+   "id": "R009",
+   "kind": "fact",
+   "predicate": "dictionary_status",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 (estate) header vs manifest.json (estate)"
+   },
+   "subject": "estate",
+   "value": "stale: guide 3.2 (2014) documents extract format 3.x; manifest.json says the delivered extract is format 4.0"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R010",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a73"
+   },
+   "subject": "field:ALLERGY.DAT.ALG_NO",
+   "value": "row key of ALLERGY"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R011",
+   "kind": "fact",
+   "predicate": "pass_through_text",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a74"
+   },
+   "subject": "field:ALLERGY.DAT.ALLERGEN_TXT",
+   "value": "free text, passed through"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R012",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a71"
+   },
+   "subject": "field:ALLERGY.DAT.NOTED_DT",
+   "value": "date MM/DD/YYYY"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R013",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a73"
+   },
+   "subject": "field:ALLERGY.DAT.PERSON_NO",
+   "value": "reference to PERSON.PERSON_NO"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R014",
+   "kind": "fact",
+   "predicate": "pass_through_text",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a74"
+   },
+   "subject": "field:ALLERGY.DAT.REACTION_TXT",
+   "value": "free text, passed through"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R015",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a74"
+   },
+   "subject": "field:ALLERGY.DAT.SEVERITY",
+   "value": "SEVERE, MODERATE, MILD; blank = not recorded"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R016",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a73"
+   },
+   "subject": "field:APPT.DAT.APPT_NO",
+   "value": "row key of APPT"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R017",
+   "kind": "fact",
+   "predicate": "pass_through_text",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a74"
+   },
+   "subject": "field:APPT.DAT.APPT_REASON",
+   "value": "free text, passed through"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R018",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a71 + ledger:E000156"
+   },
+   "subject": "field:APPT.DAT.APPT_TS",
+   "value": "timestamp YYYY-MM-DD HH:MM, local time of the campus"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R019",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a73"
+   },
+   "subject": "field:APPT.DAT.CLINIC_CD",
+   "value": "reference to CLINIC.CLINIC_CD"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R020",
+   "kind": "fact",
+   "predicate": "pass_through_text",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a74"
+   },
+   "subject": "field:APPT.DAT.LEN_MIN",
+   "value": "free text, passed through"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R021",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a73"
+   },
+   "subject": "field:APPT.DAT.PERSON_NO",
+   "value": "reference to PERSON.PERSON_NO"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R022",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a73"
+   },
+   "subject": "field:APPT.DAT.PROVIDER_ID",
+   "value": "reference to STAFF.STAFF_ID"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R023",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a73"
+   },
+   "subject": "field:CAMPUS.DAT.CAMPUS_CD",
+   "value": "row key of CAMPUS"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R024",
+   "kind": "fact",
+   "predicate": "pass_through_text",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a74"
+   },
+   "subject": "field:CAMPUS.DAT.CAMPUS_NAME",
+   "value": "free text, passed through"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R025",
+   "kind": "fact",
+   "predicate": "pass_through_text",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a74"
+   },
+   "subject": "field:CAMPUS.DAT.CITY",
+   "value": "free text, passed through"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R026",
+   "kind": "fact",
+   "predicate": "pass_through_text",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a74"
+   },
+   "subject": "field:CAMPUS.DAT.STATE",
+   "value": "free text, passed through"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R027",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a73"
+   },
+   "subject": "field:CARRIER.DAT.CARRIER_CD",
+   "value": "row key of CARRIER"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R028",
+   "kind": "fact",
+   "predicate": "pass_through_text",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a74"
+   },
+   "subject": "field:CARRIER.DAT.CARRIER_NAME",
+   "value": "free text, passed through"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R029",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a73"
+   },
+   "subject": "field:CLINIC.DAT.CAMPUS_CD",
+   "value": "reference to CAMPUS.CAMPUS_CD"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R030",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a73"
+   },
+   "subject": "field:CLINIC.DAT.CLINIC_CD",
+   "value": "row key of CLINIC"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R031",
+   "kind": "fact",
+   "predicate": "pass_through_text",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a74"
+   },
+   "subject": "field:CLINIC.DAT.CLINIC_NAME",
+   "value": "free text, passed through"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R032",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a73"
+   },
+   "subject": "field:DRUGFILE.DAT.DRUG_CD",
+   "value": "row key of DRUGFILE"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R033",
+   "kind": "fact",
+   "predicate": "pass_through_text",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a74"
+   },
+   "subject": "field:DRUGFILE.DAT.DRUG_DESC",
+   "value": "free text, passed through"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R034",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "analyst",
+    "ref": "ledger:E000206-E000208 (Priya Natarajan)"
+   },
+   "subject": "field:DRUGFILE.DAT.RXNORM",
+   "value": "RxNorm concept maintained by Pharmacy; blank on MD0105, MD0190, MD0199"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R035",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a73"
+   },
+   "subject": "field:INSCOV.DAT.COV_NO",
+   "value": "row key of INSCOV"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R036",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a71"
+   },
+   "subject": "field:INSCOV.DAT.EFF_DT",
+   "value": "date MM/DD/YYYY"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R037",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a71"
+   },
+   "subject": "field:INSCOV.DAT.END_DT",
+   "value": "date MM/DD/YYYY"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R038",
+   "kind": "fact",
+   "predicate": "pass_through_text",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a74"
+   },
+   "subject": "field:INSCOV.DAT.MEMBER_ID",
+   "value": "free text, passed through"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R039",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a73"
+   },
+   "subject": "field:INSCOV.DAT.PERSON_NO",
+   "value": "reference to PERSON.PERSON_NO"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R040",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a73"
+   },
+   "subject": "field:INSCOV.DAT.PLAN_CD",
+   "value": "reference to INSPLAN.PLAN_CD"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R041",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a74"
+   },
+   "subject": "field:INSCOV.DAT.PRIORITY",
+   "value": "1=primary, 2=secondary"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R042",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "analyst",
+    "ref": "ledger:E000174 (Denise Okafor, registration); dispute resolved via ledger:E000174 + OBS-0034"
+   },
+   "subject": "field:INSCOV.DAT.REL_CD",
+   "value": "S=self, P=spouse/partner, C=child, O=other; sometimes blank"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R043",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a73"
+   },
+   "subject": "field:INSPLAN.DAT.CARRIER_CD",
+   "value": "reference to CARRIER.CARRIER_CD"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R044",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a73"
+   },
+   "subject": "field:INSPLAN.DAT.PLAN_CD",
+   "value": "row key of INSPLAN"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R045",
+   "kind": "fact",
+   "predicate": "pass_through_text",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a74"
+   },
+   "subject": "field:INSPLAN.DAT.PLAN_NAME",
+   "value": "free text, passed through"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R046",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a74"
+   },
+   "subject": "field:INSPLAN.DAT.PLAN_TYPE",
+   "value": "plan type text (PPO, HMO, MEDICARE, MEDICAID, SELF)"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R047",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "analyst",
+    "ref": "ledger:E000202 (Ray Castillo)"
+   },
+   "subject": "field:LABRES.DAT.ABN",
+   "value": "H=high, L=low, A=abnormal"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R048",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a74"
+   },
+   "subject": "field:LABRES.DAT.ACCESSION",
+   "value": "specimen accession number, groups results"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R049",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "analyst",
+    "ref": "ledger:E000192 (Ray Castillo, lab); dispute resolved via ledger:E000192 + OBS-0041"
+   },
+   "subject": "field:LABRES.DAT.COLLECTED_TS",
+   "value": "DD-MON-YY HH:MM, two-digit year always 20xx, local time at the collecting campus"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R050",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a73"
+   },
+   "subject": "field:LABRES.DAT.PERSON_NO",
+   "value": "reference to PERSON.PERSON_NO"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R051",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a74"
+   },
+   "subject": "field:LABRES.DAT.REF_RANGE",
+   "value": "reference range text, lo-hi or <hi"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R052",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "analyst",
+    "ref": "ledger:E000200 (Ray Castillo)"
+   },
+   "subject": "field:LABRES.DAT.RESULT",
+   "value": "numeric, NEG/POS for qualitative tests, or text such as SEE SCANNED REPORT for send-outs"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R053",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "analyst",
+    "ref": "ledger:E000196 (Ray Castillo, lab, shown OBS-0045); dispute resolved via OBS-0045 (69 X rows) refutes purge belief E000194; Ray confirms X = cancelled, exclude (E000196)"
+   },
+   "subject": "field:LABRES.DAT.RESULT_STATUS",
+   "value": "F=final, C=corrected (row holds the corrected value), X=cancelled: present in the extract, must not be converted"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R054",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a73"
+   },
+   "subject": "field:LABRES.DAT.RES_NO",
+   "value": "row key of LABRES"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R055",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a73"
+   },
+   "subject": "field:LABRES.DAT.TEST_CD",
+   "value": "reference to TESTDICT.TEST_CD"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R056",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "analyst",
+    "ref": "ledger:E000200 (Ray Castillo)"
+   },
+   "subject": "field:LABRES.DAT.UNITS",
+   "value": "unit as the instrument reported it (SRC glucose mmol/L, HVMC mg/dL)"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R057",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a73"
+   },
+   "subject": "field:LABRES.DAT.VISIT_NO",
+   "value": "reference to VISIT.VISIT_NO"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R058",
+   "kind": "fact",
+   "predicate": "pass_through_text",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a74"
+   },
+   "subject": "field:PERSON.DAT.ADDR1",
+   "value": "free text, passed through"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R059",
+   "kind": "fact",
+   "predicate": "pass_through_text",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a74"
+   },
+   "subject": "field:PERSON.DAT.ADDR2",
+   "value": "free text, passed through"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R060",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "analyst",
+    "ref": "ledger:E000172 (Denise Okafor, registration); dispute resolved via ledger:E000172 + OBS-0052"
+   },
+   "subject": "field:PERSON.DAT.BIRTH_DT",
+   "value": "MM/DD/YYYY; 01/01/1900 is the desk placeholder for an unknown DOB, not a birth date"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R061",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a73"
+   },
+   "subject": "field:PERSON.DAT.CAMPUS_CD",
+   "value": "reference to CAMPUS.CAMPUS_CD"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R062",
+   "kind": "fact",
+   "predicate": "pass_through_text",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a74"
+   },
+   "subject": "field:PERSON.DAT.CELL_PH",
+   "value": "free text, passed through"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R063",
+   "kind": "fact",
+   "predicate": "pass_through_text",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a74"
+   },
+   "subject": "field:PERSON.DAT.CITY",
+   "value": "free text, passed through"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R064",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a71"
+   },
+   "subject": "field:PERSON.DAT.DECEASED_DT",
+   "value": "date MM/DD/YYYY"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R065",
+   "kind": "fact",
+   "predicate": "pass_through_text",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a74"
+   },
+   "subject": "field:PERSON.DAT.FIRST_NM",
+   "value": "free text, passed through"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R066",
+   "kind": "fact",
+   "predicate": "pass_through_text",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a74"
+   },
+   "subject": "field:PERSON.DAT.HOME_PH",
+   "value": "free text, passed through"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R067",
+   "kind": "fact",
+   "predicate": "pass_through_text",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a74"
+   },
+   "subject": "field:PERSON.DAT.LAST_NM",
+   "value": "free text, passed through"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R068",
+   "kind": "fact",
+   "predicate": "pass_through_text",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a74"
+   },
+   "subject": "field:PERSON.DAT.MID_NM",
+   "value": "free text, passed through"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R069",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a74"
+   },
+   "subject": "field:PERSON.DAT.MRN",
+   "value": "enterprise medical record number"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R070",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "analyst",
+    "ref": "ledger:E000178 (Denise Okafor)"
+   },
+   "subject": "field:PERSON.DAT.NKA_YN",
+   "value": "Y=patient reported no known allergies; may disagree with ALLERGY rows"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R071",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a73"
+   },
+   "subject": "field:PERSON.DAT.PERSON_NO",
+   "value": "row key of PERSON"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R072",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "analyst",
+    "ref": "ledger:E000176 (Denise Okafor)"
+   },
+   "subject": "field:PERSON.DAT.RACE_TXT",
+   "value": "registration picklist text; Hispanic or Latino is an ethnicity recorded on the race picklist"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R073",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "analyst",
+    "ref": "ledger:E000170 (Denise Okafor, registration); dispute resolved via ledger:E000170 + OBS-0065"
+   },
+   "subject": "field:PERSON.DAT.SEX_CD",
+   "value": "1=male, 2=female, 9=unknown, 3=X marker (since 2021); 0 never keyed"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R074",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a74"
+   },
+   "subject": "field:PERSON.DAT.SSN_LAST4",
+   "value": "last four SSN digits, may be blank; matching only"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R075",
+   "kind": "fact",
+   "predicate": "pass_through_text",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a74"
+   },
+   "subject": "field:PERSON.DAT.ST",
+   "value": "free text, passed through"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R076",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a71"
+   },
+   "subject": "field:PERSON.DAT.UPDATED_DT",
+   "value": "date MM/DD/YYYY"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R077",
+   "kind": "fact",
+   "predicate": "pass_through_text",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a74"
+   },
+   "subject": "field:PERSON.DAT.ZIP",
+   "value": "free text, passed through"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R078",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "analyst",
+    "ref": "ledger:E000182 (Denise Okafor)"
+   },
+   "subject": "field:PROBLEM.DAT.CODE_SYS",
+   "value": "I9=ICD-9-CM (before Oct 2015), I10=ICD-10-CM; blank for free-text problems"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R079",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "analyst",
+    "ref": "ledger:E000180 (Denise Okafor, HIM); dispute resolved via ledger:E000180 + OBS-0071"
+   },
+   "subject": "field:PROBLEM.DAT.DX_CODE",
+   "value": "ICD code with the decimal point stripped (E119 = E11.9, 25000 = 250.00) since the 2012 upgrade; re-insert by CODE_SYS"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R080",
+   "kind": "fact",
+   "predicate": "pass_through_text",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a74"
+   },
+   "subject": "field:PROBLEM.DAT.DX_TEXT",
+   "value": "free text, passed through"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R081",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a71"
+   },
+   "subject": "field:PROBLEM.DAT.ONSET_DT",
+   "value": "date MM/DD/YYYY"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R082",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a73"
+   },
+   "subject": "field:PROBLEM.DAT.PERSON_NO",
+   "value": "reference to PERSON.PERSON_NO"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R083",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a73"
+   },
+   "subject": "field:PROBLEM.DAT.PROB_NO",
+   "value": "row key of PROBLEM"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R084",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a71"
+   },
+   "subject": "field:PROBLEM.DAT.RESOLVE_DT",
+   "value": "date MM/DD/YYYY"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R085",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a74"
+   },
+   "subject": "field:PROBLEM.DAT.STATUS",
+   "value": "A=active, I=inactive, R=resolved"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R086",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a73"
+   },
+   "subject": "field:PROBLEM.DAT.VISIT_NO",
+   "value": "reference to VISIT.VISIT_NO"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R087",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "analyst",
+    "ref": "ledger:E000210 (Priya Natarajan)"
+   },
+   "subject": "field:RXORDER.DAT.DOSE_TXT",
+   "value": "dose with unit"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R088",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a73"
+   },
+   "subject": "field:RXORDER.DAT.DRUG_CD",
+   "value": "reference to DRUGFILE.DRUG_CD"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R089",
+   "kind": "fact",
+   "predicate": "pass_through_text",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a74"
+   },
+   "subject": "field:RXORDER.DAT.DRUG_DESC",
+   "value": "free text, passed through"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R090",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a71"
+   },
+   "subject": "field:RXORDER.DAT.ORDER_DT",
+   "value": "date MM/DD/YYYY"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R091",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a73"
+   },
+   "subject": "field:RXORDER.DAT.PERSON_NO",
+   "value": "reference to PERSON.PERSON_NO"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R092",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a73"
+   },
+   "subject": "field:RXORDER.DAT.PRESCRIBER_ID",
+   "value": "reference to STAFF.STAFF_ID"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R093",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a73"
+   },
+   "subject": "field:RXORDER.DAT.RX_NO",
+   "value": "row key of RXORDER"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R094",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "analyst",
+    "ref": "ledger:E000210 (Priya Natarajan)"
+   },
+   "subject": "field:RXORDER.DAT.RX_STATUS",
+   "value": "ACTIVE, DISCONTINUED, COMPLETED, HOLD"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R095",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "analyst",
+    "ref": "ledger:E000210 (Priya Natarajan)"
+   },
+   "subject": "field:RXORDER.DAT.SIG_TXT",
+   "value": "free-text sig, mostly Latin abbreviations"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R096",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a71"
+   },
+   "subject": "field:RXORDER.DAT.STOP_DT",
+   "value": "date MM/DD/YYYY"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R097",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a73"
+   },
+   "subject": "field:RXORDER.DAT.VISIT_NO",
+   "value": "reference to VISIT.VISIT_NO"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R098",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a74"
+   },
+   "subject": "field:STAFF.DAT.ACTIVE_YN",
+   "value": "Y=active"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R099",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a74"
+   },
+   "subject": "field:STAFF.DAT.BILLS_YN",
+   "value": "Y=billing provider"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R100",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a74"
+   },
+   "subject": "field:STAFF.DAT.NPI",
+   "value": "10-digit NPI, may be blank"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R101",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a74"
+   },
+   "subject": "field:STAFF.DAT.ROLE",
+   "value": "credential: MD, DO, NP, PA"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R102",
+   "kind": "fact",
+   "predicate": "pass_through_text",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a74"
+   },
+   "subject": "field:STAFF.DAT.SPEC_TXT",
+   "value": "free text, passed through"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R103",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a73"
+   },
+   "subject": "field:STAFF.DAT.STAFF_ID",
+   "value": "row key of STAFF"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R104",
+   "kind": "fact",
+   "predicate": "pass_through_text",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a74"
+   },
+   "subject": "field:STAFF.DAT.STAFF_NAME",
+   "value": "free text, passed through"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R105",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a71"
+   },
+   "subject": "field:STAFF.DAT.TERM_DATE",
+   "value": "date MM/DD/YYYY"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R106",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "analyst",
+    "ref": "ledger:E000198 (Ray Castillo)"
+   },
+   "subject": "field:TESTDICT.DAT.LOINC",
+   "value": "LOINC loaded 2019 for every orderable test; blank for SENDOUT"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R107",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a73"
+   },
+   "subject": "field:TESTDICT.DAT.TEST_CD",
+   "value": "row key of TESTDICT"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R108",
+   "kind": "fact",
+   "predicate": "pass_through_text",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a74"
+   },
+   "subject": "field:TESTDICT.DAT.TEST_NAME",
+   "value": "free text, passed through"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R109",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a74"
+   },
+   "subject": "field:TESTDICT.DAT.UNITS",
+   "value": "default unit for the test"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R110",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a71 + ledger:E000156"
+   },
+   "subject": "field:VISIT.DAT.ADMIT_TS",
+   "value": "timestamp YYYY-MM-DD HH:MM, local time of the campus"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R111",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a73"
+   },
+   "subject": "field:VISIT.DAT.ATTEND_ID",
+   "value": "reference to STAFF.STAFF_ID"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R112",
+   "kind": "fact",
+   "predicate": "pass_through_text",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a74"
+   },
+   "subject": "field:VISIT.DAT.CHIEF_COMPLAINT",
+   "value": "free text, passed through"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R113",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a73"
+   },
+   "subject": "field:VISIT.DAT.CLINIC_CD",
+   "value": "reference to CLINIC.CLINIC_CD"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R114",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a71 + ledger:E000156"
+   },
+   "subject": "field:VISIT.DAT.DISCH_TS",
+   "value": "timestamp YYYY-MM-DD HH:MM, local time of the campus"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R115",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a73"
+   },
+   "subject": "field:VISIT.DAT.PERSON_NO",
+   "value": "reference to PERSON.PERSON_NO"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R116",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a74"
+   },
+   "subject": "field:VISIT.DAT.STATUS",
+   "value": "OPEN, CLOSED, VOID (entered in error; not converted)"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R117",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a73"
+   },
+   "subject": "field:VISIT.DAT.VISIT_NO",
+   "value": "row key of VISIT"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R118",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "analyst",
+    "ref": "ledger:E000158 (Gary Lindqvist, interface); dispute resolved via ledger:E000158 + OBS-0110"
+   },
+   "subject": "field:VISIT.DAT.VISIT_TYPE",
+   "value": "OP outpatient, IP inpatient, ER emergency, OBS observation, SDS same-day surgery, TH telehealth (since 2020)"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R119",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a73"
+   },
+   "subject": "field:VITALS.DAT.PERSON_NO",
+   "value": "reference to PERSON.PERSON_NO"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R120",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a71 + ledger:E000156"
+   },
+   "subject": "field:VITALS.DAT.TAKEN_TS",
+   "value": "timestamp YYYY-MM-DD HH:MM, local time of the campus"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R121",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a73"
+   },
+   "subject": "field:VITALS.DAT.VISIT_NO",
+   "value": "reference to VISIT.VISIT_NO"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R122",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a73"
+   },
+   "subject": "field:VITALS.DAT.VS_NO",
+   "value": "row key of VITALS"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R123",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "analyst",
+    "ref": "ledger:E000162 (Gary Lindqvist)"
+   },
+   "subject": "field:VITALS.DAT.VS_TYPE",
+   "value": "BP, HR, RR, TEMP, WT, HT, SPO2; one row per measurement"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R124",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "analyst",
+    "ref": "ledger:E000160 (Gary Lindqvist, interface); dispute resolved via ledger:E000160 + OBS-0116"
+   },
+   "subject": "field:VITALS.DAT.VS_UNIT",
+   "value": "blank at HVMC (US units: WT lb, TEMP degF, HT in); SRC sends metric (kg, C, cm); HR/RR/SPO2 never carry a unit"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R125",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "analyst",
+    "ref": "ledger:E000160 (Gary Lindqvist)"
+   },
+   "subject": "field:VITALS.DAT.VS_VALUE",
+   "value": "measurement value; BP as systolic/diastolic"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R126",
+   "kind": "fact",
+   "predicate": "layout_binding",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a71-3 (header row, key column) + profiler inventory"
+   },
+   "subject": "file:ALLERGY",
+   "value": {
+    "columns": [
+     "ALG_NO",
+     "ALLERGEN_TXT",
+     "NOTED_DT",
+     "PERSON_NO",
+     "REACTION_TXT",
+     "SEVERITY"
+    ],
+    "header": true,
+    "key": "ALG_NO",
+    "path": "ALLERGY.DAT"
+   }
+  },
+  {
+   "data_confirmed": false,
+   "id": "R127",
+   "kind": "fact",
+   "predicate": "layout_binding",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a71-3 (header row, key column) + profiler inventory"
+   },
+   "subject": "file:APPT",
+   "value": {
+    "columns": [
+     "APPT_NO",
+     "APPT_REASON",
+     "APPT_STATUS",
+     "APPT_TS",
+     "CLINIC_CD",
+     "LEN_MIN",
+     "PERSON_NO",
+     "PROVIDER_ID"
+    ],
+    "header": true,
+    "key": "APPT_NO",
+    "path": "APPT.DAT"
+   }
+  },
+  {
+   "data_confirmed": false,
+   "id": "R128",
+   "kind": "fact",
+   "predicate": "layout_binding",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a71-3 (header row, key column) + profiler inventory"
+   },
+   "subject": "file:CAMPUS",
+   "value": {
+    "columns": [
+     "CAMPUS_CD",
+     "CAMPUS_NAME",
+     "CITY",
+     "STATE"
+    ],
+    "header": true,
+    "key": "CAMPUS_CD",
+    "path": "CAMPUS.DAT"
+   }
+  },
+  {
+   "data_confirmed": false,
+   "id": "R129",
+   "kind": "fact",
+   "predicate": "layout_binding",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a71-3 (header row, key column) + profiler inventory"
+   },
+   "subject": "file:CARRIER",
+   "value": {
+    "columns": [
+     "CARRIER_CD",
+     "CARRIER_NAME"
+    ],
+    "header": true,
+    "key": "CARRIER_CD",
+    "path": "CARRIER.DAT"
+   }
+  },
+  {
+   "data_confirmed": false,
+   "id": "R130",
+   "kind": "fact",
+   "predicate": "layout_binding",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a71-3 (header row, key column) + profiler inventory"
+   },
+   "subject": "file:CLINIC",
+   "value": {
+    "columns": [
+     "CAMPUS_CD",
+     "CLINIC_CD",
+     "CLINIC_NAME"
+    ],
+    "header": true,
+    "key": "CLINIC_CD",
+    "path": "CLINIC.DAT"
+   }
+  },
+  {
+   "data_confirmed": false,
+   "id": "R131",
+   "kind": "fact",
+   "predicate": "layout_binding",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a71-3 (header row, key column) + profiler inventory"
+   },
+   "subject": "file:DRUGFILE",
+   "value": {
+    "columns": [
+     "DRUG_CD",
+     "DRUG_DESC",
+     "RXNORM"
+    ],
+    "header": true,
+    "key": "DRUG_CD",
+    "path": "DRUGFILE.DAT"
+   }
+  },
+  {
+   "data_confirmed": false,
+   "id": "R132",
+   "kind": "fact",
+   "predicate": "presence",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "manifest.json + KICKOFF_MEMO.TXT (estate); dispute resolved via manifest.json + KICKOFF_MEMO.TXT + ledger:E000150 (Gary Lindqvist)"
+   },
+   "subject": "file:IMMUNE",
+   "value": "absent: no IMMUNE.DAT in the export and no IMMUNE count in manifest.json; the kickoff memo says immunizations were never kept in MCS/2"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R133",
+   "kind": "fact",
+   "predicate": "layout_binding",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a71-3 (header row, key column) + profiler inventory"
+   },
+   "subject": "file:INSCOV",
+   "value": {
+    "columns": [
+     "COV_NO",
+     "EFF_DT",
+     "END_DT",
+     "MEMBER_ID",
+     "PERSON_NO",
+     "PLAN_CD",
+     "PRIORITY",
+     "REL_CD"
+    ],
+    "header": true,
+    "key": "COV_NO",
+    "path": "INSCOV.DAT"
+   }
+  },
+  {
+   "data_confirmed": false,
+   "id": "R134",
+   "kind": "fact",
+   "predicate": "layout_binding",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a71-3 (header row, key column) + profiler inventory"
+   },
+   "subject": "file:INSPLAN",
+   "value": {
+    "columns": [
+     "CARRIER_CD",
+     "PLAN_CD",
+     "PLAN_NAME",
+     "PLAN_TYPE"
+    ],
+    "header": true,
+    "key": "PLAN_CD",
+    "path": "INSPLAN.DAT"
+   }
+  },
+  {
+   "data_confirmed": false,
+   "id": "R135",
+   "kind": "fact",
+   "predicate": "layout_binding",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a71-3 (header row, key column) + profiler inventory"
+   },
+   "subject": "file:LABRES",
+   "value": {
+    "columns": [
+     "ABN",
+     "ACCESSION",
+     "COLLECTED_TS",
+     "PERSON_NO",
+     "REF_RANGE",
+     "RESULT",
+     "RESULT_STATUS",
+     "RES_NO",
+     "TEST_CD",
+     "UNITS",
+     "VISIT_NO"
+    ],
+    "header": true,
+    "key": "RES_NO",
+    "path": "LABRES.DAT"
+   }
+  },
+  {
+   "data_confirmed": false,
+   "id": "R136",
+   "kind": "fact",
+   "predicate": "layout_binding",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a71-3 (header row, key column) + profiler inventory"
+   },
+   "subject": "file:PERSON",
+   "value": {
+    "columns": [
+     "ADDR1",
+     "ADDR2",
+     "BIRTH_DT",
+     "CAMPUS_CD",
+     "CELL_PH",
+     "CITY",
+     "DECEASED_DT",
+     "FIRST_NM",
+     "HOME_PH",
+     "LAST_NM",
+     "MID_NM",
+     "MRN",
+     "NKA_YN",
+     "PERSON_NO",
+     "RACE_TXT",
+     "SEX_CD",
+     "SSN_LAST4",
+     "ST",
+     "UPDATED_DT",
+     "ZIP"
+    ],
+    "header": true,
+    "key": "PERSON_NO",
+    "path": "PERSON.DAT"
+   }
+  },
+  {
+   "data_confirmed": false,
+   "id": "R137",
+   "kind": "fact",
+   "predicate": "layout_binding",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a71-3 (header row, key column) + profiler inventory"
+   },
+   "subject": "file:PROBLEM",
+   "value": {
+    "columns": [
+     "CODE_SYS",
+     "DX_CODE",
+     "DX_TEXT",
+     "ONSET_DT",
+     "PERSON_NO",
+     "PROB_NO",
+     "RESOLVE_DT",
+     "STATUS",
+     "VISIT_NO"
+    ],
+    "header": true,
+    "key": "PROB_NO",
+    "path": "PROBLEM.DAT"
+   }
+  },
+  {
+   "data_confirmed": false,
+   "id": "R138",
+   "kind": "fact",
+   "predicate": "layout_binding",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a71-3 (header row, key column) + profiler inventory"
+   },
+   "subject": "file:RXORDER",
+   "value": {
+    "columns": [
+     "DOSE_TXT",
+     "DRUG_CD",
+     "DRUG_DESC",
+     "ORDER_DT",
+     "PERSON_NO",
+     "PRESCRIBER_ID",
+     "RX_NO",
+     "RX_STATUS",
+     "SIG_TXT",
+     "STOP_DT",
+     "VISIT_NO"
+    ],
+    "header": true,
+    "key": "RX_NO",
+    "path": "RXORDER.DAT"
+   }
+  },
+  {
+   "data_confirmed": false,
+   "id": "R139",
+   "kind": "fact",
+   "predicate": "layout_binding",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a71-3 (header row, key column) + profiler inventory"
+   },
+   "subject": "file:STAFF",
+   "value": {
+    "columns": [
+     "ACTIVE_YN",
+     "BILLS_YN",
+     "NPI",
+     "ROLE",
+     "SPEC_TXT",
+     "STAFF_ID",
+     "STAFF_NAME",
+     "TERM_DATE"
+    ],
+    "header": true,
+    "key": "STAFF_ID",
+    "path": "STAFF.DAT"
+   }
+  },
+  {
+   "data_confirmed": false,
+   "id": "R140",
+   "kind": "fact",
+   "predicate": "layout_binding",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a71-3 (header row, key column) + profiler inventory"
+   },
+   "subject": "file:TESTDICT",
+   "value": {
+    "columns": [
+     "LOINC",
+     "TEST_CD",
+     "TEST_NAME",
+     "UNITS"
+    ],
+    "header": true,
+    "key": "TEST_CD",
+    "path": "TESTDICT.DAT"
+   }
+  },
+  {
+   "data_confirmed": false,
+   "id": "R141",
+   "kind": "fact",
+   "predicate": "layout_binding",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a71-3 (header row, key column) + profiler inventory"
+   },
+   "subject": "file:VISIT",
+   "value": {
+    "columns": [
+     "ADMIT_TS",
+     "ATTEND_ID",
+     "CHIEF_COMPLAINT",
+     "CLINIC_CD",
+     "DISCH_TS",
+     "PERSON_NO",
+     "STATUS",
+     "VISIT_NO",
+     "VISIT_TYPE"
+    ],
+    "header": true,
+    "key": "VISIT_NO",
+    "path": "VISIT.DAT"
+   }
+  },
+  {
+   "data_confirmed": false,
+   "id": "R142",
+   "kind": "fact",
+   "predicate": "layout_binding",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 \u00a71-3 (header row, key column) + profiler inventory"
+   },
+   "subject": "file:VITALS",
+   "value": {
+    "columns": [
+     "PERSON_NO",
+     "TAKEN_TS",
+     "VISIT_NO",
+     "VS_NO",
+     "VS_TYPE",
+     "VS_UNIT",
+     "VS_VALUE"
+    ],
+    "header": true,
+    "key": "VS_NO",
+    "path": "VITALS.DAT"
+   }
+  },
+  {
+   "data_confirmed": false,
+   "id": "R143",
+   "kind": "fact",
+   "predicate": "keying_story",
+   "provenance": {
+    "kind": "analyst",
+    "ref": "ledger:E000164 (Gary Lindqvist, interface); dispute resolved via ledger:E000164 (Gary) + the DOB+SSN4 cross-tab (23 cross-campus groups) refute 'MPI merged everything' (E000184). Every merge is still a human decision."
+   },
+   "subject": "identity",
+   "value": {
+    "key_fields": [
+     "PERSON.DAT.PERSON_NO"
+    ],
+    "master_index": false,
+    "true_duplicates": true
+   }
+  },
+  {
+   "data_confirmed": false,
+   "id": "R144",
+   "kind": "fact",
+   "predicate": "default_tz",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 (estate) \u00a71"
+   },
+   "subject": "profile",
+   "value": "America/Denver"
+  },
+  {
+   "data_confirmed": true,
+   "id": "R145",
+   "kind": "fact",
+   "predicate": "facility_tz",
+   "provenance": {
+    "kind": "analyst",
+    "ref": "ledger:E000154 (Gary Lindqvist, interface); dispute resolved via ledger:E000154 (Gary Lindqvist, interface) + OBS-0018 (CAMPUS.STATE: SRC is in AZ; Arizona does not observe DST). Denise's one-clock answer (E000186) repeats the stale guide."
+   },
+   "subject": "profile",
+   "value": {
+    "HVMC": "America/Denver",
+    "SRC": "America/Phoenix"
+   }
+  },
+  {
+   "data_confirmed": false,
+   "id": "R146",
+   "kind": "fact",
+   "predicate": "file_format",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 (estate) \u00a71"
+   },
+   "subject": "profile",
+   "value": {
+    "delimiter": "|",
+    "encoding": "latin-1",
+    "suffix": ".DAT"
+   }
+  },
+  {
+   "data_confirmed": false,
+   "id": "R147",
+   "kind": "fact",
+   "predicate": "mrn_system",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 (estate) \u00a74 (PERSON.MRN enterprise medical record number)"
+   },
+   "subject": "profile",
+   "value": "urn:meridian:mrn"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R148",
+   "kind": "fact",
+   "predicate": "reader",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "MCS2_EXTRACT_GUIDE.TXT v3.2 (estate) \u00a71"
+   },
+   "subject": "profile",
+   "value": "delimited"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R149",
+   "kind": "fact",
+   "predicate": "source_name",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "KICKOFF_MEMO.TXT (estate)"
+   },
+   "subject": "profile",
+   "value": "Meridian"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R150",
+   "kind": "fact",
+   "predicate": "system_org",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "KICKOFF_MEMO.TXT (estate)"
+   },
+   "subject": "profile",
+   "value": {
+    "key": "SYS-HARBORVALLEY",
+    "name": "Harbor Valley Health"
+   }
+  },
+  {
+   "data_confirmed": true,
+   "id": "R151",
+   "kind": "fact",
+   "predicate": "vital_units",
+   "provenance": {
+    "kind": "analyst",
+    "ref": "ledger:E000160 (Gary Lindqvist, interface)"
+   },
+   "subject": "profile",
+   "value": {
+    "HVMC": {
+     "HT": "[in_i]",
+     "TEMP": "[degF]",
+     "WT": "[lb_av]"
+    },
+    "SRC": {
+     "HT": "cm",
+     "TEMP": "Cel",
+     "WT": "kg"
+    }
+   }
+  },
+  {
+   "data_confirmed": false,
+   "id": "R152",
+   "kind": "fact",
+   "predicate": "canonical_binding",
+   "provenance": {
+    "kind": "interviewer",
+    "ref": "interviewer synthesis: guide \u00a74; NKA per E000178"
+   },
+   "subject": "resource:AllergyIntolerance",
+   "value": {
+    "fields": {
+     "ALG_ID": "ALG_NO",
+     "ALLERGEN": "ALLERGEN_TXT",
+     "ENTERED_DT": {
+      "date": "%m/%d/%Y",
+      "field": "NOTED_DT"
+     },
+     "PAT_ID": "PERSON_NO",
+     "REACTION": "REACTION_TXT",
+     "SEVERITY": {
+      "field": "SEVERITY",
+      "map": {
+       "MILD": "MILD",
+       "MODERATE": "MOD",
+       "SEVERE": "SEV"
+      }
+     }
+    },
+    "file": "ALLERGY",
+    "key": "ALG_NO"
+   }
+  },
+  {
+   "data_confirmed": false,
+   "id": "R153",
+   "kind": "fact",
+   "predicate": "canonical_binding",
+   "provenance": {
+    "kind": "interviewer",
+    "ref": "interviewer synthesis: guide \u00a74; BMP unexplained (E000166, E000188): left unmapped so it reaches the runtime status question"
+   },
+   "subject": "resource:Appointment",
+   "value": {
+    "fields": {
+     "APPT_DT": {
+      "datetime": "%Y-%m-%d %H:%M",
+      "field": "APPT_TS"
+     },
+     "APPT_ID": "APPT_NO",
+     "DEPT_ID": "CLINIC_CD",
+     "DURATION_MIN": "LEN_MIN",
+     "PAT_ID": "PERSON_NO",
+     "PROV_ID": "PROVIDER_ID",
+     "REASON": "APPT_REASON",
+     "STATUS": {
+      "field": "APPT_STATUS",
+      "map": {
+       "ARR": "A",
+       "CAN": "X",
+       "CMP": "C",
+       "NOS": "N",
+       "SCH": "S"
+      }
+     }
+    },
+    "file": "APPT",
+    "key": "APPT_NO"
+   }
+  },
+  {
+   "data_confirmed": false,
+   "id": "R154",
+   "kind": "fact",
+   "predicate": "canonical_binding",
+   "provenance": {
+    "kind": "interviewer",
+    "ref": "interviewer synthesis: DX_CODE per resolved E000180; CODE_SYS per E000182"
+   },
+   "subject": "resource:Condition",
+   "value": {
+    "fields": {
+     "CODE": {
+      "field": "DX_CODE",
+      "icd_decimal": {
+       "icd9": "I9",
+       "system_field": "CODE_SYS"
+      }
+     },
+     "CODE_TYPE": {
+      "field": "CODE_SYS",
+      "map": {
+       "I10": "10",
+       "I9": "9"
+      }
+     },
+     "DX_DESC": "DX_TEXT",
+     "DX_ID": "PROB_NO",
+     "ONSET_DT": {
+      "date": "%m/%d/%Y",
+      "field": "ONSET_DT"
+     },
+     "PAT_ID": "PERSON_NO",
+     "RESOLVED_DT": {
+      "date": "%m/%d/%Y",
+      "field": "RESOLVE_DT"
+     },
+     "STATUS": "STATUS",
+     "VISIT_ID": "VISIT_NO"
+    },
+    "file": "PROBLEM",
+    "key": "PROB_NO"
+   }
+  },
+  {
+   "data_confirmed": false,
+   "id": "R155",
+   "kind": "fact",
+   "predicate": "canonical_binding",
+   "provenance": {
+    "kind": "interviewer",
+    "ref": "interviewer synthesis: REL_CD per resolved E000174; guide \u00a74"
+   },
+   "subject": "resource:Coverage",
+   "value": {
+    "fields": {
+     "COB_ORDER": "PRIORITY",
+     "EFF_DT": {
+      "date": "%m/%d/%Y",
+      "field": "EFF_DT"
+     },
+     "MEMBER_ID": "MEMBER_ID",
+     "PAT_ID": "PERSON_NO",
+     "PLAN_ID": "PLAN_CD",
+     "REL_CODE": {
+      "field": "REL_CD",
+      "map": {
+       "C": "19",
+       "O": "G8",
+       "P": "01",
+       "S": "18"
+      }
+     },
+     "TERM_DT": {
+      "date": "%m/%d/%Y",
+      "field": "END_DT"
+     }
+    },
+    "file": "INSCOV",
+    "key": "COV_NO"
+   }
+  },
+  {
+   "data_confirmed": false,
+   "id": "R156",
+   "kind": "fact",
+   "predicate": "canonical_binding",
+   "provenance": {
+    "kind": "interviewer",
+    "ref": "interviewer synthesis: guide \u00a71/\u00a74; VISIT_TYPE per E000158; campus via clinic per E000156"
+   },
+   "subject": "resource:Encounter",
+   "value": {
+    "exclude": {
+     "STATUS": [
+      "VOID"
+     ]
+    },
+    "exclude_reason": {
+     "VOID": "visit entered in error (guide \u00a74 VISIT.STATUS)"
+    },
+    "fields": {
+     "ADMIT_DT": {
+      "datetime": "%Y-%m-%d %H:%M",
+      "field": "ADMIT_TS"
+     },
+     "ATTEND_PROV_ID": "ATTEND_ID",
+     "DEPT_ID": "CLINIC_CD",
+     "DISCH_DT": {
+      "datetime": "%Y-%m-%d %H:%M",
+      "field": "DISCH_TS"
+     },
+     "PAT_ID": "PERSON_NO",
+     "REASON_TEXT": "CHIEF_COMPLAINT",
+     "STATUS": {
+      "field": "STATUS",
+      "map": {
+       "CLOSED": "C",
+       "OPEN": "A"
+      }
+     },
+     "VISIT_ID": "VISIT_NO",
+     "VISIT_TYPE": "VISIT_TYPE"
+    },
+    "file": "VISIT",
+    "key": "VISIT_NO"
+   }
+  },
+  {
+   "data_confirmed": false,
+   "id": "R157",
+   "kind": "fact",
+   "predicate": "canonical_binding",
+   "provenance": {
+    "kind": "interviewer",
+    "ref": "interviewer synthesis: guide \u00a74; E000210 (Priya Natarajan)"
+   },
+   "subject": "resource:MedicationRequest",
+   "value": {
+    "fields": {
+     "DOSE": "DOSE_TXT",
+     "DRUG_NAME": "DRUG_DESC",
+     "FORM_CODE": "DRUG_CD",
+     "ORD_ID": "RX_NO",
+     "PAT_ID": "PERSON_NO",
+     "PROV_ID": "PRESCRIBER_ID",
+     "SIG": "SIG_TXT",
+     "START_DT": {
+      "date": "%m/%d/%Y",
+      "field": "ORDER_DT"
+     },
+     "STATUS": {
+      "field": "RX_STATUS",
+      "map": {
+       "ACTIVE": "A",
+       "COMPLETED": "C",
+       "DISCONTINUED": "D",
+       "HOLD": "H"
+      }
+     },
+     "STOP_DT": {
+      "date": "%m/%d/%Y",
+      "field": "STOP_DT"
+     },
+     "VISIT_ID": "VISIT_NO"
+    },
+    "file": "RXORDER",
+    "key": "RX_NO"
+   }
+  },
+  {
+   "data_confirmed": false,
+   "id": "R158",
+   "kind": "fact",
+   "predicate": "canonical_binding",
+   "provenance": {
+    "kind": "interviewer",
+    "ref": "interviewer synthesis: COLLECTED_TS per resolved E000192; RESULT_STATUS per resolved E000196; E000200-E000202"
+   },
+   "subject": "resource:Observation.1lab",
+   "value": {
+    "exclude": {
+     "RESULT_STATUS": [
+      "X"
+     ]
+    },
+    "exclude_reason": {
+     "X": "cancelled result (Ray Castillo, E000196)"
+    },
+    "fields": {
+     "ABN_FLAG": "ABN",
+     "ACCESSION": "ACCESSION",
+     "COLLECT_DT": {
+      "datetime": "%d-%b-%y %H:%M",
+      "field": "COLLECTED_TS"
+     },
+     "PAT_ID": "PERSON_NO",
+     "REF_RANGE": "REF_RANGE",
+     "RESULT_VAL": "RESULT",
+     "TEST_CODE": "TEST_CD",
+     "TEST_NAME": {
+      "field": "TEST_CD",
+      "lookup": {
+       "file": "TESTDICT",
+       "key": "TEST_CD",
+       "value": "TEST_NAME"
+      }
+     },
+     "UNITS": "UNITS",
+     "VISIT_ID": "VISIT_NO",
+     "_STATUS": "RESULT_STATUS"
+    },
+    "file": "LABRES",
+    "key": "RES_NO",
+    "kind": "lab"
+   }
+  },
+  {
+   "data_confirmed": false,
+   "id": "R159",
+   "kind": "fact",
+   "predicate": "canonical_binding",
+   "provenance": {
+    "kind": "interviewer",
+    "ref": "interviewer synthesis: VS_TYPE per E000162; VS_UNIT per resolved E000160"
+   },
+   "subject": "resource:Observation.2vital",
+   "value": {
+    "fields": {
+     "FIELD": {
+      "field": "VS_TYPE",
+      "map": {
+       "BP": "BP",
+       "HR": "PULSE",
+       "HT": "HT",
+       "RR": "RESP",
+       "SPO2": "SPO2",
+       "TEMP": "TEMP",
+       "WT": "WT"
+      }
+     },
+     "PAT_ID": "PERSON_NO",
+     "TAKEN_DT": {
+      "datetime": "%Y-%m-%d %H:%M",
+      "field": "TAKEN_TS"
+     },
+     "VALUE": {
+      "format": "{VS_VALUE} {VS_UNIT}"
+     },
+     "VISIT_ID": "VISIT_NO"
+    },
+    "file": "VITALS",
+    "key": "VS_NO",
+    "kind": "vital"
+   }
+  },
+  {
+   "data_confirmed": false,
+   "id": "R160",
+   "kind": "fact",
+   "predicate": "canonical_binding",
+   "provenance": {
+    "kind": "interviewer",
+    "ref": "interviewer synthesis: guide \u00a72-3 (CLINIC belongs to one campus) + E000156"
+   },
+   "subject": "resource:Organization",
+   "value": {
+    "departments": {
+     "fields": {
+      "DEPT_ID": "CLINIC_CD",
+      "DEPT_NAME": "CLINIC_NAME",
+      "FAC_ID": "CAMPUS_CD"
+     },
+     "file": "CLINIC",
+     "key": "CLINIC_CD"
+    },
+    "sites": {
+     "fields": {
+      "FAC_ID": "CAMPUS_CD",
+      "FAC_NAME": "CAMPUS_NAME"
+     },
+     "file": "CAMPUS",
+     "key": "CAMPUS_CD"
+    }
+   }
+  },
+  {
+   "data_confirmed": false,
+   "id": "R161",
+   "kind": "fact",
+   "predicate": "canonical_binding",
+   "provenance": {
+    "kind": "interviewer",
+    "ref": "interviewer synthesis: guide \u00a73-4; SEX_CD per resolved E000170; BIRTH_DT placeholder per resolved E000172; campus per E000156"
+   },
+   "subject": "resource:Patient",
+   "value": {
+    "fields": {
+     "ADDR": {
+      "format": "{ADDR1}^{ADDR2}^{CITY}^{ST}^{ZIP}"
+     },
+     "DECEASED_DT": {
+      "date": "%m/%d/%Y",
+      "field": "DECEASED_DT"
+     },
+     "DOB": {
+      "date": "%m/%d/%Y",
+      "field": "BIRTH_DT",
+      "null_values": [
+       "01/01/1900"
+      ]
+     },
+     "FAC_ID": "CAMPUS_CD",
+     "LAST_UPD": {
+      "date": "%m/%d/%Y",
+      "field": "UPDATED_DT"
+     },
+     "MRN": "MRN",
+     "NKA_FLAG": "NKA_YN",
+     "PAT_ID": "PERSON_NO",
+     "PAT_NAME": {
+      "format": "{LAST_NM},{FIRST_NM} {MID_NM}"
+     },
+     "PHONE_CELL": "CELL_PH",
+     "PHONE_HOME": "HOME_PH",
+     "RACE": "RACE_TXT",
+     "SEX": {
+      "field": "SEX_CD",
+      "map": {
+       "1": "M",
+       "2": "F",
+       "3": "X",
+       "9": "U"
+      }
+     },
+     "SSN4": "SSN_LAST4"
+    },
+    "file": "PERSON",
+    "key": "PERSON_NO"
+   }
+  },
+  {
+   "data_confirmed": false,
+   "id": "R162",
+   "kind": "fact",
+   "predicate": "canonical_binding",
+   "provenance": {
+    "kind": "interviewer",
+    "ref": "interviewer synthesis: guide \u00a72-3"
+   },
+   "subject": "resource:Payer",
+   "value": {
+    "fields": {
+     "PAYER_ID": "CARRIER_CD",
+     "PAYER_NAME": "CARRIER_NAME"
+    },
+    "file": "CARRIER",
+    "key": "CARRIER_CD"
+   }
+  },
+  {
+   "data_confirmed": false,
+   "id": "R163",
+   "kind": "fact",
+   "predicate": "canonical_binding",
+   "provenance": {
+    "kind": "interviewer",
+    "ref": "interviewer synthesis: guide \u00a72-3"
+   },
+   "subject": "resource:Plan",
+   "value": {
+    "fields": {
+     "PAYER_ID": "CARRIER_CD",
+     "PLAN_ID": "PLAN_CD",
+     "PLAN_NAME": "PLAN_NAME",
+     "PLAN_TYPE": "PLAN_TYPE"
+    },
+    "file": "INSPLAN",
+    "key": "PLAN_CD"
+   }
+  },
+  {
+   "data_confirmed": false,
+   "id": "R164",
+   "kind": "fact",
+   "predicate": "canonical_binding",
+   "provenance": {
+    "kind": "interviewer",
+    "ref": "interviewer synthesis: guide \u00a73"
+   },
+   "subject": "resource:Practitioner",
+   "value": {
+    "fields": {
+     "ACTIVE": "ACTIVE_YN",
+     "BILLING_FLAG": "BILLS_YN",
+     "NAME": "STAFF_NAME",
+     "NPI": "NPI",
+     "PROV_ID": "STAFF_ID",
+     "SPECIALTY": "SPEC_TXT",
+     "TERM_DT": {
+      "date": "%m/%d/%Y",
+      "field": "TERM_DATE"
+     }
+    },
+    "file": "STAFF",
+    "key": "STAFF_ID"
+   }
+  },
+  {
+   "data_confirmed": false,
+   "id": "SAFETY-IDENTITY-MERGE",
+   "kind": "identity_policy",
+   "note": "Identity merges always require a human reconciliation decision. No claim, from any source, can turn this into an auto-merge rule.",
+   "predicate": "merge_policy",
+   "provenance": {
+    "kind": "policy",
+    "ref": "docs/socratic-import-builder.md"
+   },
+   "subject": "identity",
+   "value": "route_to_reconciliation"
+  }
+ ],
+ "source": "meridian"
+}

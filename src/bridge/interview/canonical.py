@@ -189,12 +189,16 @@ def stage_canonical(store: Any, run_id: str, export: DelimitedExport, profile: A
     for rtype in ("Practitioner", "Payer", "Plan"):
         m = canon.get(rtype)
         if m:
-            counts[rtype] = store.stage(run_id, rtype, ((rec[m["key"]], rec, lin(m["file"], rec[m["key"]]))
-                                                        for _, rec in rows_of(m)))
+            counts[rtype] = store.stage(run_id, rtype, ((row[m["key"]], rec, lin(m["file"], row[m["key"]]))
+                                                        for row, rec in rows_of(m)))
 
     # --- identity: every chart is a candidate; merges route per the profile's policy
     pm = canon["Patient"]
-    pats = [rec for _, rec in rows_of(pm)]
+    pats = []
+    for row, rec in rows_of(pm):
+        if rec.get("PAT_ID") != row[pm["key"]]:
+            raise ValueError("canonical Patient binding must map PAT_ID to the file's key field")
+        pats.append(rec)
     pat_by_id = {p["PAT_ID"]: p for p in pats}
     auto_merge = getattr(profile, "MERGE_POLICY", None) != "route_to_reconciliation"
     clusters, review, reasons = identity.resolve(pats, [], auto_merge=auto_merge)

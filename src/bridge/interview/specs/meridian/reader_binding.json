@@ -1,0 +1,579 @@
+{
+ "canonical": {
+  "AllergyIntolerance": {
+   "fields": {
+    "ALG_ID": "ALG_NO",
+    "ALLERGEN": "ALLERGEN_TXT",
+    "ENTERED_DT": {
+     "date": "%m/%d/%Y",
+     "field": "NOTED_DT"
+    },
+    "PAT_ID": "PERSON_NO",
+    "REACTION": "REACTION_TXT",
+    "SEVERITY": {
+     "field": "SEVERITY",
+     "map": {
+      "MILD": "MILD",
+      "MODERATE": "MOD",
+      "SEVERE": "SEV"
+     }
+    }
+   },
+   "file": "ALLERGY",
+   "key": "ALG_NO"
+  },
+  "Appointment": {
+   "fields": {
+    "APPT_DT": {
+     "datetime": "%Y-%m-%d %H:%M",
+     "field": "APPT_TS"
+    },
+    "APPT_ID": "APPT_NO",
+    "DEPT_ID": "CLINIC_CD",
+    "DURATION_MIN": "LEN_MIN",
+    "PAT_ID": "PERSON_NO",
+    "PROV_ID": "PROVIDER_ID",
+    "REASON": "APPT_REASON",
+    "STATUS": {
+     "field": "APPT_STATUS",
+     "map": {
+      "ARR": "A",
+      "CAN": "X",
+      "CMP": "C",
+      "NOS": "N",
+      "SCH": "S"
+     }
+    }
+   },
+   "file": "APPT",
+   "key": "APPT_NO"
+  },
+  "Condition": {
+   "fields": {
+    "CODE": {
+     "field": "DX_CODE",
+     "icd_decimal": {
+      "icd9": "I9",
+      "system_field": "CODE_SYS"
+     }
+    },
+    "CODE_TYPE": {
+     "field": "CODE_SYS",
+     "map": {
+      "I10": "10",
+      "I9": "9"
+     }
+    },
+    "DX_DESC": "DX_TEXT",
+    "DX_ID": "PROB_NO",
+    "ONSET_DT": {
+     "date": "%m/%d/%Y",
+     "field": "ONSET_DT"
+    },
+    "PAT_ID": "PERSON_NO",
+    "RESOLVED_DT": {
+     "date": "%m/%d/%Y",
+     "field": "RESOLVE_DT"
+    },
+    "STATUS": "STATUS",
+    "VISIT_ID": "VISIT_NO"
+   },
+   "file": "PROBLEM",
+   "key": "PROB_NO"
+  },
+  "Coverage": {
+   "fields": {
+    "COB_ORDER": "PRIORITY",
+    "EFF_DT": {
+     "date": "%m/%d/%Y",
+     "field": "EFF_DT"
+    },
+    "MEMBER_ID": "MEMBER_ID",
+    "PAT_ID": "PERSON_NO",
+    "PLAN_ID": "PLAN_CD",
+    "REL_CODE": {
+     "field": "REL_CD",
+     "map": {
+      "C": "19",
+      "O": "G8",
+      "P": "01",
+      "S": "18"
+     }
+    },
+    "TERM_DT": {
+     "date": "%m/%d/%Y",
+     "field": "END_DT"
+    }
+   },
+   "file": "INSCOV",
+   "key": "COV_NO"
+  },
+  "Encounter": {
+   "exclude": {
+    "STATUS": [
+     "VOID"
+    ]
+   },
+   "exclude_reason": {
+    "VOID": "visit entered in error (guide \u00a74 VISIT.STATUS)"
+   },
+   "fields": {
+    "ADMIT_DT": {
+     "datetime": "%Y-%m-%d %H:%M",
+     "field": "ADMIT_TS"
+    },
+    "ATTEND_PROV_ID": "ATTEND_ID",
+    "DEPT_ID": "CLINIC_CD",
+    "DISCH_DT": {
+     "datetime": "%Y-%m-%d %H:%M",
+     "field": "DISCH_TS"
+    },
+    "PAT_ID": "PERSON_NO",
+    "REASON_TEXT": "CHIEF_COMPLAINT",
+    "STATUS": {
+     "field": "STATUS",
+     "map": {
+      "CLOSED": "C",
+      "OPEN": "A"
+     }
+    },
+    "VISIT_ID": "VISIT_NO",
+    "VISIT_TYPE": "VISIT_TYPE"
+   },
+   "file": "VISIT",
+   "key": "VISIT_NO"
+  },
+  "MedicationRequest": {
+   "fields": {
+    "DOSE": "DOSE_TXT",
+    "DRUG_NAME": "DRUG_DESC",
+    "FORM_CODE": "DRUG_CD",
+    "ORD_ID": "RX_NO",
+    "PAT_ID": "PERSON_NO",
+    "PROV_ID": "PRESCRIBER_ID",
+    "SIG": "SIG_TXT",
+    "START_DT": {
+     "date": "%m/%d/%Y",
+     "field": "ORDER_DT"
+    },
+    "STATUS": {
+     "field": "RX_STATUS",
+     "map": {
+      "ACTIVE": "A",
+      "COMPLETED": "C",
+      "DISCONTINUED": "D",
+      "HOLD": "H"
+     }
+    },
+    "STOP_DT": {
+     "date": "%m/%d/%Y",
+     "field": "STOP_DT"
+    },
+    "VISIT_ID": "VISIT_NO"
+   },
+   "file": "RXORDER",
+   "key": "RX_NO"
+  },
+  "Observation": [
+   {
+    "exclude": {
+     "RESULT_STATUS": [
+      "X"
+     ]
+    },
+    "exclude_reason": {
+     "X": "cancelled result (Ray Castillo, E000196)"
+    },
+    "fields": {
+     "ABN_FLAG": "ABN",
+     "ACCESSION": "ACCESSION",
+     "COLLECT_DT": {
+      "datetime": "%d-%b-%y %H:%M",
+      "field": "COLLECTED_TS"
+     },
+     "PAT_ID": "PERSON_NO",
+     "REF_RANGE": "REF_RANGE",
+     "RESULT_VAL": "RESULT",
+     "TEST_CODE": "TEST_CD",
+     "TEST_NAME": {
+      "field": "TEST_CD",
+      "lookup": {
+       "file": "TESTDICT",
+       "key": "TEST_CD",
+       "value": "TEST_NAME"
+      }
+     },
+     "UNITS": "UNITS",
+     "VISIT_ID": "VISIT_NO",
+     "_STATUS": "RESULT_STATUS"
+    },
+    "file": "LABRES",
+    "key": "RES_NO",
+    "kind": "lab"
+   },
+   {
+    "fields": {
+     "FIELD": {
+      "field": "VS_TYPE",
+      "map": {
+       "BP": "BP",
+       "HR": "PULSE",
+       "HT": "HT",
+       "RR": "RESP",
+       "SPO2": "SPO2",
+       "TEMP": "TEMP",
+       "WT": "WT"
+      }
+     },
+     "PAT_ID": "PERSON_NO",
+     "TAKEN_DT": {
+      "datetime": "%Y-%m-%d %H:%M",
+      "field": "TAKEN_TS"
+     },
+     "VALUE": {
+      "format": "{VS_VALUE} {VS_UNIT}"
+     },
+     "VISIT_ID": "VISIT_NO"
+    },
+    "file": "VITALS",
+    "key": "VS_NO",
+    "kind": "vital"
+   }
+  ],
+  "Organization": {
+   "departments": {
+    "fields": {
+     "DEPT_ID": "CLINIC_CD",
+     "DEPT_NAME": "CLINIC_NAME",
+     "FAC_ID": "CAMPUS_CD"
+    },
+    "file": "CLINIC",
+    "key": "CLINIC_CD"
+   },
+   "sites": {
+    "fields": {
+     "FAC_ID": "CAMPUS_CD",
+     "FAC_NAME": "CAMPUS_NAME"
+    },
+    "file": "CAMPUS",
+    "key": "CAMPUS_CD"
+   }
+  },
+  "Patient": {
+   "fields": {
+    "ADDR": {
+     "format": "{ADDR1}^{ADDR2}^{CITY}^{ST}^{ZIP}"
+    },
+    "DECEASED_DT": {
+     "date": "%m/%d/%Y",
+     "field": "DECEASED_DT"
+    },
+    "DOB": {
+     "date": "%m/%d/%Y",
+     "field": "BIRTH_DT",
+     "null_values": [
+      "01/01/1900"
+     ]
+    },
+    "FAC_ID": "CAMPUS_CD",
+    "LAST_UPD": {
+     "date": "%m/%d/%Y",
+     "field": "UPDATED_DT"
+    },
+    "MRN": "MRN",
+    "NKA_FLAG": "NKA_YN",
+    "PAT_ID": "PERSON_NO",
+    "PAT_NAME": {
+     "format": "{LAST_NM},{FIRST_NM} {MID_NM}"
+    },
+    "PHONE_CELL": "CELL_PH",
+    "PHONE_HOME": "HOME_PH",
+    "RACE": "RACE_TXT",
+    "SEX": {
+     "field": "SEX_CD",
+     "map": {
+      "1": "M",
+      "2": "F",
+      "3": "X",
+      "9": "U"
+     }
+    },
+    "SSN4": "SSN_LAST4"
+   },
+   "file": "PERSON",
+   "key": "PERSON_NO"
+  },
+  "Payer": {
+   "fields": {
+    "PAYER_ID": "CARRIER_CD",
+    "PAYER_NAME": "CARRIER_NAME"
+   },
+   "file": "CARRIER",
+   "key": "CARRIER_CD"
+  },
+  "Plan": {
+   "fields": {
+    "PAYER_ID": "CARRIER_CD",
+    "PLAN_ID": "PLAN_CD",
+    "PLAN_NAME": "PLAN_NAME",
+    "PLAN_TYPE": "PLAN_TYPE"
+   },
+   "file": "INSPLAN",
+   "key": "PLAN_CD"
+  },
+  "Practitioner": {
+   "fields": {
+    "ACTIVE": "ACTIVE_YN",
+    "BILLING_FLAG": "BILLS_YN",
+    "NAME": "STAFF_NAME",
+    "NPI": "NPI",
+    "PROV_ID": "STAFF_ID",
+    "SPECIALTY": "SPEC_TXT",
+    "TERM_DT": {
+     "date": "%m/%d/%Y",
+     "field": "TERM_DATE"
+    }
+   },
+   "file": "STAFF",
+   "key": "STAFF_ID"
+  }
+ },
+ "files": {
+  "ALLERGY": {
+   "columns": [
+    "ALG_NO",
+    "ALLERGEN_TXT",
+    "NOTED_DT",
+    "PERSON_NO",
+    "REACTION_TXT",
+    "SEVERITY"
+   ],
+   "header": true,
+   "key": "ALG_NO",
+   "path": "ALLERGY.DAT"
+  },
+  "APPT": {
+   "columns": [
+    "APPT_NO",
+    "APPT_REASON",
+    "APPT_STATUS",
+    "APPT_TS",
+    "CLINIC_CD",
+    "LEN_MIN",
+    "PERSON_NO",
+    "PROVIDER_ID"
+   ],
+   "header": true,
+   "key": "APPT_NO",
+   "path": "APPT.DAT"
+  },
+  "CAMPUS": {
+   "columns": [
+    "CAMPUS_CD",
+    "CAMPUS_NAME",
+    "CITY",
+    "STATE"
+   ],
+   "header": true,
+   "key": "CAMPUS_CD",
+   "path": "CAMPUS.DAT"
+  },
+  "CARRIER": {
+   "columns": [
+    "CARRIER_CD",
+    "CARRIER_NAME"
+   ],
+   "header": true,
+   "key": "CARRIER_CD",
+   "path": "CARRIER.DAT"
+  },
+  "CLINIC": {
+   "columns": [
+    "CAMPUS_CD",
+    "CLINIC_CD",
+    "CLINIC_NAME"
+   ],
+   "header": true,
+   "key": "CLINIC_CD",
+   "path": "CLINIC.DAT"
+  },
+  "DRUGFILE": {
+   "columns": [
+    "DRUG_CD",
+    "DRUG_DESC",
+    "RXNORM"
+   ],
+   "header": true,
+   "key": "DRUG_CD",
+   "path": "DRUGFILE.DAT"
+  },
+  "INSCOV": {
+   "columns": [
+    "COV_NO",
+    "EFF_DT",
+    "END_DT",
+    "MEMBER_ID",
+    "PERSON_NO",
+    "PLAN_CD",
+    "PRIORITY",
+    "REL_CD"
+   ],
+   "header": true,
+   "key": "COV_NO",
+   "path": "INSCOV.DAT"
+  },
+  "INSPLAN": {
+   "columns": [
+    "CARRIER_CD",
+    "PLAN_CD",
+    "PLAN_NAME",
+    "PLAN_TYPE"
+   ],
+   "header": true,
+   "key": "PLAN_CD",
+   "path": "INSPLAN.DAT"
+  },
+  "LABRES": {
+   "columns": [
+    "ABN",
+    "ACCESSION",
+    "COLLECTED_TS",
+    "PERSON_NO",
+    "REF_RANGE",
+    "RESULT",
+    "RESULT_STATUS",
+    "RES_NO",
+    "TEST_CD",
+    "UNITS",
+    "VISIT_NO"
+   ],
+   "header": true,
+   "key": "RES_NO",
+   "path": "LABRES.DAT"
+  },
+  "PERSON": {
+   "columns": [
+    "ADDR1",
+    "ADDR2",
+    "BIRTH_DT",
+    "CAMPUS_CD",
+    "CELL_PH",
+    "CITY",
+    "DECEASED_DT",
+    "FIRST_NM",
+    "HOME_PH",
+    "LAST_NM",
+    "MID_NM",
+    "MRN",
+    "NKA_YN",
+    "PERSON_NO",
+    "RACE_TXT",
+    "SEX_CD",
+    "SSN_LAST4",
+    "ST",
+    "UPDATED_DT",
+    "ZIP"
+   ],
+   "header": true,
+   "key": "PERSON_NO",
+   "path": "PERSON.DAT"
+  },
+  "PROBLEM": {
+   "columns": [
+    "CODE_SYS",
+    "DX_CODE",
+    "DX_TEXT",
+    "ONSET_DT",
+    "PERSON_NO",
+    "PROB_NO",
+    "RESOLVE_DT",
+    "STATUS",
+    "VISIT_NO"
+   ],
+   "header": true,
+   "key": "PROB_NO",
+   "path": "PROBLEM.DAT"
+  },
+  "RXORDER": {
+   "columns": [
+    "DOSE_TXT",
+    "DRUG_CD",
+    "DRUG_DESC",
+    "ORDER_DT",
+    "PERSON_NO",
+    "PRESCRIBER_ID",
+    "RX_NO",
+    "RX_STATUS",
+    "SIG_TXT",
+    "STOP_DT",
+    "VISIT_NO"
+   ],
+   "header": true,
+   "key": "RX_NO",
+   "path": "RXORDER.DAT"
+  },
+  "STAFF": {
+   "columns": [
+    "ACTIVE_YN",
+    "BILLS_YN",
+    "NPI",
+    "ROLE",
+    "SPEC_TXT",
+    "STAFF_ID",
+    "STAFF_NAME",
+    "TERM_DATE"
+   ],
+   "header": true,
+   "key": "STAFF_ID",
+   "path": "STAFF.DAT"
+  },
+  "TESTDICT": {
+   "columns": [
+    "LOINC",
+    "TEST_CD",
+    "TEST_NAME",
+    "UNITS"
+   ],
+   "header": true,
+   "key": "TEST_CD",
+   "path": "TESTDICT.DAT"
+  },
+  "VISIT": {
+   "columns": [
+    "ADMIT_TS",
+    "ATTEND_ID",
+    "CHIEF_COMPLAINT",
+    "CLINIC_CD",
+    "DISCH_TS",
+    "PERSON_NO",
+    "STATUS",
+    "VISIT_NO",
+    "VISIT_TYPE"
+   ],
+   "header": true,
+   "key": "VISIT_NO",
+   "path": "VISIT.DAT"
+  },
+  "VITALS": {
+   "columns": [
+    "PERSON_NO",
+    "TAKEN_TS",
+    "VISIT_NO",
+    "VS_NO",
+    "VS_TYPE",
+    "VS_UNIT",
+    "VS_VALUE"
+   ],
+   "header": true,
+   "key": "VS_NO",
+   "path": "VITALS.DAT"
+  }
+ },
+ "format": {
+  "delimiter": "|",
+  "encoding": "latin-1",
+  "suffix": ".DAT"
+ },
+ "reader": "delimited",
+ "source": "meridian"
+}
