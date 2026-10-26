@@ -123,7 +123,19 @@ def _known_fields(events: list[LedgerEvent],
     known exactly when the data has it (the dictionary's stale FAX
     field is not). A document quote filed under an observation-like id
     is not data either: only observations that pass the
-    data-observation test contribute their (file, field)."""
+    data-observation test contribute their (file, field).
+
+    Trust boundary: generation cannot authenticate a ledger event. An
+    ``inventory`` or data ``observation`` event is believed because of
+    WHO writes those event types — the profiler, via the runner, from
+    the export's data — never because of anything an interview can
+    say. Interview content (answers, and the claims and resolutions
+    drawn from them) never becomes an inventory or observation event.
+    A hand-written inventory or observation event would mint fields;
+    for a committed ledger, the acceptance test that re-profiles the
+    export and requires the recorded inventory to match exactly is the
+    check that catches that. What this function guarantees is that no
+    claim or resolution, however labelled, can add a field."""
     by_file: dict[str, set[str]] = {}
 
     def feed(file: Any, field: Any) -> None:
@@ -283,6 +295,16 @@ def _rule_provenance(store: ClaimStore, subject: str, predicate: str, value: Any
     ``data_confirmed`` is kept separate from who claimed the value: an
     analyst's claim confirmed by a profiler observation is analyst-kind
     and data-confirmed.
+
+    When several claims state the winning value, the kind is the FIRST
+    such claim's, and confirmation may come from any of them: a
+    dictionary claim recorded before a profiler claim of the same value
+    yields kind ``dictionary`` and, if the profiler claim's bound
+    observation confirms it, ``data_confirmed: true``. The kind says
+    who first stated the fact; ``data_confirmed`` says whether data
+    backs it. (The scorecard credits profiling for a data-confirmed
+    dictionary rule, so the measurement is not lost.) An unearned
+    ``profiler-data`` kind is still demoted when nothing confirms.
     """
     dispute = store.dispute(subject, predicate)
     winners = [c for c in store.get(subject, predicate)

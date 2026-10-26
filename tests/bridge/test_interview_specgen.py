@@ -908,3 +908,31 @@ def test_malformed_inventory_event_contributes_nothing(payload):
         "ledger:E000042 (an analyst)", source_kind="analyst"))
     pkg = specgen.generate_spec(events, store, "delphi")
     assert not any(r["predicate"] == "keying_story" for r in pkg.spec["rules"])
+
+
+def test_kind_names_the_first_stating_claim_confirmation_from_any():
+    """PR #43 review (Muse, minor): pin the attribution choice. With a
+    dictionary claim recorded first and a profiler claim of the same
+    keying value citing the bound observation, the rule is kind
+    ``dictionary`` (who first stated the fact) and data-confirmed (the
+    profiler claim's evidence backs it)."""
+    story = {"key_fields": ["REG.TXT.ACCT"], "master_index": False}
+    events = [
+        ledger_mod.LedgerEvent("E000001", "observation", {
+            "obs_id": "OBS-1", "file": "REG.TXT", "field": "ACCT",
+            "stats": {"rows": 10}}),
+        ledger_mod.LedgerEvent("E000002", "binding", {
+            "subject": "identity", "predicate": "keying_story",
+            "binding": ["REG.TXT", "ACCT"], "evidence_refs": ["OBS-1"]}),
+        ledger_mod.LedgerEvent("E000003", "claim", {
+            "subject": "identity", "predicate": "keying_story",
+            "value": dict(story), "source": "DATADICT.TXT v4.1",
+            "source_kind": "dictionary"}),
+        ledger_mod.LedgerEvent("E000004", "claim", {
+            "subject": "identity", "predicate": "keying_story",
+            "value": dict(story), "source": "OBS-1 (REG.TXT ACCT)",
+            "source_kind": "profiler-data", "evidence_refs": ["OBS-1"]}),
+    ]
+    rule = _keying_rule(events)
+    assert rule["provenance"]["kind"] == "dictionary"
+    assert rule["data_confirmed"] is True
