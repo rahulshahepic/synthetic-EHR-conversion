@@ -1,0 +1,36 @@
+{
+  "bill_amounts_by_site_and_era": {
+    "A:False": [],
+    "A:True": [
+      "-2500",
+      "12550"
+    ],
+    "B:False": [
+      "-2500",
+      "12550"
+    ],
+    "B:True": [
+      "-25.00",
+      "125.50"
+    ]
+  },
+  "cross_site_chart_collisions": 160,
+  "dob_lengths": {
+    "0": 5,
+    "6": 3,
+    "8": 312
+  },
+  "lab_units_by_site": {
+    "A": {
+      "": 26,
+      "mg/dL": 294
+    },
+    "B": {
+      "": 24,
+      "mg/dL": 58,
+      "mmol/L": 238
+    }
+  },
+  "nka_positive_conflicts": 15,
+  "registrations": 320
+}

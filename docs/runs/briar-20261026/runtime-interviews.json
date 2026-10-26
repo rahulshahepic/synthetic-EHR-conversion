@@ -1,0 +1,146 @@
+[
+  {
+    "affected": 19,
+    "disposition": "left_open_no_verified_value",
+    "kind": "briar_appointment_status",
+    "question_id": "q-aff8ab15",
+    "response": {
+      "analyst": "systems",
+      "answer": "I don't know; please ask the owning department.",
+      "answer_event": "E000220",
+      "question_event": "E000219"
+    }
+  },
+  {
+    "affected": 14,
+    "disposition": "left_open_no_verified_value",
+    "kind": "briar_unmapped_medication",
+    "question_id": "q-a182ab73",
+    "response": {
+      "analyst": "pharmacy",
+      "answer": "I don't know; please ask the owning department.",
+      "answer_event": "E000222",
+      "question_event": "E000221"
+    }
+  },
+  {
+    "affected": 6,
+    "disposition": "left_open_no_verified_value",
+    "kind": "briar_local_time",
+    "question_id": "q-9593811a",
+    "response": {
+      "analyst": "systems",
+      "answer": "I don't know; please ask the owning department.",
+      "answer_event": "E000224",
+      "question_event": "E000223"
+    }
+  },
+  {
+    "affected": 6,
+    "disposition": "left_open_no_verified_value",
+    "kind": "briar_credit",
+    "question_id": "q-337741aa",
+    "response": {
+      "analyst": "billing",
+      "answer": "I don't know; please ask the owning department.",
+      "answer_event": "E000226",
+      "question_event": "E000225"
+    }
+  },
+  {
+    "affected": 6,
+    "disposition": "left_open_no_verified_value",
+    "kind": "briar_credit",
+    "question_id": "q-ed81d684",
+    "response": {
+      "analyst": "billing",
+      "answer": "I don't know; please ask the owning department.",
+      "answer_event": "E000228",
+      "question_event": "E000227"
+    }
+  },
+  {
+    "affected": 5,
+    "disposition": "left_open_no_verified_value",
+    "kind": "briar_birth_date",
+    "question_id": "q-f7c83905",
+    "response": {
+      "analyst": "registration",
+      "answer": "I don't know; please ask the owning department.",
+      "answer_event": "E000230",
+      "question_event": "E000229"
+    }
+  },
+  {
+    "affected": 4,
+    "disposition": "left_open_no_verified_value",
+    "kind": "briar_local_time",
+    "question_id": "q-1c63b882",
+    "response": {
+      "analyst": "systems",
+      "answer": "I don't know; please ask the owning department.",
+      "answer_event": "E000232",
+      "question_event": "E000231"
+    }
+  },
+  {
+    "affected": 4,
+    "disposition": "left_open_no_verified_value",
+    "kind": "briar_local_time",
+    "question_id": "q-e95f7e60",
+    "response": {
+      "analyst": "systems",
+      "answer": "I don't know; please ask the owning department.",
+      "answer_event": "E000234",
+      "question_event": "E000233"
+    }
+  },
+  {
+    "affected": 4,
+    "disposition": "left_open_no_verified_value",
+    "kind": "briar_lab_unit",
+    "question_id": "q-de75ea96",
+    "response": {
+      "analyst": "lab",
+      "answer": "I don't know; please ask the owning department.",
+      "answer_event": "E000236",
+      "question_event": "E000235"
+    }
+  },
+  {
+    "affected": 4,
+    "disposition": "left_open_no_verified_value",
+    "kind": "briar_lab_unit",
+    "question_id": "q-813c68be",
+    "response": {
+      "analyst": "lab",
+      "answer": "I don't know; please ask the owning department.",
+      "answer_event": "E000238",
+      "question_event": "E000237"
+    }
+  },
+  {
+    "affected": 3,
+    "disposition": "left_open_no_verified_value",
+    "kind": "briar_birth_date",
+    "question_id": "q-920b64ef",
+    "response": {
+      "analyst": "registration",
+      "answer": "I don't know; please ask the owning department.",
+      "answer_event": "E000240",
+      "question_event": "E000239"
+    }
+  },
+  {
+    "affected": 2,
+    "disposition": "left_open_no_verified_value",
+    "kind": "briar_identity_review",
+    "question_id": "q-b18a3daa",
+    "response": {
+      "analyst": "registration",
+      "answer": "I don't know; please ask the owning department.",
+      "answer_event": "E000242",
+      "question_event": "E000241"
+    }
+  }
+]

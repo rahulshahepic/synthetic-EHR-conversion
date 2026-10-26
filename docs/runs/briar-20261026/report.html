@@ -1,0 +1,828 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Briar conversion rehearsal</title>
+<style>body{font:17px/1.6 system-ui,sans-serif;color:#202b2b;background:#f5f2eb;margin:0}main{max-width:1050px;margin:auto;padding:36px 24px}h1{font:42px/1.12 Georgia,serif;max-width:700px}h2{font:27px Georgia,serif;margin-top:36px}.metrics{display:flex;flex-wrap:wrap;gap:12px}.metrics div{flex:1;min-width:140px;background:white;padding:16px;border-top:4px solid #315d50}b.big{display:block;font-size:30px}.decision{border-left:5px solid #9b492d;background:#fff4e7;padding:16px}table{border-collapse:collapse;background:white;width:100%;font-size:14px}th,td{padding:9px;text-align:left;border-bottom:1px solid #dedcd6}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:white;padding:20px;font:14px/1.6 ui-monospace,monospace}details{background:#fff;padding:12px 16px;margin:8px 0}summary{cursor:pointer;font-weight:650}a{color:#195b4a}.table{overflow:auto}small{color:#59635f}</style>
+<main><small>SYNTHETIC EHR / OCTOBER 26, 2026</small><h1>A messy source. A completed rehearsal. An honest NO-GO.</h1>
+<p>Briar Community EHR: two sites, fallible documentation, five disagreeing analyst roles, revisioned results and unresolved clinical facts.</p>
+<div class="metrics"><div><b class="big">3,848</b>source rows accounted</div><div><b class="big">3,036</b>resources loaded</div><div><b class="big">0</b>target rejections</div><div><b class="big">7.33s</b>first corrected conversion</div></div>
+<p class="decision"><strong>Conversion completed with exceptions. Go-live: NO-GO.</strong><br>75 held records, 79 blocked dependencies, unresolved source evidence and unsigned fidelity losses. No invented birth dates, patient merges or human approvals.</p>
+<h2>The product finding</h2><p>The generated spec stages the source. It does not yet generate the domain mappers needed to finish the conversion. An explicitly authored adapter completed this run through Bridge and the Nimbus API. The generic reader also strips note indentation, and timestamp read-back needs canonical spelling. Both workarounds are disclosed.</p>
+<h2>Record accounting</h2><div class="table"><table><thead><tr><th>Resource</th><th>Logical</th><th>Loaded</th><th>Held</th><th>Blocked</th><th>Dropped</th><th>Rejected</th></tr></thead><tbody><tr><td>AllergyIntolerance</td><td>30</td><td>29</td><td>0</td><td>1</td><td>0</td><td>0</td></tr><tr><td>Appointment</td><td>320</td><td>294</td><td>19</td><td>7</td><td>0</td><td>0</td></tr><tr><td>ChargeItem</td><td>320</td><td>288</td><td>12</td><td>20</td><td>0</td><td>0</td></tr><tr><td>Condition</td><td>320</td><td>312</td><td>0</td><td>8</td><td>0</td><td>0</td></tr><tr><td>DocumentReference</td><td>320</td><td>312</td><td>0</td><td>8</td><td>0</td><td>0</td></tr><tr><td>Encounter</td><td>320</td><td>299</td><td>14</td><td>7</td><td>0</td><td>0</td></tr><tr><td>MedicationRequest</td><td>320</td><td>299</td><td>14</td><td>7</td><td>0</td><td>0</td></tr><tr><td>Observation</td><td>960</td><td>891</td><td>8</td><td>21</td><td>40</td><td>0</td></tr><tr><td>Patient</td><td>320</td><td>312</td><td>8</td><td>0</td><td>0</td><td>0</td></tr><tr><td>Total</td><td>3230</td><td>3036</td><td>75</td><td>79</td><td>40</td><td>0</td></tr></tbody></table></div>
+<h2>Evidence strength</h2><p>65,052 field/disposition assertions passed across 4 runs. The repeated-run details and population sizes are recorded in the complete report. Seven fault injections demonstrate that clinically wrong output fails scoring.</p>
+<p><strong>This was not blinded.</strong> One assistant authored the fixture, analyst answers and adapter. Analyst answers are deterministic stubs. Conversion never reads grading truth, but its author knows the planted cases. Results support this rehearsal, not a general real-world success rate.</p>
+<h2>Discovery conversation</h2><details><summary>Read all 15 discovery questions, analyst answers and resolutions</summary><pre># Briar discovery transcript
+
+Synthetic deterministic analysts; fixture and interview authored by the same assistant. No claim of a blinded evaluation.
+
+**E000096 · interviewer → systems**
+
+Is the old dictionary current on identity, DOB, timestamps, money and appointment R?
+
+Reason: Establish the systems owner&#x27;s position.
+
+**E000097 · simulated systems**
+
+It is still the approved guide. CHART is enterprise-wide, the DOB window is 1950, all bill amounts are cents, and R is rescheduled. Registration should be able to confirm.
+
+**E000098 · interviewer → registration**
+
+Is CHART enterprise-wide, and may identical demographics be merged?
+
+Reason: Repeated chart numbers and separate installations challenge enterprise identity.
+
+**E000099 · simulated registration**
+
+No. A and B allocate the same chart numbers independently. Key by SITE plus CHART. Same name and DOB can be twins or duplicate charts. We routinely merge the obvious duplicates; I would just merge those two.
+
+**E000100 · interviewer → registration**
+
+How are DOB and no-known-allergy flags actually used?
+
+Reason: DOB shapes and allergy conflicts require their operational owner.
+
+**E000101 · simulated registration**
+
+Current registrations are YYYYMMDD. Older imported rows sometimes have YYMMDD; my window is 1930-2029. Blank is unknown. NKA is sticky after an allergy is added, so preserve the positive allergy and clear the NKA flag on conflicts.
+
+**E000102 · interviewer → lab**
+
+Are all glucose units now mmol/L at Outreach?
+
+Reason: A scheduled migration does not establish that every device changed.
+
+**E000103 · simulated lab**
+
+Yes, everything at B switched on January 1. A is mg/dL. You can ignore the per-row unit now.
+
+**E000104 · interviewer → pharmacy**
+
+What does MED H mean, and can MISC be skipped?
+
+Reason: Version skew and missing drug mappings can lose active therapy.
+
+**E000105 · simulated pharmacy**
+
+H now means temporarily on hold; it is not historical. I know the old guide says otherwise. MISC is a real compound or a med with no formulary match; don&#x27;t silently skip it or invent an RxNorm code. The text and sig need to remain in the source archive until someone identifies it.
+
+**E000106 · interviewer → billing**
+
+Are all BILL amounts cents and can credits be imported as charges?
+
+Reason: Decimal and negative amounts contradict a global cents rule.
+
+**E000107 · simulated billing**
+
+No. A is cents; B switched to decimal dollars for service dates 20260101 and later. Earlier B stays cents, even if extracted today. Negative rows are credits. Do not flip their sign or turn them into debit charges; Nimbus needs a credit workflow we don&#x27;t have here.
+
+**E000112 · interviewer → systems**
+
+The support note and data conflict with that guide; which delivery contract applies?
+
+Reason: The 3.7 layout conflicts with the approved 2.3 guide.
+
+**E000113 · simulated systems**
+
+LAYOUTS 3.7 describes the file spans. The 2.3 guide has not been rewritten. Both sites use Chicago local time. 2400 is next-day midnight, but 2461 is invalid. DST repeated and missing hours cannot be disambiguated from these files.
+
+**E000114 · interviewer → systems**
+
+Registration says current DOB is YYYYMMDD and CHART is site-scoped; do you have contrary delivery evidence?
+
+Reason: Ask for evidence rather than settle by seniority.
+
+**E000115 · simulated systems**
+
+No. I was describing the old installation. Use what the 3.7 delivery actually shows; I don&#x27;t have an MPI extract.
+
+**E000116 · interviewer → registration**
+
+Can you establish the century for six-digit DOBs or prove the matching charts are one person?
+
+Reason: Name and date shape prove neither identity nor century.
+
+**E000117 · simulated registration**
+
+Not from this delivery. I would need the old paper register and chart audit. Leave those birth dates and possible merges for review.
+
+**E000118 · interviewer → lab**
+
+The B data still contains mg/dL; what supports ignoring it?
+
+Reason: Measured B-site rows contradict the initial blanket unit claim.
+
+**E000119 · simulated lab**
+
+The chemistry analyzer switched, but the point-of-care devices may not have. I cannot tell you which produced those rows. Use the transmitted unit, and do not infer a conversion from the value alone.
+
+**E000120 · interviewer → lab**
+
+What do nonnumeric results, 999999, suffix flags, revisions and journal deletes mean?
+
+Reason: Distinguish valid text, missing values, corrections and withdrawals.
+
+**E000121 · simulated lab**
+
+NEG is a valid culture result, not a bench error. 999999 is the old no-result sentinel, not a numeric result. H/L follow the result, including comparator results. Larger REV is current. A delete for an accession withdraws every test on that accession, not just potassium. Don&#x27;t resurrect the old revision.
+
+**E000122 · interviewer → lab**
+
+Can missing lab units always be filled from the dictionary?
+
+Reason: A mixed-device population invalidates a universal glucose default.
+
+**E000123 · simulated lab**
+
+For potassium here yes, mmol/L. For glucose no: an empty unit after the device migration needs a chart check. The absent-result sentinel should stay absent, not become a glucose concentration.
+
+**E000124 · interviewer → pharmacy**
+
+Does the same H meaning apply to old archived medication exports?
+
+Reason: Limit the rule to the supported version.
+
+**E000125 · simulated pharmacy**
+
+I only own the current 3.7 delivery. I cannot attest to H before the upgrade; do not apply this answer to an old delivery without its own review.
+
+**E000126 · interviewer → systems**
+
+What is APPT R in the current delivery?
+
+Reason: Physical shapes cannot establish a status meaning.
+
+**E000127 · simulated systems**
+
+I think rescheduled. Scheduling told me it may be a legacy arrived state after a migration. I cannot prove either from an appointment row. Scheduling is not available today.
+
+**E000128 · interviewer → systems**
+
+Are full-width note segments necessarily truncated, and how do journal deletions apply?
+
+Reason: Full width is not proof of lost text; establish assembly and delete scope.
+
+**E000129 · simulated systems**
+
+No, a full segment can continue in the next SEQ. The export has no original length or truncation marker. Join SEQ numerically within SITE and ID. An accession delete in JRN withdraws the entire accession. A document can still have been truncated before export; we can&#x27;t recover what never arrived.
+
+**E000131 · resolution: identity / keying_story**
+
+{&quot;key_fields&quot;: [&quot;REG.TXT.SITE+REG.TXT.CHART&quot;], &quot;master_index&quot;: false}
+
+Systems withdrew old enterprise-ID assertion; registration and site collisions agree. No patient merges authorized.
+
+**E000133 · resolution: field:REG.TXT.DOB / convention**
+
+{&quot;format&quot;: &quot;YYYYMMDD&quot;, &quot;other&quot;: &quot;runtime_question&quot;}
+
+Eight-digit rows parse; six-digit century and missing dates cannot be established.
+
+**E000135 · resolution: field:LAB.TXT.UNIT / convention**
+
+&quot;row_unit_overrides_dictionary&quot;
+
+Initial blanket site conversion was contradicted by B-site unit labels and withdrawn.
+
+**E000137 · resolution: field:MED.TXT.STATUS / convention**
+
+{&quot;A&quot;: &quot;active&quot;, &quot;H&quot;: &quot;on-hold&quot;, &quot;S&quot;: &quot;stopped&quot;}
+
+Pharmacy confirms current 3.7 delivery only; archived H remains out of scope.
+
+**E000139 · resolution: field:BILL.TXT.AMOUNT / convention**
+
+{&quot;dollars_from_service_date&quot;: &quot;20260101&quot;, &quot;negative&quot;: &quot;runtime_question&quot;, &quot;otherwise&quot;: &quot;cents&quot;, &quot;site&quot;: &quot;B&quot;}
+
+Follow-up with domain owner; delivery evidence checked
+
+**E000141 · resolution: field:LAB.TXT.RESULT / convention**
+
+{&quot;NEG&quot;: &quot;negative&quot;, &quot;comparator&quot;: &quot;preserve&quot;, &quot;missing_sentinel&quot;: &quot;999999&quot;, &quot;numeric_flags&quot;: true, &quot;other_text&quot;: &quot;preserve&quot;}
+
+Follow-up with domain owner; delivery evidence checked
+</pre></details>
+<h2>Runtime analyst follow-up</h2><details><summary>briar_appointment_status · 19 records</summary><p>I don&#x27;t know; please ask the owning department.</p><p>Disposition: left open; no verified value supplied.</p></details><details><summary>briar_unmapped_medication · 14 records</summary><p>I don&#x27;t know; please ask the owning department.</p><p>Disposition: left open; no verified value supplied.</p></details><details><summary>briar_local_time · 6 records</summary><p>I don&#x27;t know; please ask the owning department.</p><p>Disposition: left open; no verified value supplied.</p></details><details><summary>briar_credit · 6 records</summary><p>I don&#x27;t know; please ask the owning department.</p><p>Disposition: left open; no verified value supplied.</p></details><details><summary>briar_credit · 6 records</summary><p>I don&#x27;t know; please ask the owning department.</p><p>Disposition: left open; no verified value supplied.</p></details><details><summary>briar_birth_date · 5 records</summary><p>I don&#x27;t know; please ask the owning department.</p><p>Disposition: left open; no verified value supplied.</p></details><details><summary>briar_local_time · 4 records</summary><p>I don&#x27;t know; please ask the owning department.</p><p>Disposition: left open; no verified value supplied.</p></details><details><summary>briar_local_time · 4 records</summary><p>I don&#x27;t know; please ask the owning department.</p><p>Disposition: left open; no verified value supplied.</p></details><details><summary>briar_lab_unit · 4 records</summary><p>I don&#x27;t know; please ask the owning department.</p><p>Disposition: left open; no verified value supplied.</p></details><details><summary>briar_lab_unit · 4 records</summary><p>I don&#x27;t know; please ask the owning department.</p><p>Disposition: left open; no verified value supplied.</p></details><details><summary>briar_birth_date · 3 records</summary><p>I don&#x27;t know; please ask the owning department.</p><p>Disposition: left open; no verified value supplied.</p></details><details><summary>briar_identity_review · 2 records</summary><p>I don&#x27;t know; please ask the owning department.</p><p>Disposition: left open; no verified value supplied.</p></details>
+<h2>Complete report</h2><details><summary>Methods, contradictions, product failures, limits and reproduction</summary><pre># Briar EHR conversion dress rehearsal — October 26, 2026
+
+The autonomous rehearsal is complete. The explicitly authored source adapter loaded **3,036 resources across nine types** in **7.326 seconds**, with **0 target rejections**. Every one of **3,848 physical export rows** is accounted for. **65,052 clinical-field, identity, target-presence and disposition assertions** passed across 4 executed runs, listed below. These assertions are not independent tests or independent clinical validation.
+
+**Operational result: completed with exceptions. Go-live result: NO-GO.** 75 records are held for unresolved source evidence, 79 depend on held records, and 40 observations are intentionally not loaded (withdrawn accessions or explicit no-result sentinels). No sign-offs were invented and no patients were merged. A deferred question is not a clinical answer and cannot release or drop its held records.
+
+## What was actually built and executed
+
+Briar is a new synthetic source, separate from Halcyon and Delphi: 320 registration charts at two formerly separate installations, fixed-width departmental files, local chart numbers, revisioned labs, a withdrawal journal, note continuations, medications, diagnoses, appointments and charges. Its 2018 dictionary is mostly right but contradicts a 2026 support note and several operational workflows. Five named simulated analysts have different knowledge and blind spots. There are 15 discovery questions and 12 runtime follow-ups in the evidence.
+
+The stock Socratic builder generated a 91-rule declarative spec, provenance ledger, reader binding, Python profile and crosswalk CSVs. **The stock generated-reader path staged 3,848 source rows and loaded zero patients.** Its run correctly remains `staged`; the current implementation does not generate source-to-Nimbus domain mappers. I wrote an explicit test-scenario adapter using the discovered spec, then ran the ordinary Bridge Runner and embedded Nimbus **HTTP API contract**, including target validation, dependency checks, fidelity annotations, questions, counts, clinical sentinels and full loaded-record read-back. This was local embedded HTTP transport, not a remote-server/network test.
+
+## The consequential disagreements
+
+| Claim or conflict | What was checked | Conversion decision |
+|---|---|---|
+| Dictionary and systems: CHART is enterprise-wide. Registration: site-local. | 320 registrations, only 160 distinct CHART values; separate source installations; systems withdraws old assertion. | SITE+CHART identifies source charts; cross-site records remain separate. Matching demographics produce an identity-review question, never an automatic merge. |
+| Systems uses a 1950 DOB pivot; registration proposes 1930. Dictionary says six-digit DOB. | 312 eight-digit dates, 5 blanks and 3 six-digit dates. No chart evidence for the legacy century. | Parse valid YYYYMMDD only. Hold all 8 uncertain birth dates; dependent resources wait. Neither analyst&#x27;s preferred pivot becomes truth. |
+| Lab supervisor: all Outreach glucose is now mmol/L; ignore unit labels. | B-site glucose rows still explicitly carry mg/dL, alongside mmol/L. These counts include historical revisions. Supervisor acknowledges residual devices. | Preserve transmitted units. Missing glucose units are held. No magnitude-based or site-wide unit conversion. |
+| Dictionary: MED H is historical and may be skipped. Pharmacy: current H is on hold. | Pharmacy confirms the changed 3.7 workflow and refuses to attest to older versions. | Preserve current on-hold therapy; adapter rejects other delivery versions. Unmapped MISC drugs remain held with original name and sig archived. |
+| Dictionary: all amounts are cents. Billing: Outreach changed to dollars. | A cents, B pre-cutover cents and B post-cutover decimal dollars all occur. Billing confirms service date, not extraction date, controls the change. | Preserve $125.50 across all three regimes. Quarantine credits rather than invert their signs. |
+| NKA Y conflicts with positive allergy text. | 15 source conflicts; registration explains a sticky NKA flag. | Retain positive allergies and clear contradictory NKA on loaded patients. Allergies whose patients have unknown DOB remain blocked. |
+| Numeric-only labs versus NEG, 999999 and comparator results. | Domain owner distinguishes a valid culture result, a missing-value sentinel and &gt;600H-style measurements. | Preserve negative cultures, comparators and flags. Do not create a numeric 999999 observation. |
+| Latest physical lab row versus latest revision; potassium delete versus entire accession. | Revision order is reversed; source journal and owner define whole-accession withdrawal. | Highest numeric revision wins. Withdraw every test on the accession; never resurrect its older revision. |
+| APPT R means rescheduled versus possibly arrived. | No scheduling owner or status audit is available. | All 19 R appointments stay held. A convenient guess does not become a status map. |
+| Full-width notes imply truncation. | Follow-up distinguishes continuation segments from upstream truncation; no original-length marker exists. | Reassemble by numeric SEQ, preserve indentation and delivered text; mark original completeness unverified. |
+| Local times include 2400, 2461 and DST transition hours. | Both sites are Chicago local; support note defines midnight rollover but cannot establish DST offsets. | Normalize documented 2400 to next midnight; hold invalid, repeated and nonexistent wall-clock times. |
+
+## Record accounting
+
+| Resource | Logical records | Loaded | Held | Blocked | Dropped | Rejected |
+|---|---:|---:|---:|---:|---:|---:|
+| AllergyIntolerance | 30 | 29 | 0 | 1 | 0 | 0 |
+| Appointment | 320 | 294 | 19 | 7 | 0 | 0 |
+| ChargeItem | 320 | 288 | 12 | 20 | 0 | 0 |
+| Condition | 320 | 312 | 0 | 8 | 0 | 0 |
+| DocumentReference | 320 | 312 | 0 | 8 | 0 | 0 |
+| Encounter | 320 | 299 | 14 | 7 | 0 | 0 |
+| MedicationRequest | 320 | 299 | 14 | 7 | 0 | 0 |
+| Observation | 960 | 891 | 8 | 21 | 40 | 0 |
+| Patient | 320 | 312 | 8 | 0 | 0 | 0 |
+| Total | 3230 | 3036 | 75 | 79 | 40 | 0 |
+
+Physical rows and logical resources are different counts: 320 earlier glucose revisions are retained in the source archive, 640 note segments assemble into 320 documents, 8 journal rows withdraw accessions, and 30 registration rows also yield an allergy resource. The per-file/per-line accounting file links every physical row to its disposition and logical target. The 40 dropped observations comprise 24 withdrawn tests and 16 no-result sentinels after withdrawal precedence. None are silently discarded as unparsed input.
+
+## Verification and repeated runs
+
+| Run | Population | Purpose | Actual result |
+|---|---:|---|---|
+| Initial corrected run | 320 | End-to-end conversion | 3,036 loaded, zero rejected, full read-back and field/disposition grading pass |
+| Fresh target, batch size 37 | 320 | Batch-order/replay sensitivity | Same clinical content and outcomes |
+| Same target, repeat import | 320 | Idempotency | Same clinical content and outcomes; no new duplicate records |
+| Second population, new seed | 160 | Reuse the same discovered 3.7 spec | 1,521 loaded; verification and field/disposition grading pass |
+
+The stock verifier&#x27;s default sentinels still depend on Halcyon-shaped source fields. The scenario adapter provides those explicit normalized aliases, and the separate source-specific grader checks actual Nimbus API snapshots for every logical record, every loaded patient&#x27;s identity reference, dates, quantitative and qualitative results, revisions, comparators, units, flags, medication status and sig, diagnosis coding/text, allergy text, note bytes/order and charge scaling. This is stronger than checking only that a record was accepted, but it does not measure source capabilities absent from this fixture.
+
+The discovery ledger replays to byte-identical spec/profile output, all analyst answers replay exactly, and re-profiling reproduces the recorded observations. A test also forbids grading-file reads during discovery and conversion. Seven fault-injection tests demonstrate that the grader rejects wrong units, lost comparators, stripped note indentation, active/on-hold swaps, wrong charge scaling, invented diagnosis coding and extra target records.
+
+## Failures found during the rehearsal
+
+1. **Native builder stops at staging.** Source-file bindings are working; general source-to-domain mapping and execution of generated semantic rules/known-unknowns are still missing. The explicit adapter is a demonstrated workaround, not evidence that the builder generated a complete ingestion.
+2. **Generic fixed-width reader strips leading clinical whitespace.** `src/bridge/interview/reader.py:126` calls `.strip()` on every field. All 320 indented note continuations lose their indentation on the native path. The scenario reconstructs note content using the generated field spans and trims only right padding; all 312 loaded notes match the delivered segments exactly. Production reader behavior is unchanged by this PR.
+3. **Read-back compares timestamp spellings literally.** `src/bridge/verify.py:37` considers equivalent UTC `+00:00` and `Z` strings unequal. The first adapter attempt was stopped with read-back alerts; a captured example confirms the instant did not change. The adapter now emits Nimbus&#x27;s canonical UTC `Z` representation. The original failed-attempt log is preserved separately; no alert was waived to force a pass.
+
+These findings should become product work: generate/validate domain mappings and enforce known-unknown routing; support per-field whitespace semantics; compare typed timestamps semantically; make clinical sentinel definitions source-specific. Unavailable clinical facts remain a source-operations problem, not something a converter can safely invent.
+
+## What remains unresolved
+
+There are 11 blocking question groups covering missing/ambiguous DOB, invalid/DST times, unverified glucose units, unmapped medications, source credits and APPT R. A nonblocking identity group covers two charts with matching demographics, retained separately. Runtime follow-up questions were sent through the same simulated-analyst ask interface; without additional chart evidence, those answers stay unknown and release no records. Fidelity losses or explicitly unverified assumptions also await owner sign-off. The run&#x27;s NO-GO is intentional and supported by the unresolved records, not a stopped or unfinished execution.
+
+## Limits of this evidence
+
+The same assistant authored the source fixture, analysts, interview and adapter. This is **not a blinded test** of discovery, and its success rate is not an independent estimate of real-world import quality. Analysts use deterministic recorded answers through `AnalystService.ask`, not independent live models or actual staff. Grading truth is kept out of the conversion code path and consulted only by the separate scoring step after snapshots are written, but the fixture author already knows what was planted. A genuinely blinded follow-up needs an independently authored estate and independently supplied analyst backend. The second population changes the seed and size, not the source&#x27;s underlying error families. The scenario preserves source charge-to-visit references but does not validate service-date consistency against encounter dates; source-era billing dates therefore need a separate revenue-cycle audit. No claim is made about production scale, network faults, live incremental cutover, real clinical terminology validity or real-world go-live readiness.
+
+## Reproduce
+
+Tested base: `8175d7eb0026012e7174121b35e2a15b6a76e6e4` plus this task branch. Python 3.12; existing project dependencies; no added dependency or remote LLM calls.
+
+```bash
+python -m pip install -e &#x27;.[dev]&#x27;
+python -m testbed.scenarios.briar --out runs/briar-new --patients 320 --seed 2626
+python -m pytest -q
+```
+
+The output contains source files and private grading truth, frozen discovery and full runtime ledgers, generated spec/profile/binding/crosswalks, per-field profiling evidence, source-row accounting, target API snapshots, record outcomes, read-back/readiness reports, HTML reports, SHA-256 evidence hashes, repeated-run comparisons and computed grades. Output directories must be fresh; prior evidence is never overwritten.
+</pre></details>
+<details><summary>Computed grades</summary><pre>[
+  {
+    &quot;checks&quot;: {
+      &quot;allergy_reaction&quot;: 29,
+      &quot;allergy_substance&quot;: 29,
+      &quot;appointment_status&quot;: 294,
+      &quot;birth_date&quot;: 312,
+      &quot;charge_scale_and_sign&quot;: 288,
+      &quot;charge_visit_reference&quot;: 288,
+      &quot;clinical_timestamp&quot;: 1778,
+      &quot;diagnosis_mapping&quot;: 277,
+      &quot;diagnosis_text&quot;: 312,
+      &quot;drug_mapping&quot;: 299,
+      &quot;lab_comparator&quot;: 586,
+      &quot;lab_flag&quot;: 586,
+      &quot;lab_numeric_value&quot;: 586,
+      &quot;lab_unit&quot;: 586,
+      &quot;latest_lab_revision&quot;: 891,
+      &quot;logical_record_count&quot;: 9,
+      &quot;medication_status&quot;: 299,
+      &quot;nka_conflict&quot;: 312,
+      &quot;no_invented_allergy_severity&quot;: 29,
+      &quot;no_invented_diagnosis&quot;: 35,
+      &quot;note_bytes_and_order&quot;: 312,
+      &quot;patient_identity_reference&quot;: 2724,
+      &quot;qualitative_result&quot;: 305,
+      &quot;record_disposition&quot;: 3230,
+      &quot;scoped_identifier&quot;: 312,
+      &quot;sig_not_falsely_structured&quot;: 299,
+      &quot;sig_preservation&quot;: 299,
+      &quot;target_key_set&quot;: 9,
+      &quot;target_presence&quot;: 3230,
+      &quot;uncoded_diagnosis_flagged&quot;: 35
+    },
+    &quot;checks_total&quot;: 18580,
+    &quot;errors&quot;: [],
+    &quot;label&quot;: &quot;corrected&quot;,
+    &quot;ok&quot;: true,
+    &quot;scope&quot;: &quot;Every logical record disposition and target presence, every loaded clinical identity/reference and listed field; actual API snapshots, not Bridge mapped payloads. Same-author fixture, not blinded.&quot;
+  },
+  {
+    &quot;checks&quot;: {
+      &quot;allergy_reaction&quot;: 29,
+      &quot;allergy_substance&quot;: 29,
+      &quot;appointment_status&quot;: 294,
+      &quot;birth_date&quot;: 312,
+      &quot;charge_scale_and_sign&quot;: 288,
+      &quot;charge_visit_reference&quot;: 288,
+      &quot;clinical_timestamp&quot;: 1778,
+      &quot;diagnosis_mapping&quot;: 277,
+      &quot;diagnosis_text&quot;: 312,
+      &quot;drug_mapping&quot;: 299,
+      &quot;lab_comparator&quot;: 586,
+      &quot;lab_flag&quot;: 586,
+      &quot;lab_numeric_value&quot;: 586,
+      &quot;lab_unit&quot;: 586,
+      &quot;latest_lab_revision&quot;: 891,
+      &quot;logical_record_count&quot;: 9,
+      &quot;medication_status&quot;: 299,
+      &quot;nka_conflict&quot;: 312,
+      &quot;no_invented_allergy_severity&quot;: 29,
+      &quot;no_invented_diagnosis&quot;: 35,
+      &quot;note_bytes_and_order&quot;: 312,
+      &quot;patient_identity_reference&quot;: 2724,
+      &quot;qualitative_result&quot;: 305,
+      &quot;record_disposition&quot;: 3230,
+      &quot;scoped_identifier&quot;: 312,
+      &quot;sig_not_falsely_structured&quot;: 299,
+      &quot;sig_preservation&quot;: 299,
+      &quot;target_key_set&quot;: 9,
+      &quot;target_presence&quot;: 3230,
+      &quot;uncoded_diagnosis_flagged&quot;: 35
+    },
+    &quot;checks_total&quot;: 18580,
+    &quot;errors&quot;: [],
+    &quot;label&quot;: &quot;replay&quot;,
+    &quot;ok&quot;: true,
+    &quot;scope&quot;: &quot;Every logical record disposition and target presence, every loaded clinical identity/reference and listed field; actual API snapshots, not Bridge mapped payloads. Same-author fixture, not blinded.&quot;
+  },
+  {
+    &quot;checks&quot;: {
+      &quot;allergy_reaction&quot;: 29,
+      &quot;allergy_substance&quot;: 29,
+      &quot;appointment_status&quot;: 294,
+      &quot;birth_date&quot;: 312,
+      &quot;charge_scale_and_sign&quot;: 288,
+      &quot;charge_visit_reference&quot;: 288,
+      &quot;clinical_timestamp&quot;: 1778,
+      &quot;diagnosis_mapping&quot;: 277,
+      &quot;diagnosis_text&quot;: 312,
+      &quot;drug_mapping&quot;: 299,
+      &quot;lab_comparator&quot;: 586,
+      &quot;lab_flag&quot;: 586,
+      &quot;lab_numeric_value&quot;: 586,
+      &quot;lab_unit&quot;: 586,
+      &quot;latest_lab_revision&quot;: 891,
+      &quot;logical_record_count&quot;: 9,
+      &quot;medication_status&quot;: 299,
+      &quot;nka_conflict&quot;: 312,
+      &quot;no_invented_allergy_severity&quot;: 29,
+      &quot;no_invented_diagnosis&quot;: 35,
+      &quot;note_bytes_and_order&quot;: 312,
+      &quot;patient_identity_reference&quot;: 2724,
+      &quot;qualitative_result&quot;: 305,
+      &quot;record_disposition&quot;: 3230,
+      &quot;scoped_identifier&quot;: 312,
+      &quot;sig_not_falsely_structured&quot;: 299,
+      &quot;sig_preservation&quot;: 299,
+      &quot;target_key_set&quot;: 9,
+      &quot;target_presence&quot;: 3230,
+      &quot;uncoded_diagnosis_flagged&quot;: 35
+    },
+    &quot;checks_total&quot;: 18580,
+    &quot;errors&quot;: [],
+    &quot;label&quot;: &quot;idempotent&quot;,
+    &quot;ok&quot;: true,
+    &quot;scope&quot;: &quot;Every logical record disposition and target presence, every loaded clinical identity/reference and listed field; actual API snapshots, not Bridge mapped payloads. Same-author fixture, not blinded.&quot;
+  },
+  {
+    &quot;checks&quot;: {
+      &quot;allergy_reaction&quot;: 14,
+      &quot;allergy_substance&quot;: 14,
+      &quot;appointment_status&quot;: 147,
+      &quot;birth_date&quot;: 156,
+      &quot;charge_scale_and_sign&quot;: 145,
+      &quot;charge_visit_reference&quot;: 145,
+      &quot;clinical_timestamp&quot;: 891,
+      &quot;diagnosis_mapping&quot;: 139,
+      &quot;diagnosis_text&quot;: 156,
+      &quot;drug_mapping&quot;: 150,
+      &quot;lab_comparator&quot;: 294,
+      &quot;lab_flag&quot;: 294,
+      &quot;lab_numeric_value&quot;: 294,
+      &quot;lab_unit&quot;: 294,
+      &quot;latest_lab_revision&quot;: 447,
+      &quot;logical_record_count&quot;: 9,
+      &quot;medication_status&quot;: 150,
+      &quot;nka_conflict&quot;: 156,
+      &quot;no_invented_allergy_severity&quot;: 14,
+      &quot;no_invented_diagnosis&quot;: 17,
+      &quot;note_bytes_and_order&quot;: 156,
+      &quot;patient_identity_reference&quot;: 1365,
+      &quot;qualitative_result&quot;: 153,
+      &quot;record_disposition&quot;: 1615,
+      &quot;scoped_identifier&quot;: 156,
+      &quot;sig_not_falsely_structured&quot;: 150,
+      &quot;sig_preservation&quot;: 150,
+      &quot;target_key_set&quot;: 9,
+      &quot;target_presence&quot;: 1615,
+      &quot;uncoded_diagnosis_flagged&quot;: 17
+    },
+    &quot;checks_total&quot;: 9312,
+    &quot;errors&quot;: [],
+    &quot;label&quot;: &quot;corrected&quot;,
+    &quot;ok&quot;: true,
+    &quot;scope&quot;: &quot;Every logical record disposition and target presence, every loaded clinical identity/reference and listed field; actual API snapshots, not Bridge mapped payloads. Same-author fixture, not blinded.&quot;
+  }
+]</pre></details>
+<details><summary>Readiness and full read-back checks</summary><pre>{
+  &quot;readiness&quot;: {
+    &quot;checks&quot;: [
+      {
+        &quot;check&quot;: &quot;run_finished&quot;,
+        &quot;detail&quot;: {
+          &quot;reason&quot;: null,
+          &quot;status&quot;: &quot;completed_with_exceptions&quot;
+        },
+        &quot;ok&quot;: true,
+        &quot;required&quot;: true
+      },
+      {
+        &quot;check&quot;: &quot;no_blocking_questions&quot;,
+        &quot;detail&quot;: [
+          {
+            &quot;id&quot;: &quot;q-aff8ab15&quot;,
+            &quot;kind&quot;: &quot;briar_appointment_status&quot;,
+            &quot;records&quot;: 19
+          },
+          {
+            &quot;id&quot;: &quot;q-a182ab73&quot;,
+            &quot;kind&quot;: &quot;briar_unmapped_medication&quot;,
+            &quot;records&quot;: 14
+          },
+          {
+            &quot;id&quot;: &quot;q-9593811a&quot;,
+            &quot;kind&quot;: &quot;briar_local_time&quot;,
+            &quot;records&quot;: 6
+          },
+          {
+            &quot;id&quot;: &quot;q-337741aa&quot;,
+            &quot;kind&quot;: &quot;briar_credit&quot;,
+            &quot;records&quot;: 6
+          },
+          {
+            &quot;id&quot;: &quot;q-ed81d684&quot;,
+            &quot;kind&quot;: &quot;briar_credit&quot;,
+            &quot;records&quot;: 6
+          },
+          {
+            &quot;id&quot;: &quot;q-f7c83905&quot;,
+            &quot;kind&quot;: &quot;briar_birth_date&quot;,
+            &quot;records&quot;: 5
+          },
+          {
+            &quot;id&quot;: &quot;q-1c63b882&quot;,
+            &quot;kind&quot;: &quot;briar_local_time&quot;,
+            &quot;records&quot;: 4
+          },
+          {
+            &quot;id&quot;: &quot;q-e95f7e60&quot;,
+            &quot;kind&quot;: &quot;briar_local_time&quot;,
+            &quot;records&quot;: 4
+          },
+          {
+            &quot;id&quot;: &quot;q-de75ea96&quot;,
+            &quot;kind&quot;: &quot;briar_lab_unit&quot;,
+            &quot;records&quot;: 4
+          },
+          {
+            &quot;id&quot;: &quot;q-813c68be&quot;,
+            &quot;kind&quot;: &quot;briar_lab_unit&quot;,
+            &quot;records&quot;: 4
+          },
+          {
+            &quot;id&quot;: &quot;q-920b64ef&quot;,
+            &quot;kind&quot;: &quot;briar_birth_date&quot;,
+            &quot;records&quot;: 3
+          }
+        ],
+        &quot;ok&quot;: false,
+        &quot;required&quot;: true
+      },
+      {
+        &quot;check&quot;: &quot;every_record_resolved&quot;,
+        &quot;detail&quot;: {
+          &quot;AllergyIntolerance&quot;: {
+            &quot;blocked&quot;: 1
+          },
+          &quot;Appointment&quot;: {
+            &quot;blocked&quot;: 7,
+            &quot;held&quot;: 19
+          },
+          &quot;ChargeItem&quot;: {
+            &quot;blocked&quot;: 20,
+            &quot;held&quot;: 12
+          },
+          &quot;Condition&quot;: {
+            &quot;blocked&quot;: 8
+          },
+          &quot;DocumentReference&quot;: {
+            &quot;blocked&quot;: 8
+          },
+          &quot;Encounter&quot;: {
+            &quot;blocked&quot;: 7,
+            &quot;held&quot;: 14
+          },
+          &quot;MedicationRequest&quot;: {
+            &quot;blocked&quot;: 7,
+            &quot;held&quot;: 14
+          },
+          &quot;Observation&quot;: {
+            &quot;blocked&quot;: 21,
+            &quot;held&quot;: 8
+          },
+          &quot;Patient&quot;: {
+            &quot;held&quot;: 8
+          }
+        },
+        &quot;ok&quot;: false,
+        &quot;required&quot;: true
+      },
+      {
+        &quot;check&quot;: &quot;pause_alerts_acknowledged_by_named_users&quot;,
+        &quot;detail&quot;: [],
+        &quot;ok&quot;: true,
+        &quot;required&quot;: true
+      },
+      {
+        &quot;check&quot;: &quot;verification&quot;,
+        &quot;detail&quot;: {
+          &quot;counts&quot;: true,
+          &quot;readback_mismatch_rate&quot;: 0.0,
+          &quot;sentinels&quot;: {
+            &quot;abnormal_labs&quot;: true,
+            &quot;active_anticoagulants&quot;: true,
+            &quot;active_insulin&quot;: true,
+            &quot;patients_with_allergies&quot;: true
+          }
+        },
+        &quot;ok&quot;: true,
+        &quot;required&quot;: true
+      },
+      {
+        &quot;check&quot;: &quot;fidelity_loss_signed_off&quot;,
+        &quot;detail&quot;: {
+          &quot;missing&quot;: {
+            &quot;AllergyIntolerance&quot;: 58,
+            &quot;Appointment&quot;: 294,
+            &quot;Condition&quot;: 70,
+            &quot;DocumentReference&quot;: 312,
+            &quot;Encounter&quot;: 299,
+            &quot;MedicationRequest&quot;: 299,
+            &quot;Observation&quot;: 40,
+            &quot;Patient&quot;: 14
+          },
+          &quot;signed&quot;: {},
+          &quot;stale&quot;: {}
+        },
+        &quot;ok&quot;: false,
+        &quot;required&quot;: true
+      },
+      {
+        &quot;check&quot;: &quot;assistant_answers_reviewed&quot;,
+        &quot;detail&quot;: [],
+        &quot;ok&quot;: true,
+        &quot;required&quot;: false
+      },
+      {
+        &quot;check&quot;: &quot;non_blocking_questions_reviewed&quot;,
+        &quot;detail&quot;: [
+          {
+            &quot;id&quot;: &quot;q-b18a3daa&quot;,
+            &quot;kind&quot;: &quot;briar_identity_review&quot;,
+            &quot;records&quot;: 2
+          }
+        ],
+        &quot;ok&quot;: false,
+        &quot;required&quot;: false
+      }
+    ],
+    &quot;decision&quot;: &quot;NO-GO&quot;,
+    &quot;reasons&quot;: [
+      &quot;no_blocking_questions&quot;,
+      &quot;every_record_resolved&quot;,
+      &quot;fidelity_loss_signed_off&quot;
+    ],
+    &quot;run_id&quot;: &quot;run-5341c8d6&quot;,
+    &quot;warnings&quot;: [
+      &quot;non_blocking_questions_reviewed&quot;
+    ]
+  },
+  &quot;verification&quot;: {
+    &quot;counts&quot;: {
+      &quot;by_type&quot;: {
+        &quot;AllergyIntolerance&quot;: {
+          &quot;blocked&quot;: 1,
+          &quot;funnel_closed&quot;: true,
+          &quot;loaded&quot;: 29,
+          &quot;nimbus&quot;: 29,
+          &quot;nimbus_matches_loaded&quot;: true,
+          &quot;staged&quot;: 30
+        },
+        &quot;Appointment&quot;: {
+          &quot;blocked&quot;: 7,
+          &quot;funnel_closed&quot;: true,
+          &quot;held&quot;: 19,
+          &quot;loaded&quot;: 294,
+          &quot;nimbus&quot;: 294,
+          &quot;nimbus_matches_loaded&quot;: true,
+          &quot;staged&quot;: 320
+        },
+        &quot;ChargeItem&quot;: {
+          &quot;blocked&quot;: 20,
+          &quot;funnel_closed&quot;: true,
+          &quot;held&quot;: 12,
+          &quot;loaded&quot;: 288,
+          &quot;nimbus&quot;: 288,
+          &quot;nimbus_matches_loaded&quot;: true,
+          &quot;staged&quot;: 320
+        },
+        &quot;Condition&quot;: {
+          &quot;blocked&quot;: 8,
+          &quot;funnel_closed&quot;: true,
+          &quot;loaded&quot;: 312,
+          &quot;nimbus&quot;: 312,
+          &quot;nimbus_matches_loaded&quot;: true,
+          &quot;staged&quot;: 320
+        },
+        &quot;DocumentReference&quot;: {
+          &quot;blocked&quot;: 8,
+          &quot;funnel_closed&quot;: true,
+          &quot;loaded&quot;: 312,
+          &quot;nimbus&quot;: 312,
+          &quot;nimbus_matches_loaded&quot;: true,
+          &quot;staged&quot;: 320
+        },
+        &quot;Encounter&quot;: {
+          &quot;blocked&quot;: 7,
+          &quot;funnel_closed&quot;: true,
+          &quot;held&quot;: 14,
+          &quot;loaded&quot;: 299,
+          &quot;nimbus&quot;: 299,
+          &quot;nimbus_matches_loaded&quot;: true,
+          &quot;staged&quot;: 320
+        },
+        &quot;MedicationRequest&quot;: {
+          &quot;blocked&quot;: 7,
+          &quot;funnel_closed&quot;: true,
+          &quot;held&quot;: 14,
+          &quot;loaded&quot;: 299,
+          &quot;nimbus&quot;: 299,
+          &quot;nimbus_matches_loaded&quot;: true,
+          &quot;staged&quot;: 320
+        },
+        &quot;Observation&quot;: {
+          &quot;blocked&quot;: 21,
+          &quot;dropped&quot;: 40,
+          &quot;funnel_closed&quot;: true,
+          &quot;held&quot;: 8,
+          &quot;loaded&quot;: 891,
+          &quot;nimbus&quot;: 891,
+          &quot;nimbus_matches_loaded&quot;: true,
+          &quot;staged&quot;: 960
+        },
+        &quot;Patient&quot;: {
+          &quot;funnel_closed&quot;: true,
+          &quot;held&quot;: 8,
+          &quot;loaded&quot;: 312,
+          &quot;nimbus&quot;: 312,
+          &quot;nimbus_matches_loaded&quot;: true,
+          &quot;staged&quot;: 320
+        }
+      },
+      &quot;ok&quot;: true
+    },
+    &quot;ok&quot;: true,
+    &quot;readback&quot;: {
+      &quot;by_type&quot;: {
+        &quot;AllergyIntolerance&quot;: {
+          &quot;mismatched&quot;: 0,
+          &quot;sampled&quot;: 29
+        },
+        &quot;Appointment&quot;: {
+          &quot;mismatched&quot;: 0,
+          &quot;sampled&quot;: 294
+        },
+        &quot;ChargeItem&quot;: {
+          &quot;mismatched&quot;: 0,
+          &quot;sampled&quot;: 288
+        },
+        &quot;Condition&quot;: {
+          &quot;mismatched&quot;: 0,
+          &quot;sampled&quot;: 312
+        },
+        &quot;DocumentReference&quot;: {
+          &quot;mismatched&quot;: 0,
+          &quot;sampled&quot;: 312
+        },
+        &quot;Encounter&quot;: {
+          &quot;mismatched&quot;: 0,
+          &quot;sampled&quot;: 299
+        },
+        &quot;MedicationRequest&quot;: {
+          &quot;mismatched&quot;: 0,
+          &quot;sampled&quot;: 299
+        },
+        &quot;Observation&quot;: {
+          &quot;mismatched&quot;: 0,
+          &quot;sampled&quot;: 891
+        },
+        &quot;Patient&quot;: {
+          &quot;mismatched&quot;: 0,
+          &quot;sampled&quot;: 312
+        }
+      },
+      &quot;mismatch_rate&quot;: 0.0,
+      &quot;mismatches&quot;: [],
+      &quot;ok&quot;: true,
+      &quot;sampled&quot;: 3036
+    },
+    &quot;sentinels&quot;: {
+      &quot;checks&quot;: [
+        {
+          &quot;description&quot;: &quot;Active warfarin/apixaban orders&quot;,
+          &quot;expected_in_nimbus&quot;: 0,
+          &quot;name&quot;: &quot;active_anticoagulants&quot;,
+          &quot;nimbus&quot;: 0,
+          &quot;not_loaded_by_status&quot;: {},
+          &quot;not_loaded_examples&quot;: [],
+          &quot;ok&quot;: true,
+          &quot;source&quot;: 0,
+          &quot;unexplained_delta&quot;: 0
+        },
+        {
+          &quot;description&quot;: &quot;Active insulin orders&quot;,
+          &quot;expected_in_nimbus&quot;: 0,
+          &quot;name&quot;: &quot;active_insulin&quot;,
+          &quot;nimbus&quot;: 0,
+          &quot;not_loaded_by_status&quot;: {},
+          &quot;not_loaded_examples&quot;: [],
+          &quot;ok&quot;: true,
+          &quot;source&quot;: 0,
+          &quot;unexplained_delta&quot;: 0
+        },
+        {
+          &quot;description&quot;: &quot;Distinct patients with at least one real allergy&quot;,
+          &quot;expected_in_nimbus&quot;: 29,
+          &quot;name&quot;: &quot;patients_with_allergies&quot;,
+          &quot;nimbus&quot;: 29,
+          &quot;not_loaded_by_status&quot;: {
+            &quot;blocked&quot;: 1
+          },
+          &quot;not_loaded_examples&quot;: [
+            &quot;A|000001&quot;
+          ],
+          &quot;ok&quot;: true,
+          &quot;source&quot;: 30,
+          &quot;unexplained_delta&quot;: 0
+        },
+        {
+          &quot;description&quot;: &quot;Lab results flagged abnormal (H/L/A)&quot;,
+          &quot;expected_in_nimbus&quot;: 281,
+          &quot;name&quot;: &quot;abnormal_labs&quot;,
+          &quot;nimbus&quot;: 281,
+          &quot;not_loaded_by_status&quot;: {
+            &quot;blocked&quot;: 7,
+            &quot;dropped&quot;: 7,
+            &quot;held&quot;: 8
+          },
+          &quot;not_loaded_examples&quot;: [
+            &quot;B|00000080|GLU&quot;,
+            &quot;B|00000084|GLU&quot;,
+            &quot;A|00000159|GLU&quot;,
+            &quot;A|00000167|GLU&quot;,
+            &quot;B|00000238|GLU&quot;,
+            &quot;B|00000250|GLU&quot;,
+            &quot;A|00000317|GLU&quot;,
+            &quot;B|00000042|GLU&quot;,
+            &quot;A|00000083|GLU&quot;,
+            &quot;B|00000124|GLU&quot;
+          ],
+          &quot;ok&quot;: true,
+          &quot;source&quot;: 303,
+          &quot;unexplained_delta&quot;: 0
+        }
+      ],
+      &quot;ok&quot;: true
+    }
+  }
+}</pre></details>
+</main></html>
