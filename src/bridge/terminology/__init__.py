@@ -82,3 +82,52 @@ class Terminology:
 
 
 TERMS = Terminology()
+
+
+class OverlayTerminology(Terminology):
+    """Bridge's crosswalks with a generated profile's source-specific crosswalks laid over them.
+
+    ``crosswalks`` maps a code-set name to ``{source value: target}`` as the interview recorded it
+    (the profile's ``CROSSWALKS``). Text-keyed sets (race, specialties) are matched normalized,
+    like the base tables. Targets: ``visit_class``/``specialties`` a value, ``labs`` a LOINC,
+    ``formulary`` an RxNorm, ``race`` ``"race|ethnicity"``.
+    """
+
+    def __init__(self, crosswalks: dict[str, dict[str, str]]):
+        self.crosswalks = crosswalks
+
+    def _over(self, name: str, base: dict, convert, text_keyed: bool = False) -> dict:
+        out = dict(base)
+        for src, tgt in self.crosswalks.get(name, {}).items():
+            out[_norm(src) if text_keyed else src] = convert(tgt)
+        return out
+
+    @cached_property
+    def visit_class(self) -> dict[str, str]:
+        return self._over("visit_class", TERMS.visit_class, str)
+
+    @cached_property
+    def labs(self) -> dict[str, tuple[str, str, str]]:
+        return self._over("labs", TERMS.labs, lambda t: (t, "", ""))
+
+    @cached_property
+    def formulary(self) -> dict[str, tuple[str, str]]:
+        return self._over("formulary", TERMS.formulary, lambda t: (t, ""))
+
+    @cached_property
+    def specialties(self) -> dict[str, str]:
+        return self._over("specialties", TERMS.specialties, str, text_keyed=True)
+
+    @cached_property
+    def race(self) -> dict[str, tuple[str | None, str | None]]:
+        def split(t: str) -> tuple[str | None, str | None]:
+            race, _, eth = t.partition("|")
+            return race or None, eth or None
+        return self._over("race", TERMS.race, split, text_keyed=True)
+
+
+def terms_for(profile: object) -> Terminology:
+    """The terminology a run maps with: the base crosswalks, overlaid with the profile's own
+    (a generated profile's ``CROSSWALKS``) when it has any."""
+    crosswalks = getattr(profile, "CROSSWALKS", None)
+    return OverlayTerminology(crosswalks) if crosswalks else TERMS

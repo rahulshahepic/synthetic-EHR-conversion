@@ -45,10 +45,15 @@ class MapContext:
         self.held_by: str | None = None
         self.blocked_by: str | None = None
         self.superseded_by: str | None = None
+        # Mappers word prompts and notes for the hand-written Halcyon control; a generated profile
+        # names its own source system so its questions don't talk about the wrong EHR.
+        self.source_name: str = getattr(profile, "SOURCE_NAME", "Halcyon")
 
     # ------------------------------------------------------------ fidelity
     def note(self, field_: str, klass: str, weight: float = 1.0, note: str | None = None, original: Any = None) -> None:
         assert klass in FIDELITY_SCORE, klass
+        if note and self.source_name != "Halcyon":
+            note = note.replace("Halcyon", self.source_name)
         self.annotations.append(Annotation(field_, klass, weight, note, original))
 
     def fidelity(self) -> float:
@@ -69,6 +74,8 @@ class MapContext:
         rule = self.store.rule(self.run_id, kind, match_key)
         if rule is not None:
             return rule
+        if self.source_name != "Halcyon":
+            prompt = prompt.replace("Halcyon", self.source_name)
         q = self.store.upsert_question(self.run_id, kind, match_key, prompt, options, blocking, context or {}, default)
         if q["status"] == "answered" and q["answer"]:
             return q["answer"]
@@ -164,6 +171,10 @@ def run_mapper(ctx: MapContext) -> Outcome:
     if ctx.src.get("_retire"):
         from .retire import map_source_deleted
         payload = map_source_deleted(ctx)
+    elif ctx.src.get("_excluded"):
+        # The source spec excludes this row (e.g. a cancelled result): dropped, with a loss-ledger reason.
+        ctx.note("record", "dropped", 1.0, ctx.src["_excluded"])
+        payload = None
     else:
         payload = MAPPERS[ctx.rtype](ctx)
     if ctx.superseded_by:

@@ -72,6 +72,7 @@ PROFILE_CONSTANTS: dict[tuple[str, str], str] = {
     ("profile", "charge_cents_from"): "CHARGE_CENTS_FROM",
     ("profile", "lab_feed_only_days"): "LAB_FEED_ONLY_DAYS",
     ("profile", "pivot_year"): "PIVOT_YEAR",
+    ("profile", "source_name"): "SOURCE_NAME",
 }
 
 MERGE_POLICY_RULE = {
@@ -568,11 +569,29 @@ def generate_spec(events: list[LedgerEvent], store: ClaimStore, source: str,
 
 
 def _reader_binding(rules: list[dict[str, Any]], source: str, reader_name: str) -> dict[str, Any]:
+    """Files and layouts; for a delimited source also its file format and the canonical
+    binding (``resource:<Type>`` rules; ``resource:Observation.<kind>`` rules collect into
+    the Observation list, in subject order). Keys appear only when rules state them."""
     files: dict[str, Any] = {}
+    fmt: Any = None
+    canonical: dict[str, Any] = {}
     for rule in rules:
         if rule["predicate"] == "layout_binding" and rule["subject"].startswith("file:"):
             files[rule["subject"][len("file:"):]] = rule["value"]
-    return {"source": source, "reader": reader_name, "files": files}
+        elif (rule["subject"], rule["predicate"]) == ("profile", "file_format"):
+            fmt = rule["value"]
+        elif rule["predicate"] == "canonical_binding" and rule["subject"].startswith("resource:"):
+            rtype, _, sub_kind = rule["subject"][len("resource:"):].partition(".")
+            if sub_kind:
+                canonical.setdefault(rtype, []).append(rule["value"])
+            else:
+                canonical[rtype] = rule["value"]
+    out: dict[str, Any] = {"source": source, "reader": reader_name, "files": files}
+    if fmt is not None:
+        out["format"] = fmt
+    if canonical:
+        out["canonical"] = canonical
+    return out
 
 
 def _render_crosswalks(rules: list[dict[str, Any]]) -> dict[str, str]:
@@ -633,6 +652,18 @@ def _render_profile(source: str, rules: list[dict[str, Any]],
                      f" — {_comment_text(rule['provenance']['ref'])}"
                      f" (data_confirmed={rule['data_confirmed']})")
         lines.append(f"{const} = {expr}")
+    crosswalks = {r["subject"][len("codeset:"):]: r for r in rules
+                  if r["subject"].startswith("codeset:") and r["predicate"] == "crosswalk"
+                  and isinstance(r["value"], dict)}
+    if crosswalks:
+        lines.append("")
+        lines.append("# Source code sets -> standard codes, as the interview established them.")
+        for name in sorted(crosswalks):
+            rule = crosswalks[name]
+            lines.append(f"# provenance {name}: {_comment_text(rule['provenance']['kind'])}"
+                         f" — {_comment_text(rule['provenance']['ref'])}"
+                         f" (data_confirmed={rule['data_confirmed']})")
+        lines.append("CROSSWALKS = " + repr({n: dict(sorted(r["value"].items())) for n, r in sorted(crosswalks.items())}))
     lines.append("")
     lines.append("# Known unknowns: unresolved at generation time. Each becomes a")
     lines.append("# runtime reconciliation question, never a silent default.")

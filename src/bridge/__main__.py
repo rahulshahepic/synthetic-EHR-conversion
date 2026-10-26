@@ -29,8 +29,9 @@ def out(obj: Any) -> None:
 
 
 def _runner(store: RunStore, run_id: str | None) -> tuple[Runner, str]:
+    from .profiles import load_profile
     run = store.run(run_id)
-    return Runner(store, connect(run["target"])), run["id"]
+    return Runner(store, connect(run["target"]), load_profile(run["config"].get("profile"))), run["id"]
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -40,6 +41,8 @@ def main(argv: list[str] | None = None) -> int:
     sub = p.add_subparsers(dest="cmd", required=True)
     r = sub.add_parser("run")
     r.add_argument("--source", required=True)
+    r.add_argument("--profile", default="halcyon",
+                   help="source profile: halcyon (hand-written control) or a generated one, e.g. meridian")
     r.add_argument("--target", default=None, help="default: embedded Nimbus next to the run DB")
     r.add_argument("--batch-size", type=int, default=DEFAULT_BATCH_SIZE)
     r.add_argument("--rules-from", help="prior run DB or exported rules JSON whose answers should be reused")
@@ -103,7 +106,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "run":
         target = args.target or (RunStore(args.prior_run).run()["target"] if args.prior_run else
                                  f"embedded:{Path(args.run_db).with_name(Path(args.run_db).stem + '_nimbus.db')}")
-        runner = Runner(store, connect(target))
+        from .profiles import load_profile
+        runner = Runner(store, connect(target), load_profile(args.profile))
         rules = None
         if args.rules_from:
             from .reconcile.rules_io import load_rules

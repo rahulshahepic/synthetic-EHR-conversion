@@ -24,6 +24,8 @@ ReaderFactory = Callable[[str | Path], tuple[Any, Callable[..., Any]]]
 _REGISTRY: dict[str, ReaderFactory] = {}
 
 GENERATED_READER = "fixed_width"
+# Generated readers whose factory is built from the profile's committed reader binding.
+GENERATED_READERS = {"fixed_width", "delimited"}
 _SPECS_DIR = Path(__file__).resolve().parents[1] / "interview" / "specs"
 
 
@@ -41,11 +43,11 @@ def get_reader(name: str) -> ReaderFactory:
 def get_reader_for(name: str, profile: Any = None) -> ReaderFactory:
     """The factory for a reader name, resolving the generated fixed-width
     reader from the profile's committed binding when the name asks for it."""
-    if name == GENERATED_READER:
+    if name in GENERATED_READERS:
         source_system = getattr(profile, "SOURCE_SYSTEM", None)
         if not source_system:
             raise KeyError(
-                "reader 'fixed_width' is generated per source system; the "
+                f"reader {name!r} is generated per source system; the "
                 "profile must carry SOURCE_SYSTEM so its committed reader "
                 "binding can be loaded")
         binding_path = _SPECS_DIR / source_system / "reader_binding.json"
@@ -53,13 +55,17 @@ def get_reader_for(name: str, profile: Any = None) -> ReaderFactory:
             raise KeyError(
                 f"no committed reader binding for source system "
                 f"{source_system!r} at {binding_path}")
+        binding = json.loads(binding_path.read_text())
+        if name == "delimited":
+            from ..interview.canonical import make_factory as make_delimited
+            return make_delimited(binding)
         from ..interview.reader import make_factory
-        return make_factory(json.loads(binding_path.read_text()))
+        return make_factory(binding)
     return get_reader(name)
 
 
 def reader_names() -> list[str]:
-    return sorted(set(_REGISTRY) | {GENERATED_READER})
+    return sorted(set(_REGISTRY) | GENERATED_READERS)
 
 
 def _halcyon_factory(source: str | Path) -> tuple[Any, Callable[..., Any]]:

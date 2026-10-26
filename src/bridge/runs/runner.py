@@ -31,6 +31,8 @@ PIPELINE_CHUNK = 100
 class Runner:
     def __init__(self, store: S.RunStore, client: NimbusClient, profile: Any = halcyon_profile):
         self.store, self.client, self.profile = store, client, profile
+        from ..terminology import terms_for
+        self.terms = terms_for(profile)
         # One sender thread: import calls stay strictly ordered, and only it uses the client mid-batch.
         self._sender: ThreadPoolExecutor | None = None
 
@@ -48,6 +50,8 @@ class Runner:
         export, stage_fn = get_reader_for(reader_name, self.profile)(source)
         as_of = export.manifest.get("asOf") or date.today().isoformat()
         cfg = {"batch_size": batch_size, "as_of": as_of, "types": types or [t for t in LOAD_ORDER if t in MAPPERS]}
+        if getattr(self.profile, "READER", "halcyon") != "halcyon" and getattr(self.profile, "SOURCE_SYSTEM", None):
+            cfg["profile"] = self.profile.SOURCE_SYSTEM  # resume/reprocess must map with the same profile
         run_id = self.store.create_run(str(source), target_label, cfg)
         self.store.set_status(run_id, "extracting")
         staging_started = perf_counter()
@@ -183,7 +187,7 @@ class Runner:
         try:
             with self.store.tx():
                 for rec in recs:
-                    ctx = MapContext(self.store, run_id, rtype, rec, self.profile)
+                    ctx = MapContext(self.store, run_id, rtype, rec, self.profile, self.terms)
                     try:
                         outcome = run_mapper(ctx)
                     except Exception as exc:  # a mapper bug must surface as a rejection, not vanish

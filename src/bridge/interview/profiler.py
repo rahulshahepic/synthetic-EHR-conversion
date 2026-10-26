@@ -124,7 +124,21 @@ def _numeric_like(v: str) -> bool:
         return False
 
 
-def _field_stats(values: list[str], width: int | None) -> dict[str, Any]:
+def _value_distribution(nonblank: list[str], limit: int) -> dict[str, Any]:
+    """Opt-in: the full value distribution of a code-like field (at most ``limit`` distinct
+    values), else its most frequent values when they pile up (a placeholder such as a default
+    date shows here, where sorted samples would never reach it)."""
+    counts: dict[str, int] = {}
+    for v in nonblank:
+        counts[v] = counts.get(v, 0) + 1
+    if len(counts) <= limit:
+        return {"value_counts": dict(sorted(counts.items()))}
+    top = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))[:3]
+    piles = {v: n for v, n in top if n >= 3 and n / len(nonblank) >= 0.005}
+    return {"top_values": piles} if piles else {}
+
+
+def _field_stats(values: list[str], width: int | None, code_value_limit: int | None = None) -> dict[str, Any]:
     nonblank = [v for v in values if v != ""]
     stats: dict[str, Any] = {
         "count": len(values),
@@ -157,19 +171,29 @@ def _field_stats(values: list[str], width: int | None) -> dict[str, Any]:
         stats["full_width_rate"] = round(
             sum(1 for v in nonblank if len(v) == width) / len(nonblank), 4)
     stats["max_length"] = max(len(v) for v in nonblank)
+    if code_value_limit:
+        stats.update(_value_distribution(nonblank, code_value_limit))
     return stats
 
 
-def _profile_rows(rows: list[dict[str, str]], widths: dict[str, int | None]) -> dict[str, Any]:
+def _profile_rows(rows: list[dict[str, str]], widths: dict[str, int | None],
+                  code_value_limit: int | None = None) -> dict[str, Any]:
     fields: dict[str, Any] = {}
     for name in sorted(widths):
-        fields[name] = _field_stats([r.get(name, "") for r in rows], widths[name])
+        fields[name] = _field_stats([r.get(name, "") for r in rows], widths[name], code_value_limit)
     return fields
 
 
 def profile_export(export_dir: str | Path,
-                   layouts: dict[str, dict[str, list[FieldLayout]]] | None = None) -> dict[str, Any]:
+                   layouts: dict[str, dict[str, list[FieldLayout]]] | None = None,
+                   delimited: dict[str, str] | None = None,
+                   code_value_limit: int | None = None) -> dict[str, Any]:
     """Profile every data file in an export directory.
+
+    ``delimited`` (``{"suffix": ".dat", "delimiter": "|", "encoding": "latin-1"}``, as the
+    estate documents describe the files) profiles header-row delimited files with that suffix
+    the same way as CSV files. ``code_value_limit`` adds value distributions (see
+    ``_value_distribution``); off by default so recorded observations stay stable.
 
     Returns ``{"files": {name: {"records": n, "record_types": {...},
     "fields": {field: stats}}}, "observations": [...]}`` where each field's
@@ -181,11 +205,14 @@ def profile_export(export_dir: str | Path,
         if not path.is_file() or path.name.startswith("."):
             continue
         stem, suffix = path.stem.upper(), path.suffix.lower()
-        if suffix == ".csv":
+        delim = delimited if delimited and suffix == delimited.get("suffix", "").lower() else None
+        if suffix == ".csv" or delim:
             rows: list[dict[str, str]] = []
             ragged = 0
-            with path.open(newline="", encoding="utf-8", errors="replace") as f:
-                for raw_row in csv.DictReader(f):
+            encoding = delim.get("encoding", "utf-8") if delim else "utf-8"
+            dialect = {"delimiter": delim["delimiter"], "quoting": csv.QUOTE_NONE} if delim else {}
+            with path.open(newline="", encoding=encoding, errors="replace") as f:
+                for raw_row in csv.DictReader(f, **dialect):
                     # A ragged row puts surplus cells under the None key (a
                     # list) and missing cells as None values. Neither may
                     # crash profiling: surplus cells are dropped from the
@@ -198,7 +225,7 @@ def profile_export(export_dir: str | Path,
             widths = {name: None for name in (rows[0].keys() if rows else [])}
             files[path.name] = {"records": len(rows), "record_types": {"": len(rows)},
                                 "ragged_rows": ragged,
-                                "fields": _profile_rows(rows, widths)}
+                                "fields": _profile_rows(rows, widths, code_value_limit)}
         elif layouts and stem in layouts:
             per_rt = layouts[stem]
             by_rt: dict[str, list[dict[str, str]]] = {}
@@ -222,7 +249,7 @@ def profile_export(export_dir: str | Path,
             all_rows = [r for rows in by_rt.values() for r in rows]
             entry: dict[str, Any] = {"records": len(all_rows),
                                      "record_types": {rt: len(rs) for rt, rs in sorted(by_rt.items())},
-                                     "fields": _profile_rows(all_rows, widths)}
+                                     "fields": _profile_rows(all_rows, widths, code_value_limit)}
             if unknown:
                 entry["unknown_record_types"] = unknown
             files[path.name] = entry

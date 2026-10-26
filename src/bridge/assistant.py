@@ -52,7 +52,9 @@ class BridgeAssistant:
 
     def runner(self, run_id: str | None = None) -> Runner:
         if self._runner is None:
-            self._runner = Runner(self.store, connect(self.store.run(run_id)["target"]))
+            from .profiles import load_profile
+            run = self.store.run(run_id)
+            self._runner = Runner(self.store, connect(run["target"]), load_profile(run["config"].get("profile")))
         return self._runner
 
     # ------------------------------------------------------------------ read
