@@ -1,0 +1,95 @@
+{
+  "counts": {
+    "APPT": {
+      "pending": 320
+    },
+    "BILL": {
+      "pending": 320
+    },
+    "DX": {
+      "pending": 320
+    },
+    "JRN": {
+      "pending": 8
+    },
+    "LAB": {
+      "pending": 1280
+    },
+    "MED": {
+      "pending": 320
+    },
+    "NOTE": {
+      "pending": 640
+    },
+    "REG": {
+      "pending": 320
+    },
+    "VIS": {
+      "pending": 320
+    }
+  },
+  "events": [
+    {
+      "at": "2026-10-26T17:31:56+00:00",
+      "detail": {
+        "reason": "staged types are source records, not mapped types",
+        "staged_types": [
+          "APPT",
+          "BILL",
+          "DX",
+          "JRN",
+          "LAB",
+          "MED",
+          "NOTE",
+          "REG",
+          "VIS"
+        ]
+      },
+      "id": 5,
+      "kind": "execution_skipped",
+      "run_id": "run-e8eb83de"
+    },
+    {
+      "at": "2026-10-26T17:31:56+00:00",
+      "detail": {
+        "reason": null,
+        "status": "staged"
+      },
+      "id": 4,
+      "kind": "status",
+      "run_id": "run-e8eb83de"
+    },
+    {
+      "at": "2026-10-26T17:31:56+00:00",
+      "detail": {
+        "seconds": 0.06381863299998258
+      },
+      "id": 3,
+      "kind": "staging_timing",
+      "run_id": "run-e8eb83de"
+    },
+    {
+      "at": "2026-10-26T17:31:56+00:00",
+      "detail": {
+        "reason": null,
+        "status": "extracting"
+      },
+      "id": 2,
+      "kind": "status",
+      "run_id": "run-e8eb83de"
+    },
+    {
+      "at": "2026-10-26T17:31:56+00:00",
+      "detail": {
+        "source": "runs/briar-complete/source",
+        "target": "nimbus"
+      },
+      "id": 1,
+      "kind": "run_created",
+      "run_id": "run-e8eb83de"
+    }
+  ],
+  "leading_note_whitespace_stripped": 320,
+  "status": "staged",
+  "target_patients": 0
+}

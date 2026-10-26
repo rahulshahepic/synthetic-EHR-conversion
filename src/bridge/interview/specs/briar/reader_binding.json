@@ -1,0 +1,641 @@
+{
+  "files": {
+    "APPT": {
+      "discriminator": {
+        "start": 0,
+        "width": 2
+      },
+      "key_fields": [
+        "SITE",
+        "ID"
+      ],
+      "layouts": {
+        "AP": [
+          {
+            "description": "RT",
+            "name": "RT",
+            "start": 0,
+            "type": "T",
+            "width": 2
+          },
+          {
+            "description": "SITE",
+            "name": "SITE",
+            "start": 2,
+            "type": "T",
+            "width": 1
+          },
+          {
+            "description": "ID",
+            "name": "ID",
+            "start": 3,
+            "type": "T",
+            "width": 8
+          },
+          {
+            "description": "CHART",
+            "name": "CHART",
+            "start": 11,
+            "type": "T",
+            "width": 6
+          },
+          {
+            "description": "DAY",
+            "name": "DAY",
+            "start": 17,
+            "type": "T",
+            "width": 8
+          },
+          {
+            "description": "TIME",
+            "name": "TIME",
+            "start": 25,
+            "type": "T",
+            "width": 4
+          },
+          {
+            "description": "STATUS",
+            "name": "STATUS",
+            "start": 29,
+            "type": "T",
+            "width": 1
+          }
+        ]
+      },
+      "path": "APPT.TXT"
+    },
+    "BILL": {
+      "discriminator": {
+        "start": 0,
+        "width": 2
+      },
+      "key_fields": [
+        "SITE",
+        "ID"
+      ],
+      "layouts": {
+        "BI": [
+          {
+            "description": "RT",
+            "name": "RT",
+            "start": 0,
+            "type": "T",
+            "width": 2
+          },
+          {
+            "description": "SITE",
+            "name": "SITE",
+            "start": 2,
+            "type": "T",
+            "width": 1
+          },
+          {
+            "description": "ID",
+            "name": "ID",
+            "start": 3,
+            "type": "T",
+            "width": 8
+          },
+          {
+            "description": "CHART",
+            "name": "CHART",
+            "start": 11,
+            "type": "T",
+            "width": 6
+          },
+          {
+            "description": "VISIT",
+            "name": "VISIT",
+            "start": 17,
+            "type": "T",
+            "width": 8
+          },
+          {
+            "description": "DAY",
+            "name": "DAY",
+            "start": 25,
+            "type": "T",
+            "width": 8
+          },
+          {
+            "description": "AMOUNT",
+            "name": "AMOUNT",
+            "start": 33,
+            "type": "T",
+            "width": 12
+          },
+          {
+            "description": "CODE",
+            "name": "CODE",
+            "start": 45,
+            "type": "T",
+            "width": 8
+          }
+        ]
+      },
+      "path": "BILL.TXT"
+    },
+    "DX": {
+      "discriminator": {
+        "start": 0,
+        "width": 2
+      },
+      "key_fields": [
+        "SITE",
+        "ID"
+      ],
+      "layouts": {
+        "DX": [
+          {
+            "description": "RT",
+            "name": "RT",
+            "start": 0,
+            "type": "T",
+            "width": 2
+          },
+          {
+            "description": "SITE",
+            "name": "SITE",
+            "start": 2,
+            "type": "T",
+            "width": 1
+          },
+          {
+            "description": "ID",
+            "name": "ID",
+            "start": 3,
+            "type": "T",
+            "width": 8
+          },
+          {
+            "description": "CHART",
+            "name": "CHART",
+            "start": 11,
+            "type": "T",
+            "width": 6
+          },
+          {
+            "description": "CODE",
+            "name": "CODE",
+            "start": 17,
+            "type": "T",
+            "width": 8
+          },
+          {
+            "description": "TEXT",
+            "name": "TEXT",
+            "start": 25,
+            "type": "T",
+            "width": 60
+          },
+          {
+            "description": "STATUS",
+            "name": "STATUS",
+            "start": 85,
+            "type": "T",
+            "width": 1
+          }
+        ]
+      },
+      "path": "DX.TXT"
+    },
+    "JRN": {
+      "discriminator": {
+        "start": 0,
+        "width": 2
+      },
+      "key_fields": [
+        "SITE",
+        "SEQ"
+      ],
+      "layouts": {
+        "JR": [
+          {
+            "description": "RT",
+            "name": "RT",
+            "start": 0,
+            "type": "T",
+            "width": 2
+          },
+          {
+            "description": "SITE",
+            "name": "SITE",
+            "start": 2,
+            "type": "T",
+            "width": 1
+          },
+          {
+            "description": "SEQ",
+            "name": "SEQ",
+            "start": 3,
+            "type": "T",
+            "width": 6
+          },
+          {
+            "description": "TABLE",
+            "name": "TABLE",
+            "start": 9,
+            "type": "T",
+            "width": 8
+          },
+          {
+            "description": "ID",
+            "name": "ID",
+            "start": 17,
+            "type": "T",
+            "width": 8
+          },
+          {
+            "description": "ACTION",
+            "name": "ACTION",
+            "start": 25,
+            "type": "T",
+            "width": 1
+          }
+        ]
+      },
+      "path": "JRN.TXT"
+    },
+    "LAB": {
+      "discriminator": {
+        "start": 0,
+        "width": 2
+      },
+      "key_fields": [
+        "SITE",
+        "ID",
+        "TEST",
+        "REV"
+      ],
+      "layouts": {
+        "LA": [
+          {
+            "description": "RT",
+            "name": "RT",
+            "start": 0,
+            "type": "T",
+            "width": 2
+          },
+          {
+            "description": "SITE",
+            "name": "SITE",
+            "start": 2,
+            "type": "T",
+            "width": 1
+          },
+          {
+            "description": "ID",
+            "name": "ID",
+            "start": 3,
+            "type": "T",
+            "width": 8
+          },
+          {
+            "description": "CHART",
+            "name": "CHART",
+            "start": 11,
+            "type": "T",
+            "width": 6
+          },
+          {
+            "description": "TEST",
+            "name": "TEST",
+            "start": 17,
+            "type": "T",
+            "width": 8
+          },
+          {
+            "description": "REV",
+            "name": "REV",
+            "start": 25,
+            "type": "T",
+            "width": 2
+          },
+          {
+            "description": "DAY",
+            "name": "DAY",
+            "start": 27,
+            "type": "T",
+            "width": 8
+          },
+          {
+            "description": "TIME",
+            "name": "TIME",
+            "start": 35,
+            "type": "T",
+            "width": 4
+          },
+          {
+            "description": "RESULT",
+            "name": "RESULT",
+            "start": 39,
+            "type": "T",
+            "width": 16
+          },
+          {
+            "description": "UNIT",
+            "name": "UNIT",
+            "start": 55,
+            "type": "T",
+            "width": 10
+          },
+          {
+            "description": "STATUS",
+            "name": "STATUS",
+            "start": 65,
+            "type": "T",
+            "width": 1
+          }
+        ]
+      },
+      "path": "LAB.TXT"
+    },
+    "MED": {
+      "discriminator": {
+        "start": 0,
+        "width": 2
+      },
+      "key_fields": [
+        "SITE",
+        "ID"
+      ],
+      "layouts": {
+        "ME": [
+          {
+            "description": "RT",
+            "name": "RT",
+            "start": 0,
+            "type": "T",
+            "width": 2
+          },
+          {
+            "description": "SITE",
+            "name": "SITE",
+            "start": 2,
+            "type": "T",
+            "width": 1
+          },
+          {
+            "description": "ID",
+            "name": "ID",
+            "start": 3,
+            "type": "T",
+            "width": 8
+          },
+          {
+            "description": "CHART",
+            "name": "CHART",
+            "start": 11,
+            "type": "T",
+            "width": 6
+          },
+          {
+            "description": "DRUG",
+            "name": "DRUG",
+            "start": 17,
+            "type": "T",
+            "width": 8
+          },
+          {
+            "description": "NAME",
+            "name": "NAME",
+            "start": 25,
+            "type": "T",
+            "width": 35
+          },
+          {
+            "description": "DAY",
+            "name": "DAY",
+            "start": 60,
+            "type": "T",
+            "width": 8
+          },
+          {
+            "description": "STATUS",
+            "name": "STATUS",
+            "start": 68,
+            "type": "T",
+            "width": 1
+          },
+          {
+            "description": "SIG",
+            "name": "SIG",
+            "start": 69,
+            "type": "T",
+            "width": 60
+          }
+        ]
+      },
+      "path": "MED.TXT"
+    },
+    "NOTE": {
+      "discriminator": {
+        "start": 0,
+        "width": 2
+      },
+      "key_fields": [
+        "SITE",
+        "ID",
+        "SEQ"
+      ],
+      "layouts": {
+        "NO": [
+          {
+            "description": "RT",
+            "name": "RT",
+            "start": 0,
+            "type": "T",
+            "width": 2
+          },
+          {
+            "description": "SITE",
+            "name": "SITE",
+            "start": 2,
+            "type": "T",
+            "width": 1
+          },
+          {
+            "description": "ID",
+            "name": "ID",
+            "start": 3,
+            "type": "T",
+            "width": 8
+          },
+          {
+            "description": "CHART",
+            "name": "CHART",
+            "start": 11,
+            "type": "T",
+            "width": 6
+          },
+          {
+            "description": "SEQ",
+            "name": "SEQ",
+            "start": 17,
+            "type": "T",
+            "width": 2
+          },
+          {
+            "description": "DAY",
+            "name": "DAY",
+            "start": 19,
+            "type": "T",
+            "width": 8
+          },
+          {
+            "description": "TIME",
+            "name": "TIME",
+            "start": 27,
+            "type": "T",
+            "width": 4
+          },
+          {
+            "description": "TEXT",
+            "name": "TEXT",
+            "start": 31,
+            "type": "T",
+            "width": 72
+          }
+        ]
+      },
+      "path": "NOTE.TXT"
+    },
+    "REG": {
+      "discriminator": {
+        "start": 0,
+        "width": 2
+      },
+      "key_fields": [
+        "SITE",
+        "CHART"
+      ],
+      "layouts": {
+        "RE": [
+          {
+            "description": "RT",
+            "name": "RT",
+            "start": 0,
+            "type": "T",
+            "width": 2
+          },
+          {
+            "description": "SITE",
+            "name": "SITE",
+            "start": 2,
+            "type": "T",
+            "width": 1
+          },
+          {
+            "description": "CHART",
+            "name": "CHART",
+            "start": 3,
+            "type": "T",
+            "width": 6
+          },
+          {
+            "description": "NAME",
+            "name": "NAME",
+            "start": 9,
+            "type": "T",
+            "width": 30
+          },
+          {
+            "description": "DOB",
+            "name": "DOB",
+            "start": 39,
+            "type": "T",
+            "width": 8
+          },
+          {
+            "description": "SEX",
+            "name": "SEX",
+            "start": 47,
+            "type": "T",
+            "width": 1
+          },
+          {
+            "description": "NKA",
+            "name": "NKA",
+            "start": 48,
+            "type": "T",
+            "width": 1
+          },
+          {
+            "description": "ALLERGY",
+            "name": "ALLERGY",
+            "start": 49,
+            "type": "T",
+            "width": 40
+          }
+        ]
+      },
+      "path": "REG.TXT"
+    },
+    "VIS": {
+      "discriminator": {
+        "start": 0,
+        "width": 2
+      },
+      "key_fields": [
+        "SITE",
+        "ID"
+      ],
+      "layouts": {
+        "VI": [
+          {
+            "description": "RT",
+            "name": "RT",
+            "start": 0,
+            "type": "T",
+            "width": 2
+          },
+          {
+            "description": "SITE",
+            "name": "SITE",
+            "start": 2,
+            "type": "T",
+            "width": 1
+          },
+          {
+            "description": "ID",
+            "name": "ID",
+            "start": 3,
+            "type": "T",
+            "width": 8
+          },
+          {
+            "description": "CHART",
+            "name": "CHART",
+            "start": 11,
+            "type": "T",
+            "width": 6
+          },
+          {
+            "description": "DAY",
+            "name": "DAY",
+            "start": 17,
+            "type": "T",
+            "width": 8
+          },
+          {
+            "description": "TIME",
+            "name": "TIME",
+            "start": 25,
+            "type": "T",
+            "width": 4
+          },
+          {
+            "description": "STATUS",
+            "name": "STATUS",
+            "start": 29,
+            "type": "T",
+            "width": 1
+          }
+        ]
+      },
+      "path": "VIS.TXT"
+    }
+  },
+  "reader": "fixed_width",
+  "source": "briar"
+}

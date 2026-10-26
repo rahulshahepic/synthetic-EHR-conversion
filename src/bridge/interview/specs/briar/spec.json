@@ -1,0 +1,2461 @@
+{
+ "generator": "bridge.interview.specgen",
+ "known_unknowns": [
+  {
+   "claimed_values": [
+    {
+     "B": "booked",
+     "C": "cancelled",
+     "R": "rescheduled"
+    },
+    {
+     "B": "booked",
+     "C": "cancelled",
+     "R": "arrived"
+    }
+   ],
+   "disposition": "runtime_question",
+   "predicate": "convention",
+   "subject": "field:APPT.TXT.STATUS"
+  },
+  {
+   "disposition": "runtime_question",
+   "note": "Every proposed identity merge is decided by a human in reconciliation; the spec contains no auto-merge rule.",
+   "predicate": "merge_decisions",
+   "subject": "identity"
+  }
+ ],
+ "ledger_events": 218,
+ "policy_overrides": [
+  {
+   "claimed_values": [
+    "auto_merge_obvious_demographic_matches"
+   ],
+   "policy": "route_to_reconciliation",
+   "predicate": "merge_policy",
+   "subject": "identity"
+  }
+ ],
+ "reader_binding": {
+  "files": {
+   "APPT": {
+    "discriminator": {
+     "start": 0,
+     "width": 2
+    },
+    "key_fields": [
+     "SITE",
+     "ID"
+    ],
+    "layouts": {
+     "AP": [
+      {
+       "description": "RT",
+       "name": "RT",
+       "start": 0,
+       "type": "T",
+       "width": 2
+      },
+      {
+       "description": "SITE",
+       "name": "SITE",
+       "start": 2,
+       "type": "T",
+       "width": 1
+      },
+      {
+       "description": "ID",
+       "name": "ID",
+       "start": 3,
+       "type": "T",
+       "width": 8
+      },
+      {
+       "description": "CHART",
+       "name": "CHART",
+       "start": 11,
+       "type": "T",
+       "width": 6
+      },
+      {
+       "description": "DAY",
+       "name": "DAY",
+       "start": 17,
+       "type": "T",
+       "width": 8
+      },
+      {
+       "description": "TIME",
+       "name": "TIME",
+       "start": 25,
+       "type": "T",
+       "width": 4
+      },
+      {
+       "description": "STATUS",
+       "name": "STATUS",
+       "start": 29,
+       "type": "T",
+       "width": 1
+      }
+     ]
+    },
+    "path": "APPT.TXT"
+   },
+   "BILL": {
+    "discriminator": {
+     "start": 0,
+     "width": 2
+    },
+    "key_fields": [
+     "SITE",
+     "ID"
+    ],
+    "layouts": {
+     "BI": [
+      {
+       "description": "RT",
+       "name": "RT",
+       "start": 0,
+       "type": "T",
+       "width": 2
+      },
+      {
+       "description": "SITE",
+       "name": "SITE",
+       "start": 2,
+       "type": "T",
+       "width": 1
+      },
+      {
+       "description": "ID",
+       "name": "ID",
+       "start": 3,
+       "type": "T",
+       "width": 8
+      },
+      {
+       "description": "CHART",
+       "name": "CHART",
+       "start": 11,
+       "type": "T",
+       "width": 6
+      },
+      {
+       "description": "VISIT",
+       "name": "VISIT",
+       "start": 17,
+       "type": "T",
+       "width": 8
+      },
+      {
+       "description": "DAY",
+       "name": "DAY",
+       "start": 25,
+       "type": "T",
+       "width": 8
+      },
+      {
+       "description": "AMOUNT",
+       "name": "AMOUNT",
+       "start": 33,
+       "type": "T",
+       "width": 12
+      },
+      {
+       "description": "CODE",
+       "name": "CODE",
+       "start": 45,
+       "type": "T",
+       "width": 8
+      }
+     ]
+    },
+    "path": "BILL.TXT"
+   },
+   "DX": {
+    "discriminator": {
+     "start": 0,
+     "width": 2
+    },
+    "key_fields": [
+     "SITE",
+     "ID"
+    ],
+    "layouts": {
+     "DX": [
+      {
+       "description": "RT",
+       "name": "RT",
+       "start": 0,
+       "type": "T",
+       "width": 2
+      },
+      {
+       "description": "SITE",
+       "name": "SITE",
+       "start": 2,
+       "type": "T",
+       "width": 1
+      },
+      {
+       "description": "ID",
+       "name": "ID",
+       "start": 3,
+       "type": "T",
+       "width": 8
+      },
+      {
+       "description": "CHART",
+       "name": "CHART",
+       "start": 11,
+       "type": "T",
+       "width": 6
+      },
+      {
+       "description": "CODE",
+       "name": "CODE",
+       "start": 17,
+       "type": "T",
+       "width": 8
+      },
+      {
+       "description": "TEXT",
+       "name": "TEXT",
+       "start": 25,
+       "type": "T",
+       "width": 60
+      },
+      {
+       "description": "STATUS",
+       "name": "STATUS",
+       "start": 85,
+       "type": "T",
+       "width": 1
+      }
+     ]
+    },
+    "path": "DX.TXT"
+   },
+   "JRN": {
+    "discriminator": {
+     "start": 0,
+     "width": 2
+    },
+    "key_fields": [
+     "SITE",
+     "SEQ"
+    ],
+    "layouts": {
+     "JR": [
+      {
+       "description": "RT",
+       "name": "RT",
+       "start": 0,
+       "type": "T",
+       "width": 2
+      },
+      {
+       "description": "SITE",
+       "name": "SITE",
+       "start": 2,
+       "type": "T",
+       "width": 1
+      },
+      {
+       "description": "SEQ",
+       "name": "SEQ",
+       "start": 3,
+       "type": "T",
+       "width": 6
+      },
+      {
+       "description": "TABLE",
+       "name": "TABLE",
+       "start": 9,
+       "type": "T",
+       "width": 8
+      },
+      {
+       "description": "ID",
+       "name": "ID",
+       "start": 17,
+       "type": "T",
+       "width": 8
+      },
+      {
+       "description": "ACTION",
+       "name": "ACTION",
+       "start": 25,
+       "type": "T",
+       "width": 1
+      }
+     ]
+    },
+    "path": "JRN.TXT"
+   },
+   "LAB": {
+    "discriminator": {
+     "start": 0,
+     "width": 2
+    },
+    "key_fields": [
+     "SITE",
+     "ID",
+     "TEST",
+     "REV"
+    ],
+    "layouts": {
+     "LA": [
+      {
+       "description": "RT",
+       "name": "RT",
+       "start": 0,
+       "type": "T",
+       "width": 2
+      },
+      {
+       "description": "SITE",
+       "name": "SITE",
+       "start": 2,
+       "type": "T",
+       "width": 1
+      },
+      {
+       "description": "ID",
+       "name": "ID",
+       "start": 3,
+       "type": "T",
+       "width": 8
+      },
+      {
+       "description": "CHART",
+       "name": "CHART",
+       "start": 11,
+       "type": "T",
+       "width": 6
+      },
+      {
+       "description": "TEST",
+       "name": "TEST",
+       "start": 17,
+       "type": "T",
+       "width": 8
+      },
+      {
+       "description": "REV",
+       "name": "REV",
+       "start": 25,
+       "type": "T",
+       "width": 2
+      },
+      {
+       "description": "DAY",
+       "name": "DAY",
+       "start": 27,
+       "type": "T",
+       "width": 8
+      },
+      {
+       "description": "TIME",
+       "name": "TIME",
+       "start": 35,
+       "type": "T",
+       "width": 4
+      },
+      {
+       "description": "RESULT",
+       "name": "RESULT",
+       "start": 39,
+       "type": "T",
+       "width": 16
+      },
+      {
+       "description": "UNIT",
+       "name": "UNIT",
+       "start": 55,
+       "type": "T",
+       "width": 10
+      },
+      {
+       "description": "STATUS",
+       "name": "STATUS",
+       "start": 65,
+       "type": "T",
+       "width": 1
+      }
+     ]
+    },
+    "path": "LAB.TXT"
+   },
+   "MED": {
+    "discriminator": {
+     "start": 0,
+     "width": 2
+    },
+    "key_fields": [
+     "SITE",
+     "ID"
+    ],
+    "layouts": {
+     "ME": [
+      {
+       "description": "RT",
+       "name": "RT",
+       "start": 0,
+       "type": "T",
+       "width": 2
+      },
+      {
+       "description": "SITE",
+       "name": "SITE",
+       "start": 2,
+       "type": "T",
+       "width": 1
+      },
+      {
+       "description": "ID",
+       "name": "ID",
+       "start": 3,
+       "type": "T",
+       "width": 8
+      },
+      {
+       "description": "CHART",
+       "name": "CHART",
+       "start": 11,
+       "type": "T",
+       "width": 6
+      },
+      {
+       "description": "DRUG",
+       "name": "DRUG",
+       "start": 17,
+       "type": "T",
+       "width": 8
+      },
+      {
+       "description": "NAME",
+       "name": "NAME",
+       "start": 25,
+       "type": "T",
+       "width": 35
+      },
+      {
+       "description": "DAY",
+       "name": "DAY",
+       "start": 60,
+       "type": "T",
+       "width": 8
+      },
+      {
+       "description": "STATUS",
+       "name": "STATUS",
+       "start": 68,
+       "type": "T",
+       "width": 1
+      },
+      {
+       "description": "SIG",
+       "name": "SIG",
+       "start": 69,
+       "type": "T",
+       "width": 60
+      }
+     ]
+    },
+    "path": "MED.TXT"
+   },
+   "NOTE": {
+    "discriminator": {
+     "start": 0,
+     "width": 2
+    },
+    "key_fields": [
+     "SITE",
+     "ID",
+     "SEQ"
+    ],
+    "layouts": {
+     "NO": [
+      {
+       "description": "RT",
+       "name": "RT",
+       "start": 0,
+       "type": "T",
+       "width": 2
+      },
+      {
+       "description": "SITE",
+       "name": "SITE",
+       "start": 2,
+       "type": "T",
+       "width": 1
+      },
+      {
+       "description": "ID",
+       "name": "ID",
+       "start": 3,
+       "type": "T",
+       "width": 8
+      },
+      {
+       "description": "CHART",
+       "name": "CHART",
+       "start": 11,
+       "type": "T",
+       "width": 6
+      },
+      {
+       "description": "SEQ",
+       "name": "SEQ",
+       "start": 17,
+       "type": "T",
+       "width": 2
+      },
+      {
+       "description": "DAY",
+       "name": "DAY",
+       "start": 19,
+       "type": "T",
+       "width": 8
+      },
+      {
+       "description": "TIME",
+       "name": "TIME",
+       "start": 27,
+       "type": "T",
+       "width": 4
+      },
+      {
+       "description": "TEXT",
+       "name": "TEXT",
+       "start": 31,
+       "type": "T",
+       "width": 72
+      }
+     ]
+    },
+    "path": "NOTE.TXT"
+   },
+   "REG": {
+    "discriminator": {
+     "start": 0,
+     "width": 2
+    },
+    "key_fields": [
+     "SITE",
+     "CHART"
+    ],
+    "layouts": {
+     "RE": [
+      {
+       "description": "RT",
+       "name": "RT",
+       "start": 0,
+       "type": "T",
+       "width": 2
+      },
+      {
+       "description": "SITE",
+       "name": "SITE",
+       "start": 2,
+       "type": "T",
+       "width": 1
+      },
+      {
+       "description": "CHART",
+       "name": "CHART",
+       "start": 3,
+       "type": "T",
+       "width": 6
+      },
+      {
+       "description": "NAME",
+       "name": "NAME",
+       "start": 9,
+       "type": "T",
+       "width": 30
+      },
+      {
+       "description": "DOB",
+       "name": "DOB",
+       "start": 39,
+       "type": "T",
+       "width": 8
+      },
+      {
+       "description": "SEX",
+       "name": "SEX",
+       "start": 47,
+       "type": "T",
+       "width": 1
+      },
+      {
+       "description": "NKA",
+       "name": "NKA",
+       "start": 48,
+       "type": "T",
+       "width": 1
+      },
+      {
+       "description": "ALLERGY",
+       "name": "ALLERGY",
+       "start": 49,
+       "type": "T",
+       "width": 40
+      }
+     ]
+    },
+    "path": "REG.TXT"
+   },
+   "VIS": {
+    "discriminator": {
+     "start": 0,
+     "width": 2
+    },
+    "key_fields": [
+     "SITE",
+     "ID"
+    ],
+    "layouts": {
+     "VI": [
+      {
+       "description": "RT",
+       "name": "RT",
+       "start": 0,
+       "type": "T",
+       "width": 2
+      },
+      {
+       "description": "SITE",
+       "name": "SITE",
+       "start": 2,
+       "type": "T",
+       "width": 1
+      },
+      {
+       "description": "ID",
+       "name": "ID",
+       "start": 3,
+       "type": "T",
+       "width": 8
+      },
+      {
+       "description": "CHART",
+       "name": "CHART",
+       "start": 11,
+       "type": "T",
+       "width": 6
+      },
+      {
+       "description": "DAY",
+       "name": "DAY",
+       "start": 17,
+       "type": "T",
+       "width": 8
+      },
+      {
+       "description": "TIME",
+       "name": "TIME",
+       "start": 25,
+       "type": "T",
+       "width": 4
+      },
+      {
+       "description": "STATUS",
+       "name": "STATUS",
+       "start": 29,
+       "type": "T",
+       "width": 1
+      }
+     ]
+    },
+    "path": "VIS.TXT"
+   }
+  },
+  "reader": "fixed_width",
+  "source": "briar"
+ },
+ "rules": [
+  {
+   "data_confirmed": false,
+   "id": "R001",
+   "kind": "fact",
+   "predicate": "crosswalk",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "CROSSWALKS.TXT synthetic edition 3.7"
+   },
+   "subject": "codeset:charge",
+   "value": {
+    "OFFICE": "99213"
+   }
+  },
+  {
+   "data_confirmed": false,
+   "id": "R002",
+   "kind": "fact",
+   "predicate": "crosswalk",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "CROSSWALKS.TXT synthetic edition 3.7"
+   },
+   "subject": "codeset:diagnosis",
+   "value": {
+    "DM2": "E11.9"
+   }
+  },
+  {
+   "data_confirmed": false,
+   "id": "R003",
+   "kind": "fact",
+   "predicate": "crosswalk",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "CROSSWALKS.TXT synthetic edition 3.7"
+   },
+   "subject": "codeset:lab",
+   "value": {
+    "CULT": "630-4",
+    "GLU": "2345-7",
+    "K": "2823-3"
+   }
+  },
+  {
+   "data_confirmed": false,
+   "id": "R004",
+   "kind": "fact",
+   "predicate": "crosswalk",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "CROSSWALKS.TXT synthetic edition 3.7"
+   },
+   "subject": "codeset:medication",
+   "value": {
+    "MET": "860975"
+   }
+  },
+  {
+   "data_confirmed": false,
+   "id": "R005",
+   "kind": "fact",
+   "predicate": "pass_through_text",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "LAYOUTS.DAT v3.7"
+   },
+   "subject": "field:APPT.TXT.CHART",
+   "value": "opaque_source_token_preserve_without_clinical_inference"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R006",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "DATADICT.TXT v2.3 + SUPPORT.TXT 3.7; clarified interviews recorded"
+   },
+   "subject": "field:APPT.TXT.DAY",
+   "value": "YYYYMMDD"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R007",
+   "kind": "fact",
+   "predicate": "pass_through_text",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "LAYOUTS.DAT v3.7"
+   },
+   "subject": "field:APPT.TXT.ID",
+   "value": "opaque_source_token_preserve_without_clinical_inference"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R008",
+   "kind": "fact",
+   "predicate": "pass_through_text",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "LAYOUTS.DAT v3.7"
+   },
+   "subject": "field:APPT.TXT.RT",
+   "value": "opaque_source_token_preserve_without_clinical_inference"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R009",
+   "kind": "fact",
+   "predicate": "pass_through_text",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "LAYOUTS.DAT v3.7"
+   },
+   "subject": "field:APPT.TXT.SITE",
+   "value": "opaque_source_token_preserve_without_clinical_inference"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R010",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "DATADICT.TXT v2.3 + SUPPORT.TXT 3.7; clarified interviews recorded"
+   },
+   "subject": "field:APPT.TXT.TIME",
+   "value": "local_HHMM_with_2400_and_DST_review"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R011",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "analyst",
+    "ref": "ledger:E000107; dispute resolved via Follow-up with domain owner; delivery evidence checked"
+   },
+   "subject": "field:BILL.TXT.AMOUNT",
+   "value": {
+    "dollars_from_service_date": "20260101",
+    "negative": "runtime_question",
+    "otherwise": "cents",
+    "site": "B"
+   }
+  },
+  {
+   "data_confirmed": false,
+   "id": "R012",
+   "kind": "fact",
+   "predicate": "pass_through_text",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "LAYOUTS.DAT v3.7"
+   },
+   "subject": "field:BILL.TXT.CHART",
+   "value": "opaque_source_token_preserve_without_clinical_inference"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R013",
+   "kind": "fact",
+   "predicate": "pass_through_text",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "LAYOUTS.DAT v3.7"
+   },
+   "subject": "field:BILL.TXT.CODE",
+   "value": "opaque_source_token_preserve_without_clinical_inference"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R014",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "DATADICT.TXT v2.3 + SUPPORT.TXT 3.7; clarified interviews recorded"
+   },
+   "subject": "field:BILL.TXT.DAY",
+   "value": "YYYYMMDD"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R015",
+   "kind": "fact",
+   "predicate": "pass_through_text",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "LAYOUTS.DAT v3.7"
+   },
+   "subject": "field:BILL.TXT.ID",
+   "value": "opaque_source_token_preserve_without_clinical_inference"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R016",
+   "kind": "fact",
+   "predicate": "pass_through_text",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "LAYOUTS.DAT v3.7"
+   },
+   "subject": "field:BILL.TXT.RT",
+   "value": "opaque_source_token_preserve_without_clinical_inference"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R017",
+   "kind": "fact",
+   "predicate": "pass_through_text",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "LAYOUTS.DAT v3.7"
+   },
+   "subject": "field:BILL.TXT.SITE",
+   "value": "opaque_source_token_preserve_without_clinical_inference"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R018",
+   "kind": "fact",
+   "predicate": "pass_through_text",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "LAYOUTS.DAT v3.7"
+   },
+   "subject": "field:BILL.TXT.VISIT",
+   "value": "opaque_source_token_preserve_without_clinical_inference"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R019",
+   "kind": "fact",
+   "predicate": "pass_through_text",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "LAYOUTS.DAT v3.7"
+   },
+   "subject": "field:DX.TXT.CHART",
+   "value": "opaque_source_token_preserve_without_clinical_inference"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R020",
+   "kind": "fact",
+   "predicate": "pass_through_text",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "LAYOUTS.DAT v3.7"
+   },
+   "subject": "field:DX.TXT.CODE",
+   "value": "opaque_source_token_preserve_without_clinical_inference"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R021",
+   "kind": "fact",
+   "predicate": "pass_through_text",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "LAYOUTS.DAT v3.7"
+   },
+   "subject": "field:DX.TXT.ID",
+   "value": "opaque_source_token_preserve_without_clinical_inference"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R022",
+   "kind": "fact",
+   "predicate": "pass_through_text",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "LAYOUTS.DAT v3.7"
+   },
+   "subject": "field:DX.TXT.RT",
+   "value": "opaque_source_token_preserve_without_clinical_inference"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R023",
+   "kind": "fact",
+   "predicate": "pass_through_text",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "LAYOUTS.DAT v3.7"
+   },
+   "subject": "field:DX.TXT.SITE",
+   "value": "opaque_source_token_preserve_without_clinical_inference"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R024",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "DATADICT.TXT v2.3 + SUPPORT.TXT 3.7; clarified interviews recorded"
+   },
+   "subject": "field:DX.TXT.STATUS",
+   "value": "source_domain_status; unknowns_require_review"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R025",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "DATADICT.TXT v2.3 + SUPPORT.TXT 3.7; clarified interviews recorded"
+   },
+   "subject": "field:DX.TXT.TEXT",
+   "value": "right_trim_padding_only_preserve_content"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R026",
+   "kind": "fact",
+   "predicate": "pass_through_text",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "LAYOUTS.DAT v3.7"
+   },
+   "subject": "field:JRN.TXT.ACTION",
+   "value": "opaque_source_token_preserve_without_clinical_inference"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R027",
+   "kind": "fact",
+   "predicate": "pass_through_text",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "LAYOUTS.DAT v3.7"
+   },
+   "subject": "field:JRN.TXT.ID",
+   "value": "opaque_source_token_preserve_without_clinical_inference"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R028",
+   "kind": "fact",
+   "predicate": "pass_through_text",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "LAYOUTS.DAT v3.7"
+   },
+   "subject": "field:JRN.TXT.RT",
+   "value": "opaque_source_token_preserve_without_clinical_inference"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R029",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "DATADICT.TXT v2.3 + SUPPORT.TXT 3.7; clarified interviews recorded"
+   },
+   "subject": "field:JRN.TXT.SEQ",
+   "value": "integer_order"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R030",
+   "kind": "fact",
+   "predicate": "pass_through_text",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "LAYOUTS.DAT v3.7"
+   },
+   "subject": "field:JRN.TXT.SITE",
+   "value": "opaque_source_token_preserve_without_clinical_inference"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R031",
+   "kind": "fact",
+   "predicate": "pass_through_text",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "LAYOUTS.DAT v3.7"
+   },
+   "subject": "field:JRN.TXT.TABLE",
+   "value": "opaque_source_token_preserve_without_clinical_inference"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R032",
+   "kind": "fact",
+   "predicate": "pass_through_text",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "LAYOUTS.DAT v3.7"
+   },
+   "subject": "field:LAB.TXT.CHART",
+   "value": "opaque_source_token_preserve_without_clinical_inference"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R033",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "DATADICT.TXT v2.3 + SUPPORT.TXT 3.7; clarified interviews recorded"
+   },
+   "subject": "field:LAB.TXT.DAY",
+   "value": "YYYYMMDD"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R034",
+   "kind": "fact",
+   "predicate": "pass_through_text",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "LAYOUTS.DAT v3.7"
+   },
+   "subject": "field:LAB.TXT.ID",
+   "value": "opaque_source_token_preserve_without_clinical_inference"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R035",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "analyst",
+    "ref": "ledger:E000121; dispute resolved via Follow-up with domain owner; delivery evidence checked"
+   },
+   "subject": "field:LAB.TXT.RESULT",
+   "value": {
+    "NEG": "negative",
+    "comparator": "preserve",
+    "missing_sentinel": "999999",
+    "numeric_flags": true,
+    "other_text": "preserve"
+   }
+  },
+  {
+   "data_confirmed": false,
+   "id": "R036",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "DATADICT.TXT v2.3 + SUPPORT.TXT 3.7; clarified interviews recorded"
+   },
+   "subject": "field:LAB.TXT.REV",
+   "value": "integer_max_wins"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R037",
+   "kind": "fact",
+   "predicate": "pass_through_text",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "LAYOUTS.DAT v3.7"
+   },
+   "subject": "field:LAB.TXT.RT",
+   "value": "opaque_source_token_preserve_without_clinical_inference"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R038",
+   "kind": "fact",
+   "predicate": "pass_through_text",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "LAYOUTS.DAT v3.7"
+   },
+   "subject": "field:LAB.TXT.SITE",
+   "value": "opaque_source_token_preserve_without_clinical_inference"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R039",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "DATADICT.TXT v2.3 + SUPPORT.TXT 3.7; clarified interviews recorded"
+   },
+   "subject": "field:LAB.TXT.STATUS",
+   "value": "source_domain_status; unknowns_require_review"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R040",
+   "kind": "fact",
+   "predicate": "pass_through_text",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "LAYOUTS.DAT v3.7"
+   },
+   "subject": "field:LAB.TXT.TEST",
+   "value": "opaque_source_token_preserve_without_clinical_inference"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R041",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "DATADICT.TXT v2.3 + SUPPORT.TXT 3.7; clarified interviews recorded"
+   },
+   "subject": "field:LAB.TXT.TIME",
+   "value": "local_HHMM_with_2400_and_DST_review"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R042",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "DATADICT.TXT v2.3; dispute resolved via Initial blanket site conversion was contradicted by B-site unit labels and withdrawn."
+   },
+   "subject": "field:LAB.TXT.UNIT",
+   "value": "row_unit_overrides_dictionary"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R043",
+   "kind": "fact",
+   "predicate": "pass_through_text",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "LAYOUTS.DAT v3.7"
+   },
+   "subject": "field:MED.TXT.CHART",
+   "value": "opaque_source_token_preserve_without_clinical_inference"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R044",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "DATADICT.TXT v2.3 + SUPPORT.TXT 3.7; clarified interviews recorded"
+   },
+   "subject": "field:MED.TXT.DAY",
+   "value": "YYYYMMDD"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R045",
+   "kind": "fact",
+   "predicate": "pass_through_text",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "LAYOUTS.DAT v3.7"
+   },
+   "subject": "field:MED.TXT.DRUG",
+   "value": "opaque_source_token_preserve_without_clinical_inference"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R046",
+   "kind": "fact",
+   "predicate": "pass_through_text",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "LAYOUTS.DAT v3.7"
+   },
+   "subject": "field:MED.TXT.ID",
+   "value": "opaque_source_token_preserve_without_clinical_inference"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R047",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "DATADICT.TXT v2.3 + SUPPORT.TXT 3.7; clarified interviews recorded"
+   },
+   "subject": "field:MED.TXT.NAME",
+   "value": "LAST,FIRST (except medication name, which is text)"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R048",
+   "kind": "fact",
+   "predicate": "pass_through_text",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "LAYOUTS.DAT v3.7"
+   },
+   "subject": "field:MED.TXT.RT",
+   "value": "opaque_source_token_preserve_without_clinical_inference"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R049",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "DATADICT.TXT v2.3 + SUPPORT.TXT 3.7; clarified interviews recorded"
+   },
+   "subject": "field:MED.TXT.SIG",
+   "value": "clinician_text_preserve_verbatim"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R050",
+   "kind": "fact",
+   "predicate": "pass_through_text",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "LAYOUTS.DAT v3.7"
+   },
+   "subject": "field:MED.TXT.SITE",
+   "value": "opaque_source_token_preserve_without_clinical_inference"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R051",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "analyst",
+    "ref": "ledger:E000105; dispute resolved via Pharmacy confirms current 3.7 delivery only; archived H remains out of scope."
+   },
+   "subject": "field:MED.TXT.STATUS",
+   "value": {
+    "A": "active",
+    "H": "on-hold",
+    "S": "stopped"
+   }
+  },
+  {
+   "data_confirmed": false,
+   "id": "R052",
+   "kind": "fact",
+   "predicate": "pass_through_text",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "LAYOUTS.DAT v3.7"
+   },
+   "subject": "field:NOTE.TXT.CHART",
+   "value": "opaque_source_token_preserve_without_clinical_inference"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R053",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "DATADICT.TXT v2.3 + SUPPORT.TXT 3.7; clarified interviews recorded"
+   },
+   "subject": "field:NOTE.TXT.DAY",
+   "value": "YYYYMMDD"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R054",
+   "kind": "fact",
+   "predicate": "pass_through_text",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "LAYOUTS.DAT v3.7"
+   },
+   "subject": "field:NOTE.TXT.ID",
+   "value": "opaque_source_token_preserve_without_clinical_inference"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R055",
+   "kind": "fact",
+   "predicate": "pass_through_text",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "LAYOUTS.DAT v3.7"
+   },
+   "subject": "field:NOTE.TXT.RT",
+   "value": "opaque_source_token_preserve_without_clinical_inference"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R056",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "DATADICT.TXT v2.3 + SUPPORT.TXT 3.7; clarified interviews recorded"
+   },
+   "subject": "field:NOTE.TXT.SEQ",
+   "value": "integer_order"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R057",
+   "kind": "fact",
+   "predicate": "pass_through_text",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "LAYOUTS.DAT v3.7"
+   },
+   "subject": "field:NOTE.TXT.SITE",
+   "value": "opaque_source_token_preserve_without_clinical_inference"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R058",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "DATADICT.TXT v2.3 + SUPPORT.TXT 3.7; clarified interviews recorded"
+   },
+   "subject": "field:NOTE.TXT.TEXT",
+   "value": "right_trim_padding_only_preserve_content"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R059",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "DATADICT.TXT v2.3 + SUPPORT.TXT 3.7; clarified interviews recorded"
+   },
+   "subject": "field:NOTE.TXT.TIME",
+   "value": "local_HHMM_with_2400_and_DST_review"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R060",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "DATADICT.TXT v2.3 + SUPPORT.TXT 3.7; clarified interviews recorded"
+   },
+   "subject": "field:REG.TXT.ALLERGY",
+   "value": "substance:reaction_text"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R061",
+   "kind": "fact",
+   "predicate": "pass_through_text",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "LAYOUTS.DAT v3.7"
+   },
+   "subject": "field:REG.TXT.CHART",
+   "value": "opaque_source_token_preserve_without_clinical_inference"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R062",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "analyst",
+    "ref": "ledger:E000117; dispute resolved via Eight-digit rows parse; six-digit century and missing dates cannot be established."
+   },
+   "subject": "field:REG.TXT.DOB",
+   "value": {
+    "format": "YYYYMMDD",
+    "other": "runtime_question"
+   }
+  },
+  {
+   "data_confirmed": false,
+   "id": "R063",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "DATADICT.TXT v2.3 + SUPPORT.TXT 3.7; clarified interviews recorded"
+   },
+   "subject": "field:REG.TXT.NAME",
+   "value": "LAST,FIRST (except medication name, which is text)"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R064",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "DATADICT.TXT v2.3 + SUPPORT.TXT 3.7; clarified interviews recorded"
+   },
+   "subject": "field:REG.TXT.NKA",
+   "value": "sticky_Y_requires_positive_allergy_check"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R065",
+   "kind": "fact",
+   "predicate": "pass_through_text",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "LAYOUTS.DAT v3.7"
+   },
+   "subject": "field:REG.TXT.RT",
+   "value": "opaque_source_token_preserve_without_clinical_inference"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R066",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "DATADICT.TXT v2.3 + SUPPORT.TXT 3.7; clarified interviews recorded"
+   },
+   "subject": "field:REG.TXT.SEX",
+   "value": "M/F/U"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R067",
+   "kind": "fact",
+   "predicate": "pass_through_text",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "LAYOUTS.DAT v3.7"
+   },
+   "subject": "field:REG.TXT.SITE",
+   "value": "opaque_source_token_preserve_without_clinical_inference"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R068",
+   "kind": "fact",
+   "predicate": "pass_through_text",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "LAYOUTS.DAT v3.7"
+   },
+   "subject": "field:VIS.TXT.CHART",
+   "value": "opaque_source_token_preserve_without_clinical_inference"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R069",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "DATADICT.TXT v2.3 + SUPPORT.TXT 3.7; clarified interviews recorded"
+   },
+   "subject": "field:VIS.TXT.DAY",
+   "value": "YYYYMMDD"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R070",
+   "kind": "fact",
+   "predicate": "pass_through_text",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "LAYOUTS.DAT v3.7"
+   },
+   "subject": "field:VIS.TXT.ID",
+   "value": "opaque_source_token_preserve_without_clinical_inference"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R071",
+   "kind": "fact",
+   "predicate": "pass_through_text",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "LAYOUTS.DAT v3.7"
+   },
+   "subject": "field:VIS.TXT.RT",
+   "value": "opaque_source_token_preserve_without_clinical_inference"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R072",
+   "kind": "fact",
+   "predicate": "pass_through_text",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "LAYOUTS.DAT v3.7"
+   },
+   "subject": "field:VIS.TXT.SITE",
+   "value": "opaque_source_token_preserve_without_clinical_inference"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R073",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "DATADICT.TXT v2.3 + SUPPORT.TXT 3.7; clarified interviews recorded"
+   },
+   "subject": "field:VIS.TXT.STATUS",
+   "value": "source_domain_status; unknowns_require_review"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R074",
+   "kind": "fact",
+   "predicate": "convention",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "DATADICT.TXT v2.3 + SUPPORT.TXT 3.7; clarified interviews recorded"
+   },
+   "subject": "field:VIS.TXT.TIME",
+   "value": "local_HHMM_with_2400_and_DST_review"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R075",
+   "kind": "fact",
+   "predicate": "layout_binding",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "LAYOUTS.DAT v3.7; key choices pending interviews"
+   },
+   "subject": "file:APPT",
+   "value": {
+    "discriminator": {
+     "start": 0,
+     "width": 2
+    },
+    "key_fields": [
+     "SITE",
+     "ID"
+    ],
+    "layouts": {
+     "AP": [
+      {
+       "description": "RT",
+       "name": "RT",
+       "start": 0,
+       "type": "T",
+       "width": 2
+      },
+      {
+       "description": "SITE",
+       "name": "SITE",
+       "start": 2,
+       "type": "T",
+       "width": 1
+      },
+      {
+       "description": "ID",
+       "name": "ID",
+       "start": 3,
+       "type": "T",
+       "width": 8
+      },
+      {
+       "description": "CHART",
+       "name": "CHART",
+       "start": 11,
+       "type": "T",
+       "width": 6
+      },
+      {
+       "description": "DAY",
+       "name": "DAY",
+       "start": 17,
+       "type": "T",
+       "width": 8
+      },
+      {
+       "description": "TIME",
+       "name": "TIME",
+       "start": 25,
+       "type": "T",
+       "width": 4
+      },
+      {
+       "description": "STATUS",
+       "name": "STATUS",
+       "start": 29,
+       "type": "T",
+       "width": 1
+      }
+     ]
+    },
+    "path": "APPT.TXT"
+   }
+  },
+  {
+   "data_confirmed": false,
+   "id": "R076",
+   "kind": "fact",
+   "predicate": "layout_binding",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "LAYOUTS.DAT v3.7; key choices pending interviews"
+   },
+   "subject": "file:BILL",
+   "value": {
+    "discriminator": {
+     "start": 0,
+     "width": 2
+    },
+    "key_fields": [
+     "SITE",
+     "ID"
+    ],
+    "layouts": {
+     "BI": [
+      {
+       "description": "RT",
+       "name": "RT",
+       "start": 0,
+       "type": "T",
+       "width": 2
+      },
+      {
+       "description": "SITE",
+       "name": "SITE",
+       "start": 2,
+       "type": "T",
+       "width": 1
+      },
+      {
+       "description": "ID",
+       "name": "ID",
+       "start": 3,
+       "type": "T",
+       "width": 8
+      },
+      {
+       "description": "CHART",
+       "name": "CHART",
+       "start": 11,
+       "type": "T",
+       "width": 6
+      },
+      {
+       "description": "VISIT",
+       "name": "VISIT",
+       "start": 17,
+       "type": "T",
+       "width": 8
+      },
+      {
+       "description": "DAY",
+       "name": "DAY",
+       "start": 25,
+       "type": "T",
+       "width": 8
+      },
+      {
+       "description": "AMOUNT",
+       "name": "AMOUNT",
+       "start": 33,
+       "type": "T",
+       "width": 12
+      },
+      {
+       "description": "CODE",
+       "name": "CODE",
+       "start": 45,
+       "type": "T",
+       "width": 8
+      }
+     ]
+    },
+    "path": "BILL.TXT"
+   }
+  },
+  {
+   "data_confirmed": false,
+   "id": "R077",
+   "kind": "fact",
+   "predicate": "layout_binding",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "LAYOUTS.DAT v3.7; key choices pending interviews"
+   },
+   "subject": "file:DX",
+   "value": {
+    "discriminator": {
+     "start": 0,
+     "width": 2
+    },
+    "key_fields": [
+     "SITE",
+     "ID"
+    ],
+    "layouts": {
+     "DX": [
+      {
+       "description": "RT",
+       "name": "RT",
+       "start": 0,
+       "type": "T",
+       "width": 2
+      },
+      {
+       "description": "SITE",
+       "name": "SITE",
+       "start": 2,
+       "type": "T",
+       "width": 1
+      },
+      {
+       "description": "ID",
+       "name": "ID",
+       "start": 3,
+       "type": "T",
+       "width": 8
+      },
+      {
+       "description": "CHART",
+       "name": "CHART",
+       "start": 11,
+       "type": "T",
+       "width": 6
+      },
+      {
+       "description": "CODE",
+       "name": "CODE",
+       "start": 17,
+       "type": "T",
+       "width": 8
+      },
+      {
+       "description": "TEXT",
+       "name": "TEXT",
+       "start": 25,
+       "type": "T",
+       "width": 60
+      },
+      {
+       "description": "STATUS",
+       "name": "STATUS",
+       "start": 85,
+       "type": "T",
+       "width": 1
+      }
+     ]
+    },
+    "path": "DX.TXT"
+   }
+  },
+  {
+   "data_confirmed": false,
+   "id": "R078",
+   "kind": "fact",
+   "predicate": "layout_binding",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "LAYOUTS.DAT v3.7; key choices pending interviews"
+   },
+   "subject": "file:JRN",
+   "value": {
+    "discriminator": {
+     "start": 0,
+     "width": 2
+    },
+    "key_fields": [
+     "SITE",
+     "SEQ"
+    ],
+    "layouts": {
+     "JR": [
+      {
+       "description": "RT",
+       "name": "RT",
+       "start": 0,
+       "type": "T",
+       "width": 2
+      },
+      {
+       "description": "SITE",
+       "name": "SITE",
+       "start": 2,
+       "type": "T",
+       "width": 1
+      },
+      {
+       "description": "SEQ",
+       "name": "SEQ",
+       "start": 3,
+       "type": "T",
+       "width": 6
+      },
+      {
+       "description": "TABLE",
+       "name": "TABLE",
+       "start": 9,
+       "type": "T",
+       "width": 8
+      },
+      {
+       "description": "ID",
+       "name": "ID",
+       "start": 17,
+       "type": "T",
+       "width": 8
+      },
+      {
+       "description": "ACTION",
+       "name": "ACTION",
+       "start": 25,
+       "type": "T",
+       "width": 1
+      }
+     ]
+    },
+    "path": "JRN.TXT"
+   }
+  },
+  {
+   "data_confirmed": false,
+   "id": "R079",
+   "kind": "fact",
+   "predicate": "layout_binding",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "LAYOUTS.DAT v3.7; key choices pending interviews"
+   },
+   "subject": "file:LAB",
+   "value": {
+    "discriminator": {
+     "start": 0,
+     "width": 2
+    },
+    "key_fields": [
+     "SITE",
+     "ID",
+     "TEST",
+     "REV"
+    ],
+    "layouts": {
+     "LA": [
+      {
+       "description": "RT",
+       "name": "RT",
+       "start": 0,
+       "type": "T",
+       "width": 2
+      },
+      {
+       "description": "SITE",
+       "name": "SITE",
+       "start": 2,
+       "type": "T",
+       "width": 1
+      },
+      {
+       "description": "ID",
+       "name": "ID",
+       "start": 3,
+       "type": "T",
+       "width": 8
+      },
+      {
+       "description": "CHART",
+       "name": "CHART",
+       "start": 11,
+       "type": "T",
+       "width": 6
+      },
+      {
+       "description": "TEST",
+       "name": "TEST",
+       "start": 17,
+       "type": "T",
+       "width": 8
+      },
+      {
+       "description": "REV",
+       "name": "REV",
+       "start": 25,
+       "type": "T",
+       "width": 2
+      },
+      {
+       "description": "DAY",
+       "name": "DAY",
+       "start": 27,
+       "type": "T",
+       "width": 8
+      },
+      {
+       "description": "TIME",
+       "name": "TIME",
+       "start": 35,
+       "type": "T",
+       "width": 4
+      },
+      {
+       "description": "RESULT",
+       "name": "RESULT",
+       "start": 39,
+       "type": "T",
+       "width": 16
+      },
+      {
+       "description": "UNIT",
+       "name": "UNIT",
+       "start": 55,
+       "type": "T",
+       "width": 10
+      },
+      {
+       "description": "STATUS",
+       "name": "STATUS",
+       "start": 65,
+       "type": "T",
+       "width": 1
+      }
+     ]
+    },
+    "path": "LAB.TXT"
+   }
+  },
+  {
+   "data_confirmed": false,
+   "id": "R080",
+   "kind": "fact",
+   "predicate": "layout_binding",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "LAYOUTS.DAT v3.7; key choices pending interviews"
+   },
+   "subject": "file:MED",
+   "value": {
+    "discriminator": {
+     "start": 0,
+     "width": 2
+    },
+    "key_fields": [
+     "SITE",
+     "ID"
+    ],
+    "layouts": {
+     "ME": [
+      {
+       "description": "RT",
+       "name": "RT",
+       "start": 0,
+       "type": "T",
+       "width": 2
+      },
+      {
+       "description": "SITE",
+       "name": "SITE",
+       "start": 2,
+       "type": "T",
+       "width": 1
+      },
+      {
+       "description": "ID",
+       "name": "ID",
+       "start": 3,
+       "type": "T",
+       "width": 8
+      },
+      {
+       "description": "CHART",
+       "name": "CHART",
+       "start": 11,
+       "type": "T",
+       "width": 6
+      },
+      {
+       "description": "DRUG",
+       "name": "DRUG",
+       "start": 17,
+       "type": "T",
+       "width": 8
+      },
+      {
+       "description": "NAME",
+       "name": "NAME",
+       "start": 25,
+       "type": "T",
+       "width": 35
+      },
+      {
+       "description": "DAY",
+       "name": "DAY",
+       "start": 60,
+       "type": "T",
+       "width": 8
+      },
+      {
+       "description": "STATUS",
+       "name": "STATUS",
+       "start": 68,
+       "type": "T",
+       "width": 1
+      },
+      {
+       "description": "SIG",
+       "name": "SIG",
+       "start": 69,
+       "type": "T",
+       "width": 60
+      }
+     ]
+    },
+    "path": "MED.TXT"
+   }
+  },
+  {
+   "data_confirmed": false,
+   "id": "R081",
+   "kind": "fact",
+   "predicate": "layout_binding",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "LAYOUTS.DAT v3.7; key choices pending interviews"
+   },
+   "subject": "file:NOTE",
+   "value": {
+    "discriminator": {
+     "start": 0,
+     "width": 2
+    },
+    "key_fields": [
+     "SITE",
+     "ID",
+     "SEQ"
+    ],
+    "layouts": {
+     "NO": [
+      {
+       "description": "RT",
+       "name": "RT",
+       "start": 0,
+       "type": "T",
+       "width": 2
+      },
+      {
+       "description": "SITE",
+       "name": "SITE",
+       "start": 2,
+       "type": "T",
+       "width": 1
+      },
+      {
+       "description": "ID",
+       "name": "ID",
+       "start": 3,
+       "type": "T",
+       "width": 8
+      },
+      {
+       "description": "CHART",
+       "name": "CHART",
+       "start": 11,
+       "type": "T",
+       "width": 6
+      },
+      {
+       "description": "SEQ",
+       "name": "SEQ",
+       "start": 17,
+       "type": "T",
+       "width": 2
+      },
+      {
+       "description": "DAY",
+       "name": "DAY",
+       "start": 19,
+       "type": "T",
+       "width": 8
+      },
+      {
+       "description": "TIME",
+       "name": "TIME",
+       "start": 27,
+       "type": "T",
+       "width": 4
+      },
+      {
+       "description": "TEXT",
+       "name": "TEXT",
+       "start": 31,
+       "type": "T",
+       "width": 72
+      }
+     ]
+    },
+    "path": "NOTE.TXT"
+   }
+  },
+  {
+   "data_confirmed": false,
+   "id": "R082",
+   "kind": "fact",
+   "predicate": "layout_binding",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "LAYOUTS.DAT v3.7; key choices pending interviews"
+   },
+   "subject": "file:REG",
+   "value": {
+    "discriminator": {
+     "start": 0,
+     "width": 2
+    },
+    "key_fields": [
+     "SITE",
+     "CHART"
+    ],
+    "layouts": {
+     "RE": [
+      {
+       "description": "RT",
+       "name": "RT",
+       "start": 0,
+       "type": "T",
+       "width": 2
+      },
+      {
+       "description": "SITE",
+       "name": "SITE",
+       "start": 2,
+       "type": "T",
+       "width": 1
+      },
+      {
+       "description": "CHART",
+       "name": "CHART",
+       "start": 3,
+       "type": "T",
+       "width": 6
+      },
+      {
+       "description": "NAME",
+       "name": "NAME",
+       "start": 9,
+       "type": "T",
+       "width": 30
+      },
+      {
+       "description": "DOB",
+       "name": "DOB",
+       "start": 39,
+       "type": "T",
+       "width": 8
+      },
+      {
+       "description": "SEX",
+       "name": "SEX",
+       "start": 47,
+       "type": "T",
+       "width": 1
+      },
+      {
+       "description": "NKA",
+       "name": "NKA",
+       "start": 48,
+       "type": "T",
+       "width": 1
+      },
+      {
+       "description": "ALLERGY",
+       "name": "ALLERGY",
+       "start": 49,
+       "type": "T",
+       "width": 40
+      }
+     ]
+    },
+    "path": "REG.TXT"
+   }
+  },
+  {
+   "data_confirmed": false,
+   "id": "R083",
+   "kind": "fact",
+   "predicate": "layout_binding",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "LAYOUTS.DAT v3.7; key choices pending interviews"
+   },
+   "subject": "file:VIS",
+   "value": {
+    "discriminator": {
+     "start": 0,
+     "width": 2
+    },
+    "key_fields": [
+     "SITE",
+     "ID"
+    ],
+    "layouts": {
+     "VI": [
+      {
+       "description": "RT",
+       "name": "RT",
+       "start": 0,
+       "type": "T",
+       "width": 2
+      },
+      {
+       "description": "SITE",
+       "name": "SITE",
+       "start": 2,
+       "type": "T",
+       "width": 1
+      },
+      {
+       "description": "ID",
+       "name": "ID",
+       "start": 3,
+       "type": "T",
+       "width": 8
+      },
+      {
+       "description": "CHART",
+       "name": "CHART",
+       "start": 11,
+       "type": "T",
+       "width": 6
+      },
+      {
+       "description": "DAY",
+       "name": "DAY",
+       "start": 17,
+       "type": "T",
+       "width": 8
+      },
+      {
+       "description": "TIME",
+       "name": "TIME",
+       "start": 25,
+       "type": "T",
+       "width": 4
+      },
+      {
+       "description": "STATUS",
+       "name": "STATUS",
+       "start": 29,
+       "type": "T",
+       "width": 1
+      }
+     ]
+    },
+    "path": "VIS.TXT"
+   }
+  },
+  {
+   "data_confirmed": false,
+   "id": "R084",
+   "kind": "fact",
+   "predicate": "keying_story",
+   "provenance": {
+    "kind": "analyst",
+    "ref": "ledger:E000099; dispute resolved via Systems withdrew old enterprise-ID assertion; registration and site collisions agree. No patient merges authorized."
+   },
+   "subject": "identity",
+   "value": {
+    "key_fields": [
+     "REG.TXT.SITE+REG.TXT.CHART"
+    ],
+    "master_index": false
+   }
+  },
+  {
+   "data_confirmed": false,
+   "id": "R085",
+   "kind": "fact",
+   "predicate": "allergy",
+   "provenance": {
+    "kind": "analyst",
+    "ref": "ledger:E000101"
+   },
+   "subject": "semantics",
+   "value": {
+    "positive_overrides_NKA": true,
+    "substance_reaction_separator": ":"
+   }
+  },
+  {
+   "data_confirmed": false,
+   "id": "R086",
+   "kind": "fact",
+   "predicate": "appointment_known",
+   "provenance": {
+    "kind": "analyst",
+    "ref": "ledger:E000127"
+   },
+   "subject": "semantics",
+   "value": {
+    "B": "booked",
+    "C": "cancelled"
+   }
+  },
+  {
+   "data_confirmed": false,
+   "id": "R087",
+   "kind": "fact",
+   "predicate": "lab",
+   "provenance": {
+    "kind": "analyst",
+    "ref": "ledger:E000121"
+   },
+   "subject": "semantics",
+   "value": {
+    "default_units": {
+     "K": "mmol/L"
+    },
+    "deletion": "entire_site_accession",
+    "latest": "max_numeric_revision",
+    "missing_glucose_unit": "runtime_question"
+   }
+  },
+  {
+   "data_confirmed": false,
+   "id": "R088",
+   "kind": "fact",
+   "predicate": "note_type",
+   "provenance": {
+    "kind": "dictionary",
+    "ref": "CROSSWALKS.TXT"
+   },
+   "subject": "semantics",
+   "value": "11506-3"
+  },
+  {
+   "data_confirmed": false,
+   "id": "R089",
+   "kind": "fact",
+   "predicate": "notes",
+   "provenance": {
+    "kind": "analyst",
+    "ref": "ledger:E000129"
+   },
+   "subject": "semantics",
+   "value": {
+    "group": [
+     "SITE",
+     "ID"
+    ],
+    "order": "numeric_SEQ",
+    "upstream_truncation": "unknown",
+    "whitespace": "right_trim_only"
+   }
+  },
+  {
+   "data_confirmed": false,
+   "id": "R090",
+   "kind": "fact",
+   "predicate": "timezone",
+   "provenance": {
+    "kind": "analyst",
+    "ref": "ledger:E000113"
+   },
+   "subject": "semantics",
+   "value": {
+    "2400": "next_midnight",
+    "A": "America/Chicago",
+    "B": "America/Chicago",
+    "ambiguous_or_nonexistent": "runtime_question"
+   }
+  },
+  {
+   "data_confirmed": false,
+   "id": "SAFETY-IDENTITY-MERGE",
+   "kind": "identity_policy",
+   "note": "Identity merges always require a human reconciliation decision. No claim, from any source, can turn this into an auto-merge rule.",
+   "predicate": "merge_policy",
+   "provenance": {
+    "kind": "policy",
+    "ref": "docs/socratic-import-builder.md"
+   },
+   "subject": "identity",
+   "value": "route_to_reconciliation"
+  }
+ ],
+ "source": "briar"
+}

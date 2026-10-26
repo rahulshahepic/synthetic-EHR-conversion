@@ -1,0 +1,924 @@
+{
+  "accounting_dispositions": {
+    "applied_accession_withdrawal": 8,
+    "assembled_continuation": 320,
+    "derived_allergy": 30,
+    "mapped_source": 3200,
+    "superseded_revision_archived": 320
+  },
+  "label": "corrected",
+  "pauses": [],
+  "physical_rows": 3848,
+  "questions": [
+    {
+      "affected_count": 19,
+      "answer": null,
+      "blocking": true,
+      "context": {
+        "source": {
+          "CHART": "000001",
+          "DAY": "20261020",
+          "ID": "00000001",
+          "PAT_ID": "A|000001",
+          "RT": "AP",
+          "SITE": "A",
+          "STATUS": "R",
+          "TIME": "1400"
+        },
+        "synthetic": true
+      },
+      "created_at": "2026-10-26T17:31:57+00:00",
+      "default_option": null,
+      "id": "q-aff8ab15",
+      "kind": "briar_appointment_status",
+      "match_key": "R",
+      "options": [
+        {
+          "key": "defer",
+          "label": "Keep quarantined; additional source evidence is required"
+        }
+      ],
+      "prompt": "R has conflicting meanings (rescheduled/arrived); scheduling audit required. No invented Nimbus status.",
+      "run_id": "run-5341c8d6",
+      "status": "open"
+    },
+    {
+      "affected_count": 14,
+      "answer": null,
+      "blocking": true,
+      "context": {
+        "source": {
+          "CHART": "000001",
+          "DAY": "20261010",
+          "DRUG": "MISC",
+          "FORM_CODE": "MISC",
+          "ID": "00000001",
+          "NAME": "UNKNOWN COMPOUND",
+          "PAT_ID": "A|000001",
+          "RT": "ME",
+          "SIG": "TAKE ONE TABLET BY MOUTH TWICE DAILY",
+          "SITE": "A",
+          "STATUS": "H"
+        },
+        "synthetic": true
+      },
+      "created_at": "2026-10-26T17:31:57+00:00",
+      "default_option": null,
+      "id": "q-a182ab73",
+      "kind": "briar_unmapped_medication",
+      "match_key": "MISC",
+      "options": [
+        {
+          "key": "defer",
+          "label": "Keep quarantined; additional source evidence is required"
+        }
+      ],
+      "prompt": "No verified RxNorm match. Drug text and sig are archived; identify compound before target import.",
+      "run_id": "run-5341c8d6",
+      "status": "open"
+    },
+    {
+      "affected_count": 6,
+      "answer": null,
+      "blocking": true,
+      "context": {
+        "source": {
+          "CHART": "000001",
+          "DAY": "20261010",
+          "ID": "00000001",
+          "PAT_ID": "A|000001",
+          "RT": "VI",
+          "SITE": "A",
+          "STATUS": "F",
+          "TIME": "2461"
+        },
+        "synthetic": true
+      },
+      "created_at": "2026-10-26T17:31:56+00:00",
+      "default_option": null,
+      "id": "q-9593811a",
+      "kind": "briar_local_time",
+      "match_key": "20261010|2461",
+      "options": [
+        {
+          "key": "defer",
+          "label": "Keep quarantined; additional source evidence is required"
+        }
+      ],
+      "prompt": "Cannot establish UTC time: invalid local time. Need source log/offset; no first-fold assumption.",
+      "run_id": "run-5341c8d6",
+      "status": "open"
+    },
+    {
+      "affected_count": 6,
+      "answer": null,
+      "blocking": true,
+      "context": {
+        "source": {
+          "AMOUNT": "-2500",
+          "CHART": "000001",
+          "CODE": "OFFICE",
+          "DAY": "20261010",
+          "ID": "00000001",
+          "PAT_ID": "A|000001",
+          "RT": "BI",
+          "SITE": "A",
+          "VISIT": "00000001"
+        },
+        "synthetic": true
+      },
+      "created_at": "2026-10-26T17:31:57+00:00",
+      "default_option": null,
+      "id": "q-337741aa",
+      "kind": "briar_credit",
+      "match_key": "A",
+      "options": [
+        {
+          "key": "defer",
+          "label": "Keep quarantined; additional source evidence is required"
+        }
+      ],
+      "prompt": "Source credit cannot be represented by Nimbus ChargeItem; need a credit workflow. Do not flip the sign.",
+      "run_id": "run-5341c8d6",
+      "status": "open"
+    },
+    {
+      "affected_count": 6,
+      "answer": null,
+      "blocking": true,
+      "context": {
+        "source": {
+          "AMOUNT": "-2500",
+          "CHART": "000015",
+          "CODE": "OFFICE",
+          "DAY": "20251215",
+          "ID": "00000030",
+          "PAT_ID": "B|000015",
+          "RT": "BI",
+          "SITE": "B",
+          "VISIT": "00000030"
+        },
+        "synthetic": true
+      },
+      "created_at": "2026-10-26T17:31:57+00:00",
+      "default_option": null,
+      "id": "q-ed81d684",
+      "kind": "briar_credit",
+      "match_key": "B",
+      "options": [
+        {
+          "key": "defer",
+          "label": "Keep quarantined; additional source evidence is required"
+        }
+      ],
+      "prompt": "Source credit cannot be represented by Nimbus ChargeItem; need a credit workflow. Do not flip the sign.",
+      "run_id": "run-5341c8d6",
+      "status": "open"
+    },
+    {
+      "affected_count": 5,
+      "answer": null,
+      "blocking": true,
+      "context": {
+        "source": {
+          "ALLERGY": "PENICILLIN:RASH",
+          "CHART": "000001",
+          "DOB": "",
+          "IDENTITY_CANDIDATES": [],
+          "NAME": "FICTITIOUS0000,PERSON0000",
+          "NKA": "Y",
+          "PAT_ID": "A|000001",
+          "RT": "RE",
+          "SEX": "M",
+          "SITE": "A"
+        },
+        "synthetic": true
+      },
+      "created_at": "2026-10-26T17:31:56+00:00",
+      "default_option": null,
+      "id": "q-f7c83905",
+      "kind": "briar_birth_date",
+      "match_key": "blank",
+      "options": [
+        {
+          "key": "defer",
+          "label": "Keep quarantined; additional source evidence is required"
+        }
+      ],
+      "prompt": "Birth date missing or century ambiguous; need chart evidence. Do not invent a date or choose an analyst's preferred pivot.",
+      "run_id": "run-5341c8d6",
+      "status": "open"
+    },
+    {
+      "affected_count": 4,
+      "answer": null,
+      "blocking": true,
+      "context": {
+        "source": {
+          "CHART": "000034",
+          "DAY": "20251102",
+          "ID": "00000068",
+          "PAT_ID": "B|000034",
+          "RT": "VI",
+          "SITE": "B",
+          "STATUS": "F",
+          "TIME": "0130"
+        },
+        "synthetic": true
+      },
+      "created_at": "2026-10-26T17:31:56+00:00",
+      "default_option": null,
+      "id": "q-1c63b882",
+      "kind": "briar_local_time",
+      "match_key": "20251102|0130",
+      "options": [
+        {
+          "key": "defer",
+          "label": "Keep quarantined; additional source evidence is required"
+        }
+      ],
+      "prompt": "Cannot establish UTC time: DST wall-clock time ambiguous or nonexistent. Need source log/offset; no first-fold assumption.",
+      "run_id": "run-5341c8d6",
+      "status": "open"
+    },
+    {
+      "affected_count": 4,
+      "answer": null,
+      "blocking": true,
+      "context": {
+        "source": {
+          "CHART": "000036",
+          "DAY": "20260308",
+          "ID": "00000072",
+          "PAT_ID": "B|000036",
+          "RT": "VI",
+          "SITE": "B",
+          "STATUS": "F",
+          "TIME": "0230"
+        },
+        "synthetic": true
+      },
+      "created_at": "2026-10-26T17:31:56+00:00",
+      "default_option": null,
+      "id": "q-e95f7e60",
+      "kind": "briar_local_time",
+      "match_key": "20260308|0230",
+      "options": [
+        {
+          "key": "defer",
+          "label": "Keep quarantined; additional source evidence is required"
+        }
+      ],
+      "prompt": "Cannot establish UTC time: DST wall-clock time ambiguous or nonexistent. Need source log/offset; no first-fold assumption.",
+      "run_id": "run-5341c8d6",
+      "status": "open"
+    },
+    {
+      "affected_count": 4,
+      "answer": null,
+      "blocking": true,
+      "context": {
+        "source": {
+          "ABN_FLAG": "H",
+          "CHART": "000038",
+          "DAY": "20261010",
+          "ID": "00000075",
+          "PAT_ID": "A|000038",
+          "RESULT": "112H",
+          "REV": "02",
+          "RT": "LA",
+          "SITE": "A",
+          "STATUS": "C",
+          "TEST": "GLU",
+          "TIME": "1100",
+          "UNIT": "",
+          "_withdrawn": false,
+          "kind": "lab"
+        },
+        "synthetic": true
+      },
+      "created_at": "2026-10-26T17:31:57+00:00",
+      "default_option": null,
+      "id": "q-de75ea96",
+      "kind": "briar_lab_unit",
+      "match_key": "GLU|A",
+      "options": [
+        {
+          "key": "defer",
+          "label": "Keep quarantined; additional source evidence is required"
+        }
+      ],
+      "prompt": "Unit missing in mixed-device population. Cannot infer glucose units from magnitude or a site default.",
+      "run_id": "run-5341c8d6",
+      "status": "open"
+    },
+    {
+      "affected_count": 4,
+      "answer": null,
+      "blocking": true,
+      "context": {
+        "source": {
+          "ABN_FLAG": "H",
+          "CHART": "000019",
+          "DAY": "20261010",
+          "ID": "00000038",
+          "PAT_ID": "B|000019",
+          "RESULT": "6.2H",
+          "REV": "02",
+          "RT": "LA",
+          "SITE": "B",
+          "STATUS": "C",
+          "TEST": "GLU",
+          "TIME": "1100",
+          "UNIT": "",
+          "_withdrawn": false,
+          "kind": "lab"
+        },
+        "synthetic": true
+      },
+      "created_at": "2026-10-26T17:31:57+00:00",
+      "default_option": null,
+      "id": "q-813c68be",
+      "kind": "briar_lab_unit",
+      "match_key": "GLU|B",
+      "options": [
+        {
+          "key": "defer",
+          "label": "Keep quarantined; additional source evidence is required"
+        }
+      ],
+      "prompt": "Unit missing in mixed-device population. Cannot infer glucose units from magnitude or a site default.",
+      "run_id": "run-5341c8d6",
+      "status": "open"
+    },
+    {
+      "affected_count": 3,
+      "answer": null,
+      "blocking": true,
+      "context": {
+        "source": {
+          "ALLERGY": "",
+          "CHART": "000042",
+          "DOB": "250101",
+          "IDENTITY_CANDIDATES": [],
+          "NAME": "FICTITIOUS0083,PERSON0083",
+          "NKA": "Y",
+          "PAT_ID": "B|000042",
+          "RT": "RE",
+          "SEX": "F",
+          "SITE": "B"
+        },
+        "synthetic": true
+      },
+      "created_at": "2026-10-26T17:31:56+00:00",
+      "default_option": null,
+      "id": "q-920b64ef",
+      "kind": "briar_birth_date",
+      "match_key": "250101",
+      "options": [
+        {
+          "key": "defer",
+          "label": "Keep quarantined; additional source evidence is required"
+        }
+      ],
+      "prompt": "Birth date missing or century ambiguous; need chart evidence. Do not invent a date or choose an analyst's preferred pivot.",
+      "run_id": "run-5341c8d6",
+      "status": "open"
+    },
+    {
+      "affected_count": 2,
+      "answer": null,
+      "blocking": false,
+      "context": {
+        "candidates": [
+          "B|000004",
+          "B|000005"
+        ],
+        "synthetic": true
+      },
+      "created_at": "2026-10-26T17:31:56+00:00",
+      "default_option": "keep_separate",
+      "id": "q-b18a3daa",
+      "kind": "briar_identity_review",
+      "match_key": "B|000004|B|000005",
+      "options": [
+        {
+          "key": "keep_separate",
+          "label": "Retain the distinct source charts pending identity audit"
+        }
+      ],
+      "prompt": "Matching demographics may be twins or duplicate charts. Keep source charts separate pending an identity audit; no automatic merge.",
+      "run_id": "run-5341c8d6",
+      "status": "open"
+    }
+  ],
+  "readiness": {
+    "checks": [
+      {
+        "check": "run_finished",
+        "detail": {
+          "reason": null,
+          "status": "completed_with_exceptions"
+        },
+        "ok": true,
+        "required": true
+      },
+      {
+        "check": "no_blocking_questions",
+        "detail": [
+          {
+            "id": "q-aff8ab15",
+            "kind": "briar_appointment_status",
+            "records": 19
+          },
+          {
+            "id": "q-a182ab73",
+            "kind": "briar_unmapped_medication",
+            "records": 14
+          },
+          {
+            "id": "q-9593811a",
+            "kind": "briar_local_time",
+            "records": 6
+          },
+          {
+            "id": "q-337741aa",
+            "kind": "briar_credit",
+            "records": 6
+          },
+          {
+            "id": "q-ed81d684",
+            "kind": "briar_credit",
+            "records": 6
+          },
+          {
+            "id": "q-f7c83905",
+            "kind": "briar_birth_date",
+            "records": 5
+          },
+          {
+            "id": "q-1c63b882",
+            "kind": "briar_local_time",
+            "records": 4
+          },
+          {
+            "id": "q-e95f7e60",
+            "kind": "briar_local_time",
+            "records": 4
+          },
+          {
+            "id": "q-de75ea96",
+            "kind": "briar_lab_unit",
+            "records": 4
+          },
+          {
+            "id": "q-813c68be",
+            "kind": "briar_lab_unit",
+            "records": 4
+          },
+          {
+            "id": "q-920b64ef",
+            "kind": "briar_birth_date",
+            "records": 3
+          }
+        ],
+        "ok": false,
+        "required": true
+      },
+      {
+        "check": "every_record_resolved",
+        "detail": {
+          "AllergyIntolerance": {
+            "blocked": 1
+          },
+          "Appointment": {
+            "blocked": 7,
+            "held": 19
+          },
+          "ChargeItem": {
+            "blocked": 20,
+            "held": 12
+          },
+          "Condition": {
+            "blocked": 8
+          },
+          "DocumentReference": {
+            "blocked": 8
+          },
+          "Encounter": {
+            "blocked": 7,
+            "held": 14
+          },
+          "MedicationRequest": {
+            "blocked": 7,
+            "held": 14
+          },
+          "Observation": {
+            "blocked": 21,
+            "held": 8
+          },
+          "Patient": {
+            "held": 8
+          }
+        },
+        "ok": false,
+        "required": true
+      },
+      {
+        "check": "pause_alerts_acknowledged_by_named_users",
+        "detail": [],
+        "ok": true,
+        "required": true
+      },
+      {
+        "check": "verification",
+        "detail": {
+          "counts": true,
+          "readback_mismatch_rate": 0.0,
+          "sentinels": {
+            "abnormal_labs": true,
+            "active_anticoagulants": true,
+            "active_insulin": true,
+            "patients_with_allergies": true
+          }
+        },
+        "ok": true,
+        "required": true
+      },
+      {
+        "check": "fidelity_loss_signed_off",
+        "detail": {
+          "missing": {
+            "AllergyIntolerance": 58,
+            "Appointment": 294,
+            "Condition": 70,
+            "DocumentReference": 312,
+            "Encounter": 299,
+            "MedicationRequest": 299,
+            "Observation": 40,
+            "Patient": 14
+          },
+          "signed": {},
+          "stale": {}
+        },
+        "ok": false,
+        "required": true
+      },
+      {
+        "check": "assistant_answers_reviewed",
+        "detail": [],
+        "ok": true,
+        "required": false
+      },
+      {
+        "check": "non_blocking_questions_reviewed",
+        "detail": [
+          {
+            "id": "q-b18a3daa",
+            "kind": "briar_identity_review",
+            "records": 2
+          }
+        ],
+        "ok": false,
+        "required": false
+      }
+    ],
+    "decision": "NO-GO",
+    "reasons": [
+      "no_blocking_questions",
+      "every_record_resolved",
+      "fidelity_loss_signed_off"
+    ],
+    "run_id": "run-5341c8d6",
+    "warnings": [
+      "non_blocking_questions_reviewed"
+    ]
+  },
+  "run_id": "run-5341c8d6",
+  "seconds": 7.326,
+  "source_rows_accounted": 3848,
+  "summary": {
+    "batches": 39,
+    "by_type": {
+      "AllergyIntolerance": {
+        "counts": {
+          "blocked": 1,
+          "loaded": 29
+        },
+        "fidelity_mean": 0.76
+      },
+      "Appointment": {
+        "counts": {
+          "blocked": 7,
+          "held": 19,
+          "loaded": 294
+        },
+        "fidelity_mean": 0.95
+      },
+      "ChargeItem": {
+        "counts": {
+          "blocked": 20,
+          "held": 12,
+          "loaded": 288
+        },
+        "fidelity_mean": 1.0
+      },
+      "Condition": {
+        "counts": {
+          "blocked": 8,
+          "loaded": 312
+        },
+        "fidelity_mean": 0.972
+      },
+      "DocumentReference": {
+        "counts": {
+          "blocked": 8,
+          "loaded": 312
+        },
+        "fidelity_mean": 0.9
+      },
+      "Encounter": {
+        "counts": {
+          "blocked": 7,
+          "held": 14,
+          "loaded": 299
+        },
+        "fidelity_mean": 0.95
+      },
+      "MedicationRequest": {
+        "counts": {
+          "blocked": 7,
+          "held": 14,
+          "loaded": 299
+        },
+        "fidelity_mean": 0.9167
+      },
+      "Observation": {
+        "counts": {
+          "blocked": 21,
+          "dropped": 40,
+          "held": 8,
+          "loaded": 891
+        },
+        "fidelity_mean": 1.0
+      },
+      "Patient": {
+        "counts": {
+          "held": 8,
+          "loaded": 312
+        },
+        "fidelity_mean": 0.9985
+      }
+    },
+    "config": {
+      "as_of": "2026-10-26",
+      "batch_size": 100,
+      "types": [
+        "Patient",
+        "Encounter",
+        "Condition",
+        "AllergyIntolerance",
+        "MedicationRequest",
+        "Observation",
+        "DocumentReference",
+        "Appointment",
+        "ChargeItem"
+      ]
+    },
+    "open_alerts": [
+      {
+        "id": "al-ec1b0262",
+        "message": "[AllergyIntolerance] mean record fidelity below 0.85: fidelity_mean=0.76 (threshold 0.85)",
+        "rtype": "AllergyIntolerance",
+        "rule": "fidelity_warn",
+        "severity": "warn"
+      },
+      {
+        "id": "al-950c3f29",
+        "message": "[AllergyIntolerance] less than 80% of coded fields mapped to a standard: code_coverage=0.0 (threshold 0.8)",
+        "rtype": "AllergyIntolerance",
+        "rule": "code_coverage",
+        "severity": "warn"
+      }
+    ],
+    "open_questions": {
+      "blocking": 11,
+      "records_waiting": 75,
+      "total": 12
+    },
+    "passes": 1,
+    "pause_reason": null,
+    "run_id": "run-5341c8d6",
+    "source": "runs/briar-complete/source",
+    "status": "completed_with_exceptions"
+  },
+  "target_counts": {
+    "AllergyIntolerance": 29,
+    "Appointment": 294,
+    "ChargeItem": 288,
+    "Condition": 312,
+    "DocumentReference": 312,
+    "Encounter": 299,
+    "MedicationRequest": 299,
+    "Observation": 891,
+    "Patient": 312
+  },
+  "verification": {
+    "counts": {
+      "by_type": {
+        "AllergyIntolerance": {
+          "blocked": 1,
+          "funnel_closed": true,
+          "loaded": 29,
+          "nimbus": 29,
+          "nimbus_matches_loaded": true,
+          "staged": 30
+        },
+        "Appointment": {
+          "blocked": 7,
+          "funnel_closed": true,
+          "held": 19,
+          "loaded": 294,
+          "nimbus": 294,
+          "nimbus_matches_loaded": true,
+          "staged": 320
+        },
+        "ChargeItem": {
+          "blocked": 20,
+          "funnel_closed": true,
+          "held": 12,
+          "loaded": 288,
+          "nimbus": 288,
+          "nimbus_matches_loaded": true,
+          "staged": 320
+        },
+        "Condition": {
+          "blocked": 8,
+          "funnel_closed": true,
+          "loaded": 312,
+          "nimbus": 312,
+          "nimbus_matches_loaded": true,
+          "staged": 320
+        },
+        "DocumentReference": {
+          "blocked": 8,
+          "funnel_closed": true,
+          "loaded": 312,
+          "nimbus": 312,
+          "nimbus_matches_loaded": true,
+          "staged": 320
+        },
+        "Encounter": {
+          "blocked": 7,
+          "funnel_closed": true,
+          "held": 14,
+          "loaded": 299,
+          "nimbus": 299,
+          "nimbus_matches_loaded": true,
+          "staged": 320
+        },
+        "MedicationRequest": {
+          "blocked": 7,
+          "funnel_closed": true,
+          "held": 14,
+          "loaded": 299,
+          "nimbus": 299,
+          "nimbus_matches_loaded": true,
+          "staged": 320
+        },
+        "Observation": {
+          "blocked": 21,
+          "dropped": 40,
+          "funnel_closed": true,
+          "held": 8,
+          "loaded": 891,
+          "nimbus": 891,
+          "nimbus_matches_loaded": true,
+          "staged": 960
+        },
+        "Patient": {
+          "funnel_closed": true,
+          "held": 8,
+          "loaded": 312,
+          "nimbus": 312,
+          "nimbus_matches_loaded": true,
+          "staged": 320
+        }
+      },
+      "ok": true
+    },
+    "ok": true,
+    "readback": {
+      "by_type": {
+        "AllergyIntolerance": {
+          "mismatched": 0,
+          "sampled": 29
+        },
+        "Appointment": {
+          "mismatched": 0,
+          "sampled": 294
+        },
+        "ChargeItem": {
+          "mismatched": 0,
+          "sampled": 288
+        },
+        "Condition": {
+          "mismatched": 0,
+          "sampled": 312
+        },
+        "DocumentReference": {
+          "mismatched": 0,
+          "sampled": 312
+        },
+        "Encounter": {
+          "mismatched": 0,
+          "sampled": 299
+        },
+        "MedicationRequest": {
+          "mismatched": 0,
+          "sampled": 299
+        },
+        "Observation": {
+          "mismatched": 0,
+          "sampled": 891
+        },
+        "Patient": {
+          "mismatched": 0,
+          "sampled": 312
+        }
+      },
+      "mismatch_rate": 0.0,
+      "mismatches": [],
+      "ok": true,
+      "sampled": 3036
+    },
+    "sentinels": {
+      "checks": [
+        {
+          "description": "Active warfarin/apixaban orders",
+          "expected_in_nimbus": 0,
+          "name": "active_anticoagulants",
+          "nimbus": 0,
+          "not_loaded_by_status": {},
+          "not_loaded_examples": [],
+          "ok": true,
+          "source": 0,
+          "unexplained_delta": 0
+        },
+        {
+          "description": "Active insulin orders",
+          "expected_in_nimbus": 0,
+          "name": "active_insulin",
+          "nimbus": 0,
+          "not_loaded_by_status": {},
+          "not_loaded_examples": [],
+          "ok": true,
+          "source": 0,
+          "unexplained_delta": 0
+        },
+        {
+          "description": "Distinct patients with at least one real allergy",
+          "expected_in_nimbus": 29,
+          "name": "patients_with_allergies",
+          "nimbus": 29,
+          "not_loaded_by_status": {
+            "blocked": 1
+          },
+          "not_loaded_examples": [
+            "A|000001"
+          ],
+          "ok": true,
+          "source": 30,
+          "unexplained_delta": 0
+        },
+        {
+          "description": "Lab results flagged abnormal (H/L/A)",
+          "expected_in_nimbus": 281,
+          "name": "abnormal_labs",
+          "nimbus": 281,
+          "not_loaded_by_status": {
+            "blocked": 7,
+            "dropped": 7,
+            "held": 8
+          },
+          "not_loaded_examples": [
+            "B|00000080|GLU",
+            "B|00000084|GLU",
+            "A|00000159|GLU",
+            "A|00000167|GLU",
+            "B|00000238|GLU",
+            "B|00000250|GLU",
+            "A|00000317|GLU",
+            "B|00000042|GLU",
+            "A|00000083|GLU",
+            "B|00000124|GLU"
+          ],
+          "ok": true,
+          "source": 303,
+          "unexplained_delta": 0
+        }
+      ],
+      "ok": true
+    }
+  }
+}

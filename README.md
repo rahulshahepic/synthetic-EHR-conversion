@@ -20,6 +20,7 @@ tests/                pytest suites
 - [Plan & milestones](docs/PLAN.md)
 - [Source: Halcyon](docs/source-halcyon.md)
 - [Source: Delphi](docs/delphi.md)
+- [Briar: autonomous messy-source rehearsal, results and analyst dialogue](docs/runs/briar-20261026/RESULTS.md)
 - [Target: Nimbus & import API](docs/target-nimbus.md)
 - [Mapping & fidelity](docs/mapping-and-fidelity.md)
 - [Metrics, monitoring, pause & revert](docs/metrics-and-monitoring.md)

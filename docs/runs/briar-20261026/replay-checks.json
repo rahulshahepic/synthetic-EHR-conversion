@@ -1,0 +1,6 @@
+{
+  "analyst_replay_exact": true,
+  "frozen_spec_bytes_exact": true,
+  "reprofile_exact": true,
+  "rule_replay_exact": true
+}
