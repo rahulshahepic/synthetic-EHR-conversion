@@ -290,3 +290,41 @@ def test_duplicate_charts_without_truth_or_rule_grades_ungraded(monkeypatch):
     spec = {"rules": [dict(specgen.MERGE_POLICY_RULE)], "known_unknowns": []}
     verdict = scorecard.grade_entry({"id": "disagreement_duplicate_charts"}, spec)
     assert verdict["verdict"] == "ungraded", verdict
+
+
+@pytest.mark.parametrize("truth", [
+    {"account_field": "ACCT", "min_departments": "2"},
+    {"account_field": "ACCT", "min_departments": True},
+    {"account_field": "ACCT", "min_departments": 0},
+    {"account_field": 7, "min_departments": 2},
+    {"account_field": "", "min_departments": 2},
+])
+def test_wrongly_typed_keying_truth_grades_ungraded(monkeypatch, truth):
+    """PR #43 round-6 review (Claude): _keying_truth checked only for a
+    dict with non-None members, so min_departments "2" crashed the
+    ``>=`` comparison and aborted grade(). Member types are checked
+    too: a non-empty string field name, a positive int."""
+    spec = _keying_spec({"key_fields": ["LAB.TXT.ACCT", "REG.TXT.ACCT"],
+                         "master_index": False, "true_duplicates": True})
+    for entry_id in ("dict_registration_account_claim",
+                     "disagreement_duplicate_charts"):
+        variant = dict(scorecard.CHECKS[entry_id])
+        variant["keying_truth"] = truth
+        monkeypatch.setitem(scorecard.CHECKS, entry_id, variant)
+        verdict = scorecard.grade_entry({"id": entry_id}, spec)
+        assert verdict["verdict"] == "ungraded", (entry_id, verdict)
+
+
+def test_keying_check_without_truth_or_rule_grades_ungraded(monkeypatch):
+    """PR #43 round-6 review (Claude): the truth-first check covered
+    only duplicate_charts, so a regular keying check with no
+    keying_truth and a spec with no keying rule fell through to a
+    confident "missed"."""
+    variant = dict(scorecard.CHECKS["dict_registration_account_claim"])
+    del variant["keying_truth"]
+    monkeypatch.setitem(scorecard.CHECKS, "dict_registration_account_claim",
+                        variant)
+    spec = {"rules": [dict(specgen.MERGE_POLICY_RULE)], "known_unknowns": []}
+    verdict = scorecard.grade_entry({"id": "dict_registration_account_claim"},
+                                    spec)
+    assert verdict["verdict"] == "ungraded", verdict

@@ -101,14 +101,21 @@ _DEMOGRAPHIC_FIELDS = {"SSN", "SSN4", "DOB", "NAME", "PATIENT_NAME", "MRN"}
 
 def _keying_truth(check: dict[str, Any]) -> dict[str, Any] | None:
     """The check's recorded keying truth, or None when there is none
-    to grade against: the key is missing, or its value is not a dict
-    at all (a hand-edited ``"ACCT/2"`` string in the grading data).
-    A malformed truth is "ungraded", never an AttributeError that
-    aborts grading for every discrepancy, and never a default."""
+    to grade against: the key is missing, its value is not a dict (a
+    hand-edited ``"ACCT/2"`` string), or a member has the wrong type
+    (``account_field`` must be a non-empty string, ``min_departments``
+    a positive int — ``"2"`` would crash the ``>=`` comparison). A
+    malformed truth is "ungraded", never an exception that aborts
+    grading for every discrepancy, and never a default."""
     truth = check.get("keying_truth")
     if not isinstance(truth, dict):
         return None
-    if truth.get("account_field") is None or truth.get("min_departments") is None:
+    account_field = truth.get("account_field")
+    min_departments = truth.get("min_departments")
+    if not isinstance(account_field, str) or not account_field:
+        return None
+    if not isinstance(min_departments, int) or isinstance(min_departments, bool) \
+            or min_departments < 1:
         return None
     return truth
 
@@ -203,6 +210,16 @@ def grade_entry(entry: dict[str, Any], spec: dict[str, Any]) -> dict[str, Any]:
                               "so the resolution is not fully recorded"}
         return {"id": entry["id"], "verdict": "swallowed",
                 "detail": "no keying story / merge policy in the spec"}
+    if ("identity", "keying_story") in check["subjects"] \
+            and _keying_truth(check) is None:
+        # Same truth-first rule as duplicate_charts: a keying check with
+        # no usable keying_truth is ungraded whatever the spec holds,
+        # including no keying rule at all (which would otherwise fall
+        # through to a confident "missed").
+        return {"id": entry["id"], "verdict": "ungraded",
+                "detail": "check data carries no keying_truth for "
+                          "this entry; refusing to grade against a "
+                          "default truth"}
     for subject, predicate in check["subjects"]:
         if _unknown_for(spec, subject, predicate):
             return {"id": entry["id"], "verdict": "routed-to-runtime-question",

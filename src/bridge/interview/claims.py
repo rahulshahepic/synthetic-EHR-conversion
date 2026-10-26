@@ -88,23 +88,6 @@ def values_match(subject: str, predicate: str, a: Any, b: Any) -> bool:
     return False
 
 
-def resolution_added_facts(subject: str, predicate: str,
-                           claim_value: Any, resolved_value: Any) -> bool:
-    """Whether the resolved value records facts the claim never stated
-    (keying story: a flag present in the resolution but absent from
-    the claim — ``true_duplicates`` is the current case). Such facts
-    carry the resolution's provenance, not the claim's: the claim's
-    evidence cannot data-confirm a fact it never mentioned, so a
-    partially-matching winner's confirmation is not enough on its own
-    (see specgen._rule_provenance)."""
-    if (subject, predicate) != ("identity", "keying_story"):
-        return False
-    if not isinstance(claim_value, dict) or not isinstance(resolved_value, dict):
-        return False
-    return any(flag not in claim_value for flag in resolved_value
-               if flag not in ("key_fields", "master_index"))
-
-
 def validate_binding(value: Any) -> tuple[str, str]:
     """A subject-to-field binding is exactly two non-empty strings:
     ``(file, field)``. Anything else — a bare string, a 1- or 3-element

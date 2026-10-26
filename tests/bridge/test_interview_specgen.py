@@ -489,24 +489,39 @@ def test_resolution_added_fact_is_not_confirmed_by_the_winner():
     assert rule["provenance"]["kind"] == "analyst"
 
 
-def test_resolution_added_fact_confirmed_by_the_resolutions_own_evidence():
-    """Same shape, but the resolution cites the binding's observation
-    itself: both routes confirm — the winner's for the stated core,
-    the resolution's for the added fact — and the rule confirms."""
+def test_resolution_evidence_does_not_confirm_the_added_fact():
+    """PR #43 round-6 review (Claude, reproduced): the resolution
+    citing the binding's observation confirmed the true_duplicates it
+    added. A field observation measures nothing about how registration
+    behaves, so a keying story carrying true_duplicates is never
+    data-confirmed, whoever cites the observation."""
     claim = {"key_fields": _KEY_FIELDS, "master_index": False}
     resolved = {"key_fields": _KEY_FIELDS, "master_index": False,
                 "true_duplicates": True}
     rule = _keying_rule(_keying_ledger(claim, resolved,
                                        resolution_refs=("OBS-0001",)))
-    assert rule["data_confirmed"] is True
-    assert rule["provenance"]["kind"] == "profiler-data"
+    assert rule["data_confirmed"] is False
+    assert rule["provenance"]["kind"] == "analyst"
 
 
-def test_exactly_stated_keying_story_still_confirms():
-    """Control: claim and resolution state the identical story,
-    flag included — the winner route confirms as before."""
+def test_profiler_labelled_claim_does_not_confirm_true_duplicates():
+    """PR #43 round-6 review (Claude, reproduced): a claim labelled
+    profiler-data stating the full story, flag included, and citing the
+    bound field's observation came out profiler-data + data_confirmed.
+    The label is self-declared and the observation measures a field,
+    not registration behaviour: unconfirmed, and the unearned kind is
+    demoted."""
     story = {"key_fields": _KEY_FIELDS, "master_index": False,
              "true_duplicates": True}
+    rule = _keying_rule(_keying_ledger(story, dict(story)))
+    assert rule["data_confirmed"] is False
+    assert rule["provenance"]["kind"] != "profiler-data"
+
+
+def test_keying_core_alone_still_confirms():
+    """Control: a story with no fact beyond its key fields still
+    confirms through the bound observation, as before."""
+    story = {"key_fields": _KEY_FIELDS, "master_index": False}
     rule = _keying_rule(_keying_ledger(story, dict(story)))
     assert rule["data_confirmed"] is True
     assert rule["provenance"]["kind"] == "profiler-data"
@@ -713,13 +728,13 @@ def test_mixed_winners_partial_confirmation_does_not_leak(profiler_first):
     assert rule["provenance"]["kind"] == "analyst"
 
 
-def test_mixed_winners_resolution_evidence_confirms_the_complete_value():
-    """Same mixed winners, but the resolution cites the binding's
-    observation itself: the complete value is then confirmed through
-    the resolution's own route, the supplier of the added fact."""
+def test_mixed_winners_resolution_evidence_does_not_confirm():
+    """Same mixed winners, with the resolution citing the binding's
+    observation itself: still unconfirmed — no field observation can
+    confirm true_duplicates."""
     rule = _keying_rule(_mixed_winner_ledger(
         True, resolution_refs=("OBS-0001",)))
-    assert rule["data_confirmed"] is True
+    assert rule["data_confirmed"] is False
 
 
 # -- round-5 review: the allowlist reads resolved state, data only -------------
@@ -795,21 +810,23 @@ def test_overruled_single_claim_layout_feeds_no_fields():
     assert not any(r["predicate"] == "keying_story" for r in pkg.spec["rules"])
     assert any(o["predicate"] == "keying_story"
                for o in pkg.spec["policy_overrides"])
-    # The corrected layout's own field validates.
+    # The corrected layout was introduced by the resolution, which is a
+    # selection, not evidence: no documentary claim states it, so even
+    # its ACCT field does not validate (round-6 review).
     pkg = _keying_pkg(_layout_store(corrected),
                       ["REG.TXT.ACCT", "LAB.TXT.ACCT"])
-    assert any(r["predicate"] == "keying_story" for r in pkg.spec["rules"])
+    assert not any(r["predicate"] == "keying_story" for r in pkg.spec["rules"])
     # Withdrawn: even the surviving field is gone.
     pkg = _keying_pkg(_layout_store(None), ["REG.TXT.ACCT", "LAB.TXT.ACCT"])
     assert not any(r["predicate"] == "keying_story" for r in pkg.spec["rules"])
 
 
-def test_resolution_introduced_layout_feeds_its_fields():
-    """PR #43 round-5 review: the allowlist loop read only claim
-    values, so a layout the RESOLUTION introduced contributed
-    nothing — the corrected NEW_ACCT was rejected while the overruled
-    OLD_ACCT still validated. Both halves follow from reading the
-    resolved state."""
+def test_resolution_introduced_layout_feeds_no_fields():
+    """The allowlist reads the resolved state, so the overruled
+    OLD_ACCT does not validate. But a resolution is a selection, not
+    evidence (round-6 review): a layout only the RESOLUTION states —
+    NEW_ACCT, whatever kind the resolution declares — feeds nothing
+    either, until a documentary claim states it."""
     store = claims_mod.ClaimStore()
     store.add(claims_mod.Claim(
         "file:REG", "layout_binding",
@@ -821,7 +838,7 @@ def test_resolution_introduced_layout_feeds_its_fields():
                   "DATADICT.TXT v4.1 errata (estate document)",
                   source_kind="document")
     pkg = _keying_pkg(store, ["REG.TXT.NEW_ACCT", "LAB.TXT.ACCT"])
-    assert any(r["predicate"] == "keying_story" for r in pkg.spec["rules"])
+    assert not any(r["predicate"] == "keying_story" for r in pkg.spec["rules"])
     store2 = claims_mod.ClaimStore()
     store2.add(claims_mod.Claim(
         "file:REG", "layout_binding",
@@ -859,19 +876,24 @@ def test_layout_kind_comes_from_the_source_not_the_label():
     pkg = specgen.generate_spec([], store, "delphi")
     assert not any(r["predicate"] == "keying_story" for r in pkg.spec["rules"])
 
-    # Control: the same layout from an estate-document source feeds
-    # the allowlist with no source_kind label at all.
-    store2 = claims_mod.ClaimStore()
-    store2.add(claims_mod.Claim(
-        "file:AUTO_MERGE", "layout_binding",
-        {"path": "AUTO_MERGE.ALL",
-         "layouts": {"X": [{"name": "CHARTS"}]}},
-        "LAYOUTS.DAT v5.0 (estate document)"))
-    store2.add(claims_mod.Claim(
-        "identity", "keying_story",
-        {"key_fields": ["AUTO_MERGE.ALL.CHARTS"], "master_index": False},
-        "ledger:E000040 (an analyst)", source_kind="analyst"))
-    pkg = specgen.generate_spec([], store2, "delphi")
+    # An estate-document source with NO structured kind earns nothing
+    # either: there is no free-text fallback (round-6 review).
+    def _store(source_kind):
+        store2 = claims_mod.ClaimStore()
+        store2.add(claims_mod.Claim(
+            "file:AUTO_MERGE", "layout_binding",
+            {"path": "AUTO_MERGE.ALL",
+             "layouts": {"X": [{"name": "CHARTS"}]}},
+            "LAYOUTS.DAT v5.0 (estate document)", source_kind=source_kind))
+        store2.add(claims_mod.Claim(
+            "identity", "keying_story",
+            {"key_fields": ["AUTO_MERGE.ALL.CHARTS"], "master_index": False},
+            "ledger:E000040 (an analyst)", source_kind="analyst"))
+        return store2
+    pkg = specgen.generate_spec([], _store(""), "delphi")
+    assert not any(r["predicate"] == "keying_story" for r in pkg.spec["rules"])
+    # Control: the same document recorded as dictionary evidence feeds it.
+    pkg = specgen.generate_spec([], _store("dictionary"), "delphi")
     assert any(r["predicate"] == "keying_story" for r in pkg.spec["rules"])
 
 
@@ -966,13 +988,12 @@ def test_documentary_winning_claim_supports_the_resolved_layout():
     assert any(r["predicate"] == "keying_story" for r in pkg.spec["rules"])
 
 
-def test_resolution_only_document_layout_reaches_the_reader():
-    """PR #43 round-6 review (ChatGPT P2, reproduced): a document-
-    sourced resolve introducing a layout with no prior claim fed the
-    allowlist (the keying rule was emitted) but the subject never
-    became a rule, so the reader binding was empty and no unknown
-    flagged the gap. Settled resolution-only subjects are rules too:
-    the allowlist and the reader now use the same selected layouts."""
+def test_resolution_only_layout_is_neither_rule_nor_evidence():
+    """PR #43 round-6 review: a lone resolve (nothing claimed) is not
+    a fact anyone stated. It neither feeds the allowlist (so the
+    keying story naming its field is flagged) nor becomes a rule (so
+    the reader binding stays empty) — the allowlist and the reader
+    still agree, by both ignoring it."""
     events = [
         ledger_mod.LedgerEvent("E000001", "resolve", {
             "subject": "file:REG", "predicate": "layout_binding",
@@ -988,8 +1009,8 @@ def test_resolution_only_document_layout_reaches_the_reader():
     ]
     store = claims_mod.ClaimStore.from_ledger(events)
     pkg = specgen.generate_spec(events, store, "delphi")
-    assert any(r["predicate"] == "keying_story" for r in pkg.spec["rules"])
-    assert pkg.reader_binding["files"]["REG"]["path"] == "REG.TXT"
+    assert not any(r["predicate"] == "keying_story" for r in pkg.spec["rules"])
+    assert "REG" not in pkg.reader_binding["files"]
 
 
 # -- round-6 review: confirmation attribution ----------------------------------
@@ -1036,16 +1057,12 @@ def test_copied_ref_does_not_confirm_the_added_fact():
     assert rule["provenance"]["kind"] == "analyst"
 
 
-def test_kind_follows_the_confirming_complete_winner():
-    """PR #43 round-6 review (Claude): the kind came from winners[0]
-    even when that winner was PARTIAL and the confirmation came from
-    a different, complete winner. Here the first winner is an analyst
-    stating the keying core only; a profiler-data winner states the
-    complete story and its bound observation confirms it: the rule
-    takes the confirming complete winner's kind. (A complete
-    winners[0] keeps its kind when another winner confirms — kind
-    and confirmation are separate there; see the Delphi potassium
-    rule, analyst-kind and data-confirmed.)"""
+def test_profiler_winner_stating_true_duplicates_does_not_confirm():
+    """PR #43 round-6 review (Claude): a profiler-data winner stating
+    the complete story, true_duplicates included, with its bound ACCT
+    observation, made the rule profiler-data + data_confirmed. The ACCT
+    observation measures the field, not registration behaviour: the
+    rule is unconfirmed and the unearned profiler-data kind is gone."""
     events = [
         ledger_mod.LedgerEvent("E000001", "observation", {
             "obs_id": "OBS-1", "file": "REG.TXT", "field": "ACCT",
@@ -1073,8 +1090,8 @@ def test_kind_follows_the_confirming_complete_winner():
             "source_kind": "analyst", "evidence_refs": []}),
     ]
     rule = _keying_rule(events)
-    assert rule["data_confirmed"] is True
-    assert rule["provenance"]["kind"] == "profiler-data"
+    assert rule["data_confirmed"] is False
+    assert rule["provenance"]["kind"] == "analyst"
 
 
 def test_observation_payloads_is_the_shared_map():
@@ -1089,3 +1106,92 @@ def test_observation_payloads_is_the_shared_map():
     assert not hasattr(specgen, "_observation_payloads")
     assert not hasattr(specgen, "_is_data_observation")
     assert not hasattr(specgen, "_ref_confirms")
+
+
+# -- round-6 review (Claude): lone resolves, answer-derived layouts, merges ----
+
+def test_lone_resolve_emits_no_rule():
+    """PR #43 round-6 review (Claude, reproduced): resolution-only
+    subjects entered rule generation, so a single resolve event with
+    nothing claimed emitted a keying story (kind and confirmation
+    taken from the event's own label) or a codeset handling rule. A
+    resolution settles a dispute among claims; alone it states
+    nothing."""
+    events = [
+        ledger_mod.LedgerEvent("E000001", "observation", {
+            "obs_id": "OBS-0001", "file": "REG.TXT", "field": "ACCT",
+            "stats": {"rows": 10}}),
+        ledger_mod.LedgerEvent("E000002", "binding", {
+            "subject": "identity", "predicate": "keying_story",
+            "binding": ["REG.TXT", "ACCT"], "evidence_refs": ["OBS-0001"]}),
+        _layout_event("E000003", "REG", "REG.TXT"),
+        _layout_event("E000004", "LAB", "LAB.TXT"),
+        ledger_mod.LedgerEvent("E000005", "resolve", {
+            "subject": "identity", "predicate": "keying_story",
+            "value": {"key_fields": ["REG.TXT.ACCT", "LAB.TXT.ACCT"],
+                      "master_index": False, "true_duplicates": True},
+            "source": "anything", "source_kind": "profiler-data",
+            "evidence_refs": ["OBS-0001"]}),
+        ledger_mod.LedgerEvent("E000006", "resolve", {
+            "subject": "codeset:x", "predicate": "handling",
+            "value": "drop all", "source": "me"}),
+    ]
+    pkg = specgen.generate_spec(events, claims_mod.ClaimStore.from_ledger(events),
+                                "delphi")
+    assert not any(r["predicate"] == "keying_story" for r in pkg.spec["rules"])
+    assert not any(r["subject"] == "codeset:x" for r in pkg.spec["rules"])
+
+
+@pytest.mark.parametrize("with_claim", [False, True])
+def test_resolved_merge_policy_is_flagged(with_claim):
+    """PR #43 round-6 review (Claude): the merge-policy screen read
+    only claimed values, so resolving to auto_merge_all — alone, or
+    over a route_to_reconciliation claim — left no trace in
+    policy_overrides. The resolved value is screened too, and it
+    never becomes a rule."""
+    store = claims_mod.ClaimStore()
+    if with_claim:
+        store.add(claims_mod.Claim("identity", "merge_policy",
+                                   "route_to_reconciliation",
+                                   "ledger:E000001 (an analyst)",
+                                   source_kind="analyst"))
+    store.resolve("identity", "merge_policy", "auto_merge_all",
+                  "ledger:E000002 (an analyst)", source_kind="analyst")
+    pkg = specgen.generate_spec([], store, "delphi")
+    overrides = [o for o in pkg.spec["policy_overrides"]
+                 if o["predicate"] == "merge_policy"]
+    assert overrides and "auto_merge_all" in overrides[0]["claimed_values"]
+    assert not any(r["predicate"] == "merge_policy" and r["id"] != "SAFETY-IDENTITY-MERGE"
+                   for r in pkg.spec["rules"])
+
+
+def test_answer_derived_layout_claim_feeds_no_fields():
+    """PR #43 round-6 review (Claude): a layout claim's structured kind
+    is a label copied from the event. A dictionary-kind claim whose
+    evidence is an interview answer is that answer, whatever its
+    label: it feeds nothing. (Same claim with no answer ref: control.)"""
+    layout = {"path": "AUTO_MERGE.ALL", "layouts": {"X": [{"name": "CHARTS"}]}}
+
+    def events(refs):
+        return [
+            ledger_mod.LedgerEvent("E000001", "question", {"analyst": "greg",
+                                                           "text": "layouts?"}),
+            ledger_mod.LedgerEvent("E000002", "answer", {"text": "trust me"}),
+            ledger_mod.LedgerEvent("E000003", "claim", {
+                "subject": "file:AUTO_MERGE", "predicate": "layout_binding",
+                "value": layout, "source": "Greg Holt (systems) answer",
+                "source_kind": "dictionary", "evidence_refs": refs}),
+            ledger_mod.LedgerEvent("E000004", "claim", {
+                "subject": "identity", "predicate": "keying_story",
+                "value": {"key_fields": ["AUTO_MERGE.ALL.CHARTS"],
+                          "master_index": False},
+                "source": "ledger:E000002 (Greg Holt, systems)",
+                "source_kind": "analyst"}),
+        ]
+
+    for refs, emitted in ((["E000002"], False), ([], True)):
+        evs = events(refs)
+        pkg = specgen.generate_spec(evs, claims_mod.ClaimStore.from_ledger(evs),
+                                    "delphi")
+        assert any(r["predicate"] == "keying_story"
+                   for r in pkg.spec["rules"]) is emitted, refs

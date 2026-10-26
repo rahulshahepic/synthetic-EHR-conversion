@@ -59,7 +59,7 @@ from typing import Any
 
 from .claims import (Claim, ClaimStore, Dispute, is_data_observation,
                      observation_confirms, observation_payloads,
-                     resolution_added_facts, values_match)
+                     values_match)
 from .coverage import Inventory, build_checklist, uncovered
 from .ledger import LedgerEvent
 
@@ -105,58 +105,66 @@ MERGE_POLICY_RULE = {
 # the way it could when only whitespace was banned.
 
 
-def _layout_evidence(source: Any, source_kind: Any) -> bool:
-    """Whether a layout statement is *estate* evidence — a document
-    of the estate itself (dictionary, data dictionary, layouts file,
-    registration manual) rather than an interviewee's assertion.
+def _interview_event_ids(events: list[LedgerEvent]) -> set[str]:
+    """Ids of the ledger's question and answer events: what an
+    interviewee said, as opposed to what the estate's documents say."""
+    return {e.id for e in events if e.type in ("question", "answer")}
 
-    The classification is structured provenance first, not substring
-    matching on the free-text source: a ``ledger:`` source is an
-    analyst answer whatever label the event carries; a recorded
-    ``dictionary``/``document`` kind earns estate standing (so
-    "REGISTRATION MANUAL p.4", source_kind document, counts); an
-    ``analyst``/``profiler-data`` label does not, however the source
-    sentence is worded (so "per the estate layouts" from an analyst
-    earns nothing). Only a statement with NO structured kind falls
-    back to the conservative source reading, for ledgers recorded
-    before source_kind existed."""
-    src = source if isinstance(source, str) else ""
-    if src.startswith("ledger:"):
+
+def _layout_evidence(claim: Claim, interview_ids: set[str]) -> bool:
+    """Whether a layout CLAIM is estate evidence — a document of the
+    estate itself (dictionary, layouts file, registration manual) rather
+    than an interviewee's assertion.
+
+    Only a claim can be: a resolution selects among evidence and is
+    never evidence itself, so no ``resolve`` event — lone or not, however
+    labelled — adds a field. A claim earns estate standing only when
+    its structured kind is ``dictionary``/``document`` AND nothing ties
+    it to the interview: a ``ledger:`` source, or an evidence ref
+    naming a question/answer event, makes it an analyst answer whatever
+    label it carries. There is no free-text fallback: a claim with no
+    structured kind earns nothing, however its source is worded ("per
+    the estate layouts"), and a real manual recorded with kind
+    ``document`` counts whatever its title.
+
+    The ledger itself remains the trust root: its writer records
+    dictionary ingests and profiler observations alike, so a forged
+    document-kind claim is as possible as a forged observation. What
+    this closes is the route the builder exists to guard — an
+    interview answer turning into estate truth."""
+    if claim.source_kind not in ("dictionary", "document"):
         return False
-    if source_kind in ("dictionary", "document"):
-        return True
-    if source_kind:
+    if (claim.source or "").startswith("ledger:"):
         return False
-    return _conservative_kind(src) == "dictionary"
+    return not any(r in interview_ids for r in claim.evidence_refs)
 
 
 def _known_fields(store: ClaimStore, observations: dict[str, dict[str, Any]],
-                  inventory: Inventory | None) -> dict[str, set[str]]:
+                  inventory: Inventory | None,
+                  interview_ids: set[str] = frozenset()) -> dict[str, set[str]]:
     """The estate's real fields, keyed by file: ``FILE -> {FIELD}``,
     from the records that speak for the estate itself, available at
-    generation time: the store's settled layout state, the coverage
-    inventory, and the profiler's data observations recorded in the
-    ledger.
+    generation time: estate-document layout claims (``_layout_evidence``)
+    in their settled state, the coverage inventory, and the profiler's
+    data observations recorded in the ledger.
 
-    Only those records feed the allowlist. An analyst-kind layout
-    claim is an assertion by an interviewee, not estate truth: feeding
-    it in would let any claim mint the fields its own keying story
-    needs (an invented ``AUTO_MERGE.ALL`` layout makes the instruction
-    "valid"). And a document quote filed under an observation-like id
-    is not data either: only observations that pass the
-    data-observation test contribute their (file, field).
+    Only those records feed the allowlist. An interviewee's layout
+    claim is an assertion, not estate truth: feeding it in would let
+    any claim mint the fields its own keying story needs (an invented
+    ``AUTO_MERGE.ALL`` layout makes the instruction "valid"). A document
+    quote filed under an observation-like id is not data either: only
+    observations that pass the data-observation test contribute their
+    (file, field).
 
-    Layouts are read from the RESOLVED state, not from raw claims —
-    but a resolution is a *selection* among evidence, not evidence
-    itself: a resolved layout feeds the allowlist only when the
-    resolution carries estate evidence of its own (a document
-    resolution) or a documentary claim actually stated the selected
-    value. An analyst resolution — or a lone ``resolve`` event with
-    nothing claimed — promotes nothing to estate truth, exactly as
-    an analyst claim cannot. An open dispute contributes nothing
-    while it is contested; a resolution to None (the layout
-    withdrawn) feeds nothing at all. An undisputed layout
-    contributes its estate-document claims' fields."""
+    Layouts are read from the RESOLVED state, but a resolution is a
+    *selection* among evidence, not evidence itself: a resolved layout
+    feeds the allowlist only when an estate-document claim stated the
+    selected value. The resolution's own source and kind count for
+    nothing, so a lone ``resolve`` event with nothing claimed promotes
+    nothing. An open dispute contributes nothing while it is
+    contested; a resolution to None (the layout withdrawn) feeds
+    nothing at all. An undisputed layout contributes its
+    estate-document claims' fields."""
     by_file: dict[str, set[str]] = {}
 
     def feed(file: Any, field: Any) -> None:
@@ -178,23 +186,19 @@ def _known_fields(store: ClaimStore, observations: dict[str, dict[str, Any]],
 
     layout_keys = {(c.subject, c.predicate) for c in store.claims
                    if c.predicate == "layout_binding"}
-    layout_keys |= {key for key in store.disputes
-                    if key[1] == "layout_binding"}
     for subject, predicate in layout_keys:
+        documentary = [c for c in store.get(subject, predicate)
+                       if _layout_evidence(c, interview_ids)]
         dispute = store.dispute(subject, predicate)
         if dispute is not None:
-            if dispute.resolved and dispute.resolved_value is not None:
-                if _layout_evidence(dispute.resolution_source,
-                                    dispute.resolution_source_kind) or any(
-                        _layout_evidence(c.source, c.source_kind)
-                        and values_match(subject, predicate, c.value,
+            if dispute.resolved and dispute.resolved_value is not None \
+                    and any(values_match(subject, predicate, c.value,
                                          dispute.resolved_value)
-                        for c in store.get(subject, predicate)):
-                    feed_layout(dispute.resolved_value)
+                            for c in documentary):
+                feed_layout(dispute.resolved_value)
             continue  # open dispute: contested, not estate truth yet
-        for claim in store.get(subject, predicate):
-            if _layout_evidence(claim.source, claim.source_kind):
-                feed_layout(claim.value)
+        for claim in documentary:
+            feed_layout(claim.value)
     if inventory is not None:
         for fname, field_names in inventory.files.items():
             for name in field_names:
@@ -345,97 +349,41 @@ def _rule_provenance(store: ClaimStore, subject: str, predicate: str, value: Any
                 store.binding_refs.get((subject, predicate), ()),
                 recorded, observations):
             subject_binding = recorded
-    # Confirmation is counted per winner, and completeness travels
-    # with it. A winner may match only partially — it stated the core
-    # of the emitted value while the resolution added facts (a keying
-    # flag) on top. Those added facts carry the resolution's
-    # provenance, not the winner's: the winner's evidence cannot
-    # data-confirm a fact it never mentioned. So a PARTIAL winner's
-    # confirmation covers only the part it stated, and counts towards
-    # the emitted value only together with the resolution's own
-    # confirmation of the rest. Only a winner that states the complete
-    # value — or the resolution itself, through its own evidence —
-    # confirms the value as emitted. (Counting "any winner confirmed"
-    # against "all winners partial" let one extra unmeasured claim
-    # launder a partial winner's measurement into confirmation of the
-    # complete story.)
-    #
-    # Attribution: the kind is the first COMPLETE winner's kind (a
-    # partial winners[0] stated only part of the emitted value, so
-    # when a complete winner's evidence confirms the whole value the
-    # kind follows that winner — the partial winner cannot lend its
-    # kind to facts it never stated). A complete winners[0] keeps its
-    # kind even when another winner's evidence does the confirming:
-    # kind and confirmation stay separate there, as they are for an
-    # analyst claim confirmed by a profiler observation.
-    # And a fact beyond the keying core (``true_duplicates``: a fact
-    # about registration behaviour, not about the bound field) is
-    # confirmed by a winner only when that winner is itself
-    # profiler-data — a profiler statement of the fact, backed by its
-    # measurement. A non-profiler winner that merely *copies* the
-    # bound field's observation ref onto a claim stating the extra
-    # fact confirms the core it copied the ref for, never the extra
-    # fact: that fact takes its confirmation from the resolution
-    # itself, or stays unconfirmed.
-    complete_confirmed = False
-    confirming_kind: str | None = None
-    confirming_src = ""
-    partial_confirmed = False
-    has_complete_winner = False
-    extra_facts = (subject, predicate) == ("identity", "keying_story") \
-        and isinstance(value, dict) and any(
-            k not in ("key_fields", "master_index") for k in value)
     if winners:
         kind = _claim_kind(winners[0], observations)
         winning_src = winners[0].source or ""
-        for c in winners:
-            is_partial = resolution_added_facts(
-                subject, predicate, c.value, value)
-            if not is_partial:
-                has_complete_winner = True
-            if subject_binding is None:
-                continue
-            refs = list(c.evidence_refs)
-            if c.source and c.source.split():
-                refs.append(c.source.split()[0].rstrip("(:"))
-            if not _evidence_confirmed(refs, subject_binding, observations):
-                continue
-            c_kind = _claim_kind(c, observations)
-            if is_partial or (extra_facts and c_kind != "profiler-data"):
-                partial_confirmed = True
-            else:
-                complete_confirmed = True
-                if confirming_kind != "profiler-data":
-                    confirming_kind = c_kind
-                    confirming_src = c.source or ""
-    if complete_confirmed and confirming_kind is not None and winners \
-            and resolution_added_facts(subject, predicate,
-                                       winners[0].value, value):
-        kind = confirming_kind
-        winning_src = confirming_src
-    res_confirmed = False
+        if subject_binding is not None:
+            for c in winners:
+                refs = list(c.evidence_refs)
+                if c.source and c.source.split():
+                    refs.append(c.source.split()[0].rstrip("(:"))
+                if _evidence_confirmed(refs, subject_binding, observations):
+                    confirmed = True
+                    break
     if dispute is not None and dispute.resolved:
         # Structured evidence refs only. The resolution's free-text source
         # is a label for humans: an OBS id mentioned there — including in
         # a sentence saying it does NOT support the resolution — confirms
         # nothing.
         refs = list(dispute.resolution_evidence_refs)
-        expected = subject_binding
-        res_confirmed = expected is not None and _evidence_confirmed(
-            refs, expected, observations)
+        if subject_binding is not None and _evidence_confirmed(
+                refs, subject_binding, observations):
+            confirmed = True
         if kind is None:
             winning_src = dispute.resolution_source or ""
             kind = dispute.resolution_source_kind or (
-                "profiler-data" if res_confirmed else "analyst")
-    if has_complete_winner:
-        confirmed = complete_confirmed or res_confirmed
-    elif winners:
-        # No winner states the whole value: the stated parts confirm
-        # through a partial winner, the resolution-added parts only
-        # through the resolution's own evidence. Both must hold.
-        confirmed = partial_confirmed and res_confirmed
-    else:
-        confirmed = res_confirmed
+                "profiler-data" if confirmed else "analyst")
+    if (subject, predicate) == ("identity", "keying_story") \
+            and isinstance(value, dict) and any(
+                k not in ("key_fields", "master_index") for k in value):
+        # A keying story that records a fact beyond its key fields and
+        # master index (``true_duplicates``: how registration behaves)
+        # is never data-confirmed. A binding names one (file, field),
+        # and no observation of a field measures that fact — whoever
+        # cites the observation, claim or resolution, and whatever kind
+        # the citing event declares. Counting it would let a copied
+        # ACCT observation ref "confirm" the duplicate-charts fact.
+        confirmed = False
     kind = kind or "analyst"
     if kind == "profiler-data" and not confirmed:
         # The meeting point of the claim and resolution routes: the
@@ -507,25 +455,36 @@ def generate_spec(events: list[LedgerEvent], store: ClaimStore, source: str,
         if extra:
             store = _with_extra_claims(store, extra)
     observations = observation_payloads(events)
-    known_fields = _known_fields(store, observations, inventory)
+    known_fields = _known_fields(store, observations, inventory,
+                                 _interview_event_ids(events))
     rules: list[dict[str, Any]] = []
     overrides: list[dict[str, Any]] = []
     invalid_keying: Any = None
-    # Subjects come from claims AND from settled disputes: a lone
-    # ``resolve`` event (ClaimStore.resolve creates the dispute even
-    # when nothing was claimed) is an accepted state, and its selected
-    # value is a rule like any other — a resolution-only layout must
-    # reach the reader binding, not just the key-field allowlist, or
-    # the two artifacts disagree about the estate's layouts.
+    # Subjects come from claims only. A resolution settles a dispute
+    # among claims; a lone ``resolve`` event with nothing claimed
+    # (ClaimStore.resolve creates the dispute anyway) is not a fact
+    # anyone stated, so it never becomes a rule — otherwise one event
+    # could emit a keying story, a crosswalk handling, or a layout,
+    # with whatever provenance kind it declared for itself.
+    # (The one exception is the merge-policy screen below: a lone
+    # resolve on an identity merge predicate still reaches it, so the
+    # override is recorded — it never becomes a rule either way.)
     keys = sorted({c.key() for c in store.claims} | {
-        (d.subject, d.predicate) for d in store.disputes.values()
-        if d.resolved and d.resolved_value is not None})
+        key for key, d in store.disputes.items()
+        if key[0] == "identity" and key[1] != "keying_story" and d.resolved})
     n = 0
     for subject, predicate in keys:
         if subject == "identity" and predicate != "keying_story":
             # Merge policy is policy, not evidence — for ANY predicate that
             # expresses it, not only the one literally named merge_policy.
+            # The resolved value counts too: resolving a merge dispute to
+            # "auto_merge_all" is overridden and flagged exactly like
+            # claiming it.
             claimed = [c.value for c in store.get(subject, predicate)]
+            d = store.dispute(subject, predicate)
+            if d is not None and d.resolved and d.resolved_value is not None \
+                    and d.resolved_value not in claimed:
+                claimed.append(d.resolved_value)
             if any(v != "route_to_reconciliation" for v in claimed):
                 overrides.append({"subject": subject, "predicate": predicate,
                                   "claimed_values": claimed,
