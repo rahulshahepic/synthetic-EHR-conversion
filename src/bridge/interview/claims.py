@@ -175,6 +175,20 @@ def observation_confirms(ref: Any, expected: tuple[str, str],
         (expected[0].lower(), expected[1].lower())
 
 
+def observation_payloads(events: list) -> dict[str, dict[str, Any]]:
+    """Observation id -> payload, for every observation event in a
+    ledger. The ONE observation map: ledger replay (below) and spec
+    generation (specgen) both build theirs here, so the two can never
+    drift into disagreeing about which observations exist."""
+    out: dict[str, dict[str, Any]] = {}
+    for e in events:
+        if e.type == "observation":
+            oid = e.payload.get("obs_id")
+            if oid:
+                out[oid] = e.payload
+    return out
+
+
 def string_refs(raw: Any) -> tuple[str, ...]:
     """Evidence refs as recorded evidence may carry them, reduced to
     the usable form: only a list/tuple contributes refs at all (a
@@ -457,12 +471,7 @@ class ClaimStore:
         whole source. (Direct ``bind()`` callers still get the raise:
         they are code, not recorded evidence.)"""
         store = cls()
-        observations: dict[str, dict[str, Any]] = {}
-        for e in events:
-            if e.type == "observation":
-                oid = e.payload.get("obs_id")
-                if oid:
-                    observations[oid] = e.payload
+        observations = observation_payloads(events)
 
         def binding_evidence_ok(refs: tuple[str, ...],
                                 parsed: tuple[str, str]) -> bool:

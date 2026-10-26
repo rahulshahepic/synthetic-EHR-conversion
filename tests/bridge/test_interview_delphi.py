@@ -257,3 +257,36 @@ def test_keying_check_without_truth_grades_ungraded(monkeypatch):
         monkeypatch.setitem(scorecard.CHECKS, entry_id, variant)
         verdict = scorecard.grade_entry({"id": entry_id}, spec)
         assert verdict["verdict"] == "ungraded", (entry_id, verdict)
+
+
+def test_non_dict_keying_truth_grades_ungraded_not_a_crash(monkeypatch):
+    """PR #43 round-6 review (Claude, reproduced): a hand-edited
+    keying_truth that is not a dict ('ACCT/2') raised AttributeError
+    in _keying_position and aborted grade() for every discrepancy.
+    A malformed truth is "ungraded", for the keying checks and for
+    duplicate_charts alike."""
+    spec = _keying_spec({"key_fields": ["LAB.TXT.ACCT", "REG.TXT.ACCT"],
+                         "master_index": False, "true_duplicates": True})
+    for entry_id in ("dict_registration_account_claim",
+                     "belief_lab_account_is_identity",
+                     "disagreement_duplicate_charts"):
+        variant = dict(scorecard.CHECKS[entry_id])
+        variant["keying_truth"] = "ACCT/2"
+        monkeypatch.setitem(scorecard.CHECKS, entry_id, variant)
+        verdict = scorecard.grade_entry({"id": entry_id}, spec)
+        assert verdict["verdict"] == "ungraded", (entry_id, verdict)
+
+
+def test_duplicate_charts_without_truth_or_rule_grades_ungraded(monkeypatch):
+    """PR #43 round-6 review (Claude, reproduced): the ungraded guard
+    ran only when the spec carried a dict keying rule, so a check
+    with no keying_truth and a spec with NO keying rule still graded
+    "swallowed" — a confident verdict from no truth. The truth check
+    comes before the spec is looked at."""
+    variant = dict(scorecard.CHECKS["disagreement_duplicate_charts"])
+    del variant["keying_truth"]
+    monkeypatch.setitem(scorecard.CHECKS, "disagreement_duplicate_charts",
+                        variant)
+    spec = {"rules": [dict(specgen.MERGE_POLICY_RULE)], "known_unknowns": []}
+    verdict = scorecard.grade_entry({"id": "disagreement_duplicate_charts"}, spec)
+    assert verdict["verdict"] == "ungraded", verdict

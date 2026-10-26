@@ -873,3 +873,219 @@ def test_layout_kind_comes_from_the_source_not_the_label():
         "ledger:E000040 (an analyst)", source_kind="analyst"))
     pkg = specgen.generate_spec([], store2, "delphi")
     assert any(r["predicate"] == "keying_story" for r in pkg.spec["rules"])
+
+
+# -- round-6 review: resolutions are selections, not evidence ------------------
+
+def _auto_merge_keying(store):
+    store.add(claims_mod.Claim(
+        "identity", "keying_story",
+        {"key_fields": ["AUTO_MERGE.ALL.CHARTS"], "master_index": False},
+        "ledger:E000042 (an analyst)", source_kind="analyst"))
+    return specgen.generate_spec([], store, "delphi")
+
+
+def test_analyst_resolution_cannot_promote_an_analyst_layout():
+    """PR #43 round-6 review (ChatGPT P2, reproduced): the resolved-
+    layout branch fed ANY resolution's value unconditionally, so
+    resolving an analyst's invented layout with an analyst resolution
+    promoted it to estate evidence. A resolution selects a value; it
+    does not mint evidence. The same story without the resolution was
+    correctly flagged, and stays flagged with it."""
+    layout = {"path": "AUTO_MERGE.ALL",
+              "layouts": {"S": [{"name": "CHARTS"}]}}
+    store = claims_mod.ClaimStore()
+    store.add(claims_mod.Claim(
+        "file:AUTO_MERGE", "layout_binding", layout,
+        "ledger:E000040 (an analyst)", source_kind="analyst"))
+    store.resolve("file:AUTO_MERGE", "layout_binding", layout,
+                  "ledger:E000041 (an analyst)", source_kind="analyst")
+    pkg = _auto_merge_keying(store)
+    assert not any(r["predicate"] == "keying_story" for r in pkg.spec["rules"])
+    assert any(o["predicate"] == "keying_story"
+               for o in pkg.spec["policy_overrides"])
+
+
+def test_lone_resolve_event_cannot_mint_layout_fields():
+    """PR #43 round-6 review (Claude, reproduced): ClaimStore.resolve
+    creates a dispute even when nothing was claimed, and the lone
+    resolve's value fed the allowlist unchecked — the exact case the
+    _known_fields docstring said must be blocked."""
+    store = claims_mod.ClaimStore()
+    store.resolve("file:AUTO_MERGE", "layout_binding",
+                  {"path": "AUTO_MERGE.ALL",
+                   "layouts": {"X": [{"name": "CHARTS"}]}},
+                  "ledger:E000041")
+    pkg = _auto_merge_keying(store)
+    assert not any(r["predicate"] == "keying_story" for r in pkg.spec["rules"])
+
+
+def test_layout_evidence_kind_is_structured_not_a_substring():
+    """PR #43 round-6 review (Claude, reproduced both directions):
+    substring matching on the source sentence let an analyst through
+    ("Greg Holt, per the estate layouts", source_kind analyst) and
+    kept a real estate document out ("REGISTRATION MANUAL p.4",
+    source_kind document — manuals are estate documents). The
+    recorded kind decides; the sentence does not."""
+    store = claims_mod.ClaimStore()
+    store.add(claims_mod.Claim(
+        "file:AUTO_MERGE", "layout_binding",
+        {"path": "AUTO_MERGE.ALL",
+         "layouts": {"X": [{"name": "CHARTS"}]}},
+        "Greg Holt, per the estate layouts", source_kind="analyst"))
+    pkg = _auto_merge_keying(store)
+    assert not any(r["predicate"] == "keying_story" for r in pkg.spec["rules"])
+
+    store2 = claims_mod.ClaimStore()
+    store2.add(claims_mod.Claim(
+        "file:REG", "layout_binding",
+        {"path": "REG.TXT", "layouts": {"S": [{"name": "ACCT"}]}},
+        "REGISTRATION MANUAL p.4", source_kind="document"))
+    store2.add(claims_mod.Claim(
+        "identity", "keying_story",
+        {"key_fields": ["REG.TXT.ACCT"], "master_index": False},
+        "ledger:E000042 (an analyst)", source_kind="analyst"))
+    pkg2 = specgen.generate_spec([], store2, "delphi")
+    assert any(r["predicate"] == "keying_story" for r in pkg2.spec["rules"])
+
+
+def test_documentary_winning_claim_supports_the_resolved_layout():
+    """PR #43 round-6 review (ChatGPT): an analyst RESOLUTION may
+    still select a value a documentary claim actually stated — the
+    estate evidence is the claim, and the resolution is only the
+    selection. That layout feeds the allowlist as before."""
+    layout = {"path": "REG.TXT", "layouts": {"S": [{"name": "ACCT"}]}}
+    store = claims_mod.ClaimStore()
+    store.add(claims_mod.Claim(
+        "file:REG", "layout_binding", layout,
+        "DATADICT.TXT v4.1 (estate document)", source_kind="dictionary"))
+    _seed_layout(store, "LAB.TXT")
+    store.resolve("file:REG", "layout_binding", layout,
+                  "ledger:E000041 (an analyst)", source_kind="analyst")
+    pkg = _keying_pkg(store, ["REG.TXT.ACCT", "LAB.TXT.ACCT"])
+    assert any(r["predicate"] == "keying_story" for r in pkg.spec["rules"])
+
+
+def test_resolution_only_document_layout_reaches_the_reader():
+    """PR #43 round-6 review (ChatGPT P2, reproduced): a document-
+    sourced resolve introducing a layout with no prior claim fed the
+    allowlist (the keying rule was emitted) but the subject never
+    became a rule, so the reader binding was empty and no unknown
+    flagged the gap. Settled resolution-only subjects are rules too:
+    the allowlist and the reader now use the same selected layouts."""
+    events = [
+        ledger_mod.LedgerEvent("E000001", "resolve", {
+            "subject": "file:REG", "predicate": "layout_binding",
+            "value": {"path": "REG.TXT",
+                      "layouts": {"S": [{"name": "ACCT"}]}},
+            "source": "DATADICT.TXT v4.1 errata (estate document)",
+            "source_kind": "document"}),
+        ledger_mod.LedgerEvent("E000002", "claim", {
+            "subject": "identity", "predicate": "keying_story",
+            "value": {"key_fields": ["REG.TXT.ACCT"], "master_index": False},
+            "source": "ledger:E000003 (an analyst)",
+            "source_kind": "analyst"}),
+    ]
+    store = claims_mod.ClaimStore.from_ledger(events)
+    pkg = specgen.generate_spec(events, store, "delphi")
+    assert any(r["predicate"] == "keying_story" for r in pkg.spec["rules"])
+    assert pkg.reader_binding["files"]["REG"]["path"] == "REG.TXT"
+
+
+# -- round-6 review: confirmation attribution ----------------------------------
+
+def test_copied_ref_does_not_confirm_the_added_fact():
+    """PR #43 round-6 review (Claude, reproduced): a partial
+    profiler-data winner citing the bound ACCT observation, plus an
+    analyst winner stating the complete story (true_duplicates
+    added) with the SAME observation ref copied onto it, produced
+    kind profiler-data + data_confirmed — profiling credit for a
+    fact no observation measured. The copied ref confirms the keying
+    core for the analyst; true_duplicates takes its confirmation
+    from a profiler-data winner stating it, or from the resolution
+    itself. Here neither does, so the rule is (analyst, False) —
+    exactly what the same ledger earns without the copied ref."""
+    events = [
+        ledger_mod.LedgerEvent("E000001", "observation", {
+            "obs_id": "OBS-1", "file": "REG.TXT", "field": "ACCT",
+            "stats": {"rows": 10}}),
+        ledger_mod.LedgerEvent("E000002", "binding", {
+            "subject": "identity", "predicate": "keying_story",
+            "binding": ["REG.TXT", "ACCT"], "evidence_refs": ["OBS-1"]}),
+        _layout_event("E000003", "REG", "REG.TXT"),
+        ledger_mod.LedgerEvent("E000004", "claim", {
+            "subject": "identity", "predicate": "keying_story",
+            "value": {"key_fields": ["REG.TXT.ACCT"], "master_index": False},
+            "source": "OBS-1 (REG.TXT ACCT distribution)",
+            "source_kind": "profiler-data", "evidence_refs": ["OBS-1"]}),
+        ledger_mod.LedgerEvent("E000005", "claim", {
+            "subject": "identity", "predicate": "keying_story",
+            "value": {"key_fields": ["REG.TXT.ACCT"], "master_index": False,
+                      "true_duplicates": True},
+            "source": "ledger:E000006 (Greg Holt, systems)",
+            "source_kind": "analyst", "evidence_refs": ["OBS-1"]}),
+        ledger_mod.LedgerEvent("E000006", "resolve", {
+            "subject": "identity", "predicate": "keying_story",
+            "value": {"key_fields": ["REG.TXT.ACCT"], "master_index": False,
+                      "true_duplicates": True},
+            "source": "ledger answers", "claimed_by": "Greg Holt, systems",
+            "source_kind": "analyst", "evidence_refs": []}),
+    ]
+    rule = _keying_rule(events)
+    assert rule["data_confirmed"] is False
+    assert rule["provenance"]["kind"] == "analyst"
+
+
+def test_kind_follows_the_confirming_complete_winner():
+    """PR #43 round-6 review (Claude): the kind came from winners[0]
+    even when that winner was PARTIAL and the confirmation came from
+    a different, complete winner. Here the first winner is an analyst
+    stating the keying core only; a profiler-data winner states the
+    complete story and its bound observation confirms it: the rule
+    takes the confirming complete winner's kind. (A complete
+    winners[0] keeps its kind when another winner confirms — kind
+    and confirmation are separate there; see the Delphi potassium
+    rule, analyst-kind and data-confirmed.)"""
+    events = [
+        ledger_mod.LedgerEvent("E000001", "observation", {
+            "obs_id": "OBS-1", "file": "REG.TXT", "field": "ACCT",
+            "stats": {"rows": 10}}),
+        ledger_mod.LedgerEvent("E000002", "binding", {
+            "subject": "identity", "predicate": "keying_story",
+            "binding": ["REG.TXT", "ACCT"], "evidence_refs": ["OBS-1"]}),
+        _layout_event("E000003", "REG", "REG.TXT"),
+        ledger_mod.LedgerEvent("E000004", "claim", {
+            "subject": "identity", "predicate": "keying_story",
+            "value": {"key_fields": ["REG.TXT.ACCT"], "master_index": False},
+            "source": "ledger:E000006 (Greg Holt, systems)",
+            "source_kind": "analyst", "evidence_refs": ["OBS-1"]}),
+        ledger_mod.LedgerEvent("E000005", "claim", {
+            "subject": "identity", "predicate": "keying_story",
+            "value": {"key_fields": ["REG.TXT.ACCT"], "master_index": False,
+                      "true_duplicates": True},
+            "source": "OBS-1 (REG.TXT ACCT distribution)",
+            "source_kind": "profiler-data", "evidence_refs": ["OBS-1"]}),
+        ledger_mod.LedgerEvent("E000006", "resolve", {
+            "subject": "identity", "predicate": "keying_story",
+            "value": {"key_fields": ["REG.TXT.ACCT"], "master_index": False,
+                      "true_duplicates": True},
+            "source": "ledger answers", "claimed_by": "Greg Holt, systems",
+            "source_kind": "analyst", "evidence_refs": []}),
+    ]
+    rule = _keying_rule(events)
+    assert rule["data_confirmed"] is True
+    assert rule["provenance"]["kind"] == "profiler-data"
+
+
+def test_observation_payloads_is_the_shared_map():
+    """PR #43 round-6 cleanup (Claude): the observation map is built
+    once, in claims, and shared by ledger replay and generation —
+    specgen no longer keeps its own copy of the loop (or wrapper
+    duplicates of is_data_observation / observation_confirms)."""
+    events = _dob_events() + [ledger_mod.LedgerEvent("E000002", "claim", {})]
+    assert claims_mod.observation_payloads(events) == {
+        "OBS-0009": {"obs_id": "OBS-0009", "file": "REG.TXT", "field": "DOB",
+                     "stats": {"shape_rates": {"YYMMDD": 1.0}}}}
+    assert not hasattr(specgen, "_observation_payloads")
+    assert not hasattr(specgen, "_is_data_observation")
+    assert not hasattr(specgen, "_ref_confirms")

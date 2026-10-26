@@ -99,6 +99,20 @@ def _caught_by(rule: dict[str, Any]) -> str:
 _DEMOGRAPHIC_FIELDS = {"SSN", "SSN4", "DOB", "NAME", "PATIENT_NAME", "MRN"}
 
 
+def _keying_truth(check: dict[str, Any]) -> dict[str, Any] | None:
+    """The check's recorded keying truth, or None when there is none
+    to grade against: the key is missing, or its value is not a dict
+    at all (a hand-edited ``"ACCT/2"`` string in the grading data).
+    A malformed truth is "ungraded", never an AttributeError that
+    aborts grading for every discrepancy, and never a default."""
+    truth = check.get("keying_truth")
+    if not isinstance(truth, dict):
+        return None
+    if truth.get("account_field") is None or truth.get("min_departments") is None:
+        return None
+    return truth
+
+
 def _keying_position(value: dict[str, Any], check: dict[str, Any]) -> str | None:
     """The position a structured keying story takes, graded against the
     expected structured facts in the check data (``keying_truth``) — not
@@ -123,11 +137,11 @@ def _keying_position(value: dict[str, Any], check: dict[str, Any]) -> str | None
     ACCT / 2-departments truth that would report a confident verdict
     computed from facts nobody recorded."""
     fields = value.get("key_fields") or []
-    expected = check.get("keying_truth") or {}
-    account_field = expected.get("account_field")
-    min_departments = expected.get("min_departments")
-    if account_field is None or min_departments is None:
+    expected = _keying_truth(check)
+    if expected is None:
         return "ungraded"
+    account_field = expected["account_field"]
+    min_departments = expected["min_departments"]
     if value.get("master_index") is True or len(fields) == 1:
         return "false"
     parts = [part for token in fields for part in str(token).split("+")]
@@ -156,17 +170,21 @@ def grade_entry(entry: dict[str, Any], spec: dict[str, Any]) -> dict[str, Any]:
                           "by policy, whatever any analyst claimed" if routed else
                           "spec lacks the merge-routing policy rule"}
     if check.get("special") == "duplicate_charts":
+        # The truth check comes FIRST, before the spec is even looked
+        # at: with no recorded keying_truth there is nothing to grade
+        # against, whatever the spec does or does not contain — a
+        # missing keying rule used to fall through to "swallowed",
+        # a confident verdict computed from no truth at all.
+        if _keying_truth(check) is None:
+            return {"id": entry["id"], "verdict": "ungraded",
+                    "detail": "check data carries no keying_truth for "
+                              "this entry; refusing to grade against a "
+                              "default truth"}
         keying = _rule_for(spec, "identity", "keying_story")
         policy = next((r for r in spec.get("rules", []) if r.get("id") == "SAFETY-IDENTITY-MERGE"),
                       None)
         if keying is not None and policy is not None:
             value = keying.get("value")
-            if isinstance(value, dict) \
-                    and _keying_position(value, check) == "ungraded":
-                return {"id": entry["id"], "verdict": "ungraded",
-                        "detail": "check data carries no keying_truth for "
-                                  "this entry; refusing to grade against a "
-                                  "default truth"}
             # Routing requires BOTH the recorded resolved fact AND a
             # keying story that takes the true position: true_duplicates
             # recorded on top of a false keying story (a demographic
